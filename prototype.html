@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chronica — AI Historian</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #F2EDE3;
+      --bg2:    #EBE4D8;
+      --bg3:    #E2D9CA;
+      --bg4:    #D6CCBA;
+      --gold:   #8B5E1A;
+      --gold-d: #5C3D0E;
+      --text:   #1E170C;
+      --muted:  #8A7A62;
+      --green:  #2E6E44;
+      --teal:   #1E5E5E;
+      --serif:  'Cormorant Garamond', Georgia, serif;
+      --sans:   'DM Sans', system-ui, sans-serif;
+    }
+
+    html, body { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:var(--sans); overflow:hidden; -webkit-font-smoothing:antialiased; }
+
+    .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.5s ease, transform 0.5s ease; }
+    .screen.hidden { opacity:0; pointer-events:none; transform:translateY(8px); }
+
+
+    /* ══════════════ UPLOAD ══════════════ */
+    #s-upload { background:var(--bg); }
+    .logo { font-family:var(--serif); font-size:12px; font-weight:400; letter-spacing:0.48em; text-transform:uppercase; color:var(--gold); margin-bottom:52px; }
+    .drop-zone {
+      width:480px; height:280px; border:1px solid rgba(201,162,80,0.2);
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+      cursor:pointer; position:relative; background:rgba(201,162,80,0.012);
+      transition:border-color 0.3s, background 0.3s;
+    }
+    .drop-zone:hover { border-color:rgba(201,162,80,0.48); background:rgba(201,162,80,0.03); }
+    .drop-zone::before { content:''; position:absolute; top:-1px; left:-1px; width:20px; height:20px; border-top:1px solid var(--gold); border-left:1px solid var(--gold); opacity:0.65; }
+    .drop-zone::after  { content:''; position:absolute; bottom:-1px; right:-1px; width:20px; height:20px; border-bottom:1px solid var(--gold); border-right:1px solid var(--gold); opacity:0.65; }
+    .drop-title { font-family:var(--serif); font-size:21px; font-weight:400; }
+    .drop-hint  { font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted); }
+    .drop-tags  { display:flex; gap:8px; margin-top:4px; }
+    .dtag { font-size:10px; letter-spacing:0.1em; color:var(--gold-d); border:1px solid rgba(201,162,80,0.16); padding:3px 10px; }
+    .tagline { margin-top:32px; font-family:var(--serif); font-size:15px; font-style:italic; color:var(--muted); }
+
+
+    /* ══════════════ WORKSPACE ══════════════ */
+    #s-work { flex-direction:column; align-items:stretch; justify-content:flex-start; background:var(--bg); padding:0; }
+
+    .topnav {
+      position:fixed; top:0; left:0; right:0; height:44px; z-index:100;
+      background:rgba(242,237,227,0.97); backdrop-filter:blur(12px);
+      border-bottom:1px solid rgba(139,94,26,0.12);
+      display:flex; align-items:center; justify-content:space-between; padding:0 24px;
+    }
+    .nav-logo  { font-family:var(--serif); font-size:12px; letter-spacing:0.38em; text-transform:uppercase; color:var(--gold); opacity:0.8; }
+    .nav-doc   { font-size:12px; color:var(--muted); letter-spacing:0.04em; }
+    .nav-status { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--green); letter-spacing:0.1em; }
+    .live-dot  { width:6px; height:6px; border-radius:50%; background:var(--green); animation:live-blink 2s ease-in-out infinite; }
+    @keyframes live-blink { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+    /* PDF panel */
+    .pdf-panel {
+      width:58%; padding-top:44px; border-right:1px solid rgba(201,162,80,0.07);
+      overflow-y:auto; background:var(--bg2); display:flex; flex-direction:column; align-items:center;
+    }
+    .pdf-panel::-webkit-scrollbar { width:4px; }
+    .pdf-panel::-webkit-scrollbar-thumb { background:rgba(201,162,80,0.15); border-radius:2px; }
+
+    .pdf-toolbar {
+      position:sticky; top:0; z-index:10;
+      background:rgba(235,228,216,0.97); backdrop-filter:blur(8px);
+      border-bottom:1px solid rgba(139,94,26,0.1);
+      padding:10px 24px; display:flex; align-items:center; justify-content:space-between; width:100%;
+    }
+    .pdf-title { font-size:12px; letter-spacing:0.08em; color:var(--muted); }
+    .pdf-pages { font-size:11px; color:rgba(139,94,26,0.5); letter-spacing:0.1em; }
+
+    .pdf-page { width:100%; padding:32px 48px; border-bottom:1px solid rgba(201,162,80,0.04); }
+    .pdf-page-num { font-size:9px; letter-spacing:0.2em; color:var(--muted); text-transform:uppercase; margin-bottom:20px; opacity:0.5; }
+
+    .ms-header { font-family:var(--serif); font-size:22px; font-weight:400; color:rgba(139,94,26,0.85); text-align:center; margin-bottom:16px; letter-spacing:0.06em; }
+    .ms-divider { width:60%; height:1px; background:rgba(139,94,26,0.2); margin:0 auto 20px; }
+    .ms-text { font-family:var(--serif); font-size:15px; font-weight:300; line-height:1.85; color:rgba(30,23,12,0.78); }
+    .ms-text p { margin-bottom:14px; }
+    .ms-hl { display:inline; background:rgba(139,94,26,0.1); border-bottom:1px solid rgba(139,94,26,0.35); cursor:pointer; transition:background 0.2s; }
+    .ms-hl:hover { background:rgba(139,94,26,0.2); }
+    .ms-arabic { font-size:18px; color:rgba(139,94,26,0.6); text-align:right; margin-bottom:12px; font-style:italic; }
+    .ms-margin { float:right; width:120px; margin:0 0 8px 16px; padding:8px 10px; border-left:2px solid rgba(139,94,26,0.2); font-size:12px; font-style:italic; color:var(--muted); line-height:1.5; }
+
+    .hist-callout {
+      margin:20px 0; padding:14px 18px;
+      background:rgba(139,94,26,0.06); border-left:2px solid rgba(139,94,26,0.35);
+      display:none; align-items:flex-start; gap:10px;
+    }
+    .hist-callout.show { display:flex; animation:cin 0.5s ease forwards; }
+    @keyframes cin { from{opacity:0;transform:translateX(-8px);} to{opacity:1;transform:translateX(0);} }
+    .callout-ico  { font-size:14px; margin-top:1px; flex-shrink:0; }
+    .callout-text { font-size:13px; color:rgba(139,94,26,0.9); line-height:1.55; font-style:italic; }
+
+    /* Right panel */
+    .right-panel { width:42%; padding-top:44px; display:flex; flex-direction:column; overflow:hidden; background:var(--bg); }
+
+    .historian-area { padding:20px 22px; border-bottom:1px solid rgba(201,162,80,0.08); flex-shrink:0; }
+    .hist-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .hist-label { font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:8px; }
+    .hist-label::before { content:''; width:20px; height:1px; background:var(--gold); opacity:0.4; }
+
+    .mic-toggle {
+      display:flex; align-items:center; gap:7px; padding:6px 14px;
+      border:1px solid rgba(201,162,80,0.25); cursor:pointer;
+      background:rgba(201,162,80,0.04); font-size:10px; letter-spacing:0.1em; color:var(--gold);
+      transition:all 0.2s;
+    }
+    .mic-toggle:hover { background:rgba(201,162,80,0.1); }
+    .mic-toggle.muted { border-color:rgba(201,162,80,0.1); color:var(--muted); }
+
+    .waveform { display:flex; align-items:center; gap:2px; height:32px; margin-bottom:12px; }
+    .wv { width:3px; background:var(--gold); border-radius:2px; animation:wvanim 0.6s ease-in-out infinite; opacity:0.7; }
+    .wv:nth-child(1){height:8px; animation-delay:0s;}   .wv:nth-child(2){height:16px; animation-delay:0.05s;}
+    .wv:nth-child(3){height:24px; animation-delay:0.1s;} .wv:nth-child(4){height:32px; animation-delay:0.15s;}
+    .wv:nth-child(5){height:20px; animation-delay:0.2s;} .wv:nth-child(6){height:28px; animation-delay:0.25s;}
+    .wv:nth-child(7){height:14px; animation-delay:0.3s;} .wv:nth-child(8){height:22px; animation-delay:0.35s;}
+    .wv:nth-child(9){height:18px; animation-delay:0.4s;} .wv:nth-child(10){height:10px; animation-delay:0.45s;}
+    .wv:nth-child(11){height:26px; animation-delay:0.5s;}.wv:nth-child(12){height:16px; animation-delay:0.55s;}
+    @keyframes wvanim { 0%,100%{transform:scaleY(0.4);opacity:0.4;} 50%{transform:scaleY(1);opacity:0.85;} }
+
+    /* Transcript container: label + text span + cursor span */
+    .transcript-wrap { font-family:var(--serif); font-size:16px; font-weight:300; font-style:italic; line-height:1.65; color:rgba(30,23,12,0.85); min-height:64px; }
+    .transcript-label { font-style:normal; font-family:var(--sans); font-size:11px; color:var(--muted); letter-spacing:0.1em; display:block; margin-bottom:6px; }
+    .t-cursor { display:inline-block; width:2px; height:16px; background:var(--gold); margin-left:2px; animation:blink 1s ease-in-out infinite; vertical-align:middle; }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+
+    .ask-row { display:flex; gap:8px; margin-top:14px; }
+    .ask-inp {
+      flex:1; background:rgba(255,255,255,0.5); border:1px solid rgba(139,94,26,0.18);
+      padding:8px 12px; font-family:var(--sans); font-size:12px; color:var(--text); outline:none; transition:border-color 0.2s;
+    }
+    .ask-inp:focus { border-color:rgba(139,94,26,0.45); }
+    .ask-inp::placeholder { color:var(--muted); }
+    .ask-btn {
+      padding:8px 16px; background:rgba(201,162,80,0.08); border:1px solid rgba(201,162,80,0.25);
+      color:var(--gold); font-family:var(--sans); font-size:11px; letter-spacing:0.1em; cursor:pointer; transition:background 0.2s;
+    }
+    .ask-btn:hover { background:rgba(201,162,80,0.16); }
+
+    /* Research */
+    .research-area { padding:16px 22px; border-bottom:1px solid rgba(201,162,80,0.08); flex-shrink:0; }
+    .area-label { font-size:10px; letter-spacing:0.25em; text-transform:uppercase; color:var(--muted); margin-bottom:12px; }
+    .ri {
+      display:flex; align-items:flex-start; gap:10px; padding:8px 0;
+      border-bottom:1px solid rgba(255,255,255,0.03);
+      opacity:0; transform:translateX(6px); transition:opacity 0.4s ease, transform 0.4s ease;
+    }
+    .ri:last-child { border-bottom:none; }
+    .ri.show { opacity:1; transform:translateX(0); }
+    .ri-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:4px; background:var(--bg4); border:1px solid var(--muted); }
+    .ri.searching .ri-dot { background:var(--teal); border:none; animation:pulse 1s ease-in-out infinite; }
+    .ri.done      .ri-dot { background:var(--green); border:none; animation:none; }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+    .ri-q   { font-size:12px; color:var(--text); line-height:1.35; }
+    .ri-st  { font-size:10px; color:var(--muted); margin-top:2px; letter-spacing:0.06em; }
+    .ri.searching .ri-st { color:var(--teal); }
+    .ri.done      .ri-st { color:var(--green); }
+
+    /* Segments */
+    .segments-area { padding:16px 22px; flex:1; overflow-y:auto; }
+    .segments-area::-webkit-scrollbar { width:3px; }
+    .segments-area::-webkit-scrollbar-thumb { background:rgba(201,162,80,0.1); }
+    .seg-card {
+      display:flex; align-items:center; gap:12px; padding:12px 14px; margin-bottom:8px;
+      background:var(--bg2); border:1px solid rgba(201,162,80,0.08);
+      cursor:default; opacity:0; transform:translateY(6px);
+      transition:opacity 0.4s ease, transform 0.4s ease, border-color 0.2s, background 0.2s;
+    }
+    .seg-card.show { opacity:1; transform:translateY(0); }
+    .seg-card.ready { cursor:pointer; }
+    .seg-card.ready:hover { border-color:rgba(201,162,80,0.3); background:rgba(201,162,80,0.04); }
+    .seg-play {
+      width:30px; height:30px; border-radius:50%; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      border:1px solid rgba(201,162,80,0.2); background:rgba(201,162,80,0.05); font-size:11px;
+      transition:all 0.2s;
+    }
+    .seg-card.generating .seg-play { animation:spin 2.5s linear infinite; border-color:rgba(201,162,80,0.12); }
+    .seg-card.ready:hover .seg-play { background:rgba(201,162,80,0.18); border-color:var(--gold); }
+    @keyframes spin { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+    .seg-title { font-family:var(--serif); font-size:15px; font-weight:400; }
+    .seg-sub   { font-size:11px; color:var(--muted); margin-top:2px; }
+    .seg-card.ready .seg-sub { color:rgba(90,155,110,0.8); }
+    .seg-dur { font-size:11px; color:var(--muted); flex-shrink:0; }
+
+
+    /* ══════════════ DOCUMENTARY ══════════════ */
+    #s-doc { background:#000; align-items:stretch; justify-content:stretch; }
+
+    .doc-visual { flex:1; position:relative; overflow:hidden; animation:ken 28s ease-in-out infinite alternate; }
+    @keyframes ken { 0%{transform:scale(1) translate(0,0);} 100%{transform:scale(1.07) translate(-1.5%,-1%);} }
+    .vl { position:absolute; inset:0; }
+    .v-bg  { background:radial-gradient(ellipse 130% 90% at 50% 65%, #1A0F05 0%, #080503 55%, #000 100%); }
+    .v-glo { background:radial-gradient(ellipse 55% 65% at 50% 28%, rgba(201,162,80,0.18) 0%, transparent 68%); animation:gbr 9s ease-in-out infinite; }
+    @keyframes gbr { 0%,100%{opacity:0.75;} 50%{opacity:1;transform:scale(1.04);} }
+    .v-dst {
+      background-image:
+        radial-gradient(circle 1.5px at 22% 28%, rgba(201,162,80,0.45) 0%,transparent 50%),
+        radial-gradient(circle 1px  at 78% 18%, rgba(201,162,80,0.3)  0%,transparent 50%),
+        radial-gradient(circle 2px  at 55% 65%, rgba(201,162,80,0.2)  0%,transparent 50%);
+      animation:dst 14s ease-in-out infinite;
+    }
+    @keyframes dst { 0%,100%{transform:translate(0,0);} 33%{transform:translate(5px,-8px);} 66%{transform:translate(-7px,5px);} }
+    .v-vig { background:radial-gradient(ellipse 110% 110% at 50% 50%, transparent 28%, rgba(0,0,0,0.75) 100%); }
+    .v-bot { background:linear-gradient(to top,  rgba(0,0,0,0.92) 0%, transparent 42%); }
+    .v-top { background:linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 28%); }
+    .arch-wrap { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+    .arch-svg { width:100%; height:100%; opacity:0.1; }
+
+    .doc-topbar {
+      position:absolute; top:0; left:0; right:0; z-index:10;
+      padding:18px 28px; display:flex; align-items:center; justify-content:space-between;
+      background:linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%);
+    }
+    .dt-logo { font-family:var(--serif); font-size:11px; letter-spacing:0.4em; text-transform:uppercase; color:rgba(201,162,80,0.65); }
+    .dt-seg  { font-size:11px; color:rgba(232,216,184,0.4); letter-spacing:0.1em; text-transform:uppercase; }
+
+    .doc-caps { position:absolute; bottom:80px; left:0; right:0; text-align:center; padding:0 12%; z-index:10; }
+    .cap-text {
+      font-family:var(--serif); font-size:26px; font-weight:300; font-style:italic;
+      color:rgba(240,225,195,0.94); line-height:1.6;
+      text-shadow:0 2px 24px rgba(0,0,0,0.85); min-height:80px; transition:opacity 0.4s ease;
+    }
+
+    .doc-botbar {
+      position:absolute; bottom:0; left:0; right:0; z-index:10;
+      padding:16px 28px; display:flex; align-items:center;
+    }
+    .back-btn {
+      font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted);
+      cursor:pointer; padding:8px 16px; border:1px solid rgba(201,162,80,0.1);
+      background:rgba(0,0,0,0.4); backdrop-filter:blur(8px); transition:all 0.2s;
+    }
+    .back-btn:hover { color:var(--text); border-color:rgba(201,162,80,0.3); }
+
+    .doc-sidebar {
+      width:320px; background:rgba(242,237,227,0.97); border-left:1px solid rgba(0,0,0,0.1);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+
+    .doc-seg-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--muted); margin-bottom:12px; }
+    .doc-seg-item {
+      display:flex; align-items:center; gap:10px; padding:10px 0;
+      border-bottom:1px solid rgba(255,255,255,0.03); cursor:pointer; transition:opacity 0.2s;
+    }
+    .doc-seg-item:last-child { border-bottom:none; }
+    .doc-seg-bar  { width:2px; height:28px; background:var(--bg4); flex-shrink:0; transition:background 0.3s; }
+    .doc-seg-num  { font-family:var(--serif); font-size:18px; font-weight:300; color:var(--muted); width:28px; flex-shrink:0; }
+    .doc-seg-name { font-size:13px; color:var(--muted); }
+    .doc-seg-item.active .doc-seg-bar  { background:var(--gold); }
+    .doc-seg-item.active .doc-seg-num  { color:var(--gold); }
+    .doc-seg-item.active .doc-seg-name { color:var(--text); }
+    /* ══════════════ AGENT SESSION POPUP ══════════════ */
+    .agent-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(30,20,10,0.35); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    }
+    .agent-overlay.open { opacity: 1; pointer-events: all; }
+
+    .agent-modal {
+      width: 580px; max-height: 72vh;
+      background: var(--bg); border: 1px solid rgba(139,94,26,0.2);
+      box-shadow: 0 20px 60px rgba(30,20,10,0.2);
+      display: flex; flex-direction: column;
+      transform: translateY(14px); transition: transform 0.35s ease;
+    }
+    .agent-overlay.open .agent-modal { transform: translateY(0); }
+
+    .agent-modal-head {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid rgba(201,162,80,0.08);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      flex-shrink: 0;
+    }
+    .agent-head-left { display: flex; flex-direction: column; gap: 6px; }
+    .agent-tag {
+      font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase;
+      color: var(--gold); display: flex; align-items: center; gap: 6px;
+    }
+    .agent-tag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); }
+    .agent-tag-dot.running { animation: pulse 1s ease-in-out infinite; }
+    .agent-query { font-family: var(--serif); font-size: 18px; font-weight: 400; line-height: 1.35; }
+    .agent-close {
+      font-size: 20px; color: var(--muted); cursor: pointer; flex-shrink: 0;
+      background: none; border: none; transition: color 0.2s; padding: 0; line-height: 1;
+    }
+    .agent-close:hover { color: var(--text); }
+
+    .agent-modal-body {
+      overflow-y: auto; padding: 16px 24px 24px; flex: 1;
+    }
+    .agent-modal-body::-webkit-scrollbar { width: 3px; }
+    .agent-modal-body::-webkit-scrollbar-thumb { background: rgba(201,162,80,0.12); }
+
+    /* Log entries */
+    .log-entry {
+      display: flex; gap: 12px; padding: 9px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.028);
+      opacity: 0; transform: translateY(6px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry.show { opacity: 1; transform: translateY(0); }
+
+    .log-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; width: 18px; text-align: center; }
+    .log-content { flex: 1; }
+    .log-action { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; margin-bottom: 2px; }
+    .log-detail { font-size: 13px; color: var(--text); line-height: 1.4; }
+    .log-detail.source {
+      padding: 6px 10px; margin-top: 4px;
+      background: var(--bg3); border-left: 2px solid rgba(139,94,26,0.25);
+      font-size: 12px; color: rgba(30,23,12,0.65);
+    }
+    .log-detail.source.accepted { border-left-color: rgba(46,110,68,0.5); color: rgba(30,23,12,0.85); }
+    .log-detail.source.rejected { border-left-color: rgba(160,60,40,0.4); opacity: 0.45; text-decoration: line-through; }
+    .log-detail.fact {
+      padding: 6px 10px; margin-top: 4px;
+      background: rgba(139,94,26,0.06); border-left: 2px solid rgba(139,94,26,0.4);
+      font-size: 12px; font-style: italic; color: rgba(30,23,12,0.85);
+    }
+    .log-time { font-size: 10px; color: var(--muted); flex-shrink: 0; margin-top: 2px; letter-spacing: 0.05em; }
+
+    /* Clickable research items */
+    .ri { cursor: pointer; border-radius: 2px; transition: background 0.15s; }
+    .ri:hover { background: rgba(139,94,26,0.06); }
+    .ri:hover .ri-q { color: var(--gold); }
+    .ri-arrow { font-size: 10px; color: var(--muted); flex-shrink: 0; margin-top: 3px; transition: color 0.2s; }
+    .ri:hover .ri-arrow { color: var(--gold); }
+
+    /* ══════════════ VOICE INTERACTION ══════════════ */
+
+    /* Floating voice button — always visible */
+    .voice-btn {
+      position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+      z-index: 1000;
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 28px;
+      background: rgba(242,237,227,0.96); backdrop-filter: blur(20px);
+      border: 1px solid rgba(139,94,26,0.3);
+      border-radius: 100px; cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 24px rgba(30,20,10,0.14);
+    }
+    .voice-btn:hover { border-color: rgba(139,94,26,0.55); background: rgba(255,252,245,0.98); }
+    .voice-btn.listening {
+      border-color: rgba(139,94,26,0.8);
+      background: rgba(255,252,245,0.98);
+      box-shadow: 0 0 32px rgba(139,94,26,0.12), 0 4px 24px rgba(30,20,10,0.12);
+    }
+    .voice-btn.historian-talking { border-color: rgba(46,110,68,0.5); }
+
+    .vb-ring {
+      width: 38px; height: 38px; border-radius: 50%; position: relative;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .vb-ring::before {
+      content: ''; position: absolute; inset: -4px; border-radius: 50%;
+      border: 1.5px solid rgba(201,162,80,0.3);
+      transition: all 0.3s;
+    }
+    .voice-btn.listening .vb-ring::before { animation: ring-pulse 1.2s ease-in-out infinite; border-color: rgba(201,162,80,0.6); }
+    @keyframes ring-pulse { 0%,100%{ transform:scale(1); opacity:0.6; } 50%{ transform:scale(1.25); opacity:0.2; } }
+
+    .vb-mic-icon { font-size: 18px; }
+
+    /* User speaking waveform */
+    .user-wave { display: none; align-items: center; gap: 2px; height: 24px; }
+    .voice-btn.listening .user-wave { display: flex; }
+    .voice-btn.listening .vb-mic-icon { display: none; }
+    .uw { width: 3px; background: var(--gold); border-radius: 2px; animation: uwav 0.5s ease-in-out infinite; }
+    .uw:nth-child(1){height:6px;  animation-delay:0s;}
+    .uw:nth-child(2){height:14px; animation-delay:0.07s;}
+    .uw:nth-child(3){height:22px; animation-delay:0.14s;}
+    .uw:nth-child(4){height:18px; animation-delay:0.21s;}
+    .uw:nth-child(5){height:10px; animation-delay:0.28s;}
+    .uw:nth-child(6){height:20px; animation-delay:0.35s;}
+    .uw:nth-child(7){height:12px; animation-delay:0.42s;}
+    @keyframes uwav { 0%,100%{transform:scaleY(0.3);} 50%{transform:scaleY(1);} }
+
+    .vb-text-wrap { display: flex; flex-direction: column; gap: 2px; }
+    .vb-label {
+      font-size: 12px; letter-spacing: 0.08em; color: rgba(201,162,80,0.8);
+      transition: all 0.2s;
+    }
+    .vb-sublabel { font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
+    .voice-btn.listening .vb-label { color: var(--gold); }
+    .voice-btn.listening .vb-sublabel { color: rgba(201,162,80,0.5); }
+
+    /* Live transcript toast — shows what user said + what historian says */
+    .live-toast {
+      position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%);
+      z-index: 999; width: 560px; max-width: 90vw;
+      background: rgba(242,237,227,0.98); backdrop-filter: blur(20px);
+      border: 1px solid rgba(139,94,26,0.18);
+      box-shadow: 0 8px 40px rgba(30,20,10,0.16);
+      border-radius: 4px; padding: 20px 24px;
+      opacity: 0; pointer-events: none;
+      transform: translateX(-50%) translateY(12px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .live-toast.show {
+      opacity: 1; pointer-events: all;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast-user {
+      font-size: 12px; letter-spacing: 0.1em; color: var(--muted);
+      text-transform: uppercase; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .toast-user-text {
+      font-family: var(--serif); font-size: 16px; font-style: italic;
+      color: rgba(139,94,26,0.9); margin-bottom: 16px; line-height: 1.5;
+    }
+    .toast-hist-label {
+      font-size: 10px; letter-spacing: 0.25em; color: var(--green);
+      text-transform: uppercase; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .toast-hist-label::before { content: ''; width: 16px; height: 1px; background: var(--green); opacity: 0.5; }
+    .toast-hist-text {
+      font-family: var(--serif); font-size: 17px; font-weight: 300;
+      line-height: 1.65; color: var(--text);
+    }
+    .toast-close {
+      position: absolute; top: 12px; right: 14px;
+      font-size: 18px; color: var(--muted); cursor: pointer;
+      transition: color 0.2s; background: none; border: none;
+    }
+    .toast-close:hover { color: var(--text); }
+
+    /* Historian pause indicator — shows on captions area when user speaks */
+    .hist-paused {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 998;
+      font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
+      color: rgba(201,162,80,0.6); pointer-events: none;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .hist-paused.show { opacity: 1; }
+
+  </style>
+</head>
+<body>
+
+<!-- ═══ UPLOAD ═══ -->
+<div class="screen" id="s-upload">
+  <div class="logo">Chronica</div>
+  <div class="drop-zone" onclick="startWork()">
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" opacity="0.35">
+      <path d="M6 34h28M20 6v20M11 15l9-9 9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="drop-title">Drop your historical document</div>
+    <div class="drop-hint">PDF · Image · Text — any language</div>
+    <div class="drop-tags">
+      <span class="dtag">Ottoman Turkish</span>
+      <span class="dtag">Arabic</span>
+      <span class="dtag">Latin</span>
+      <span class="dtag">Any Language</span>
+    </div>
+  </div>
+  <div class="tagline">Any document. Any language. Any era.</div>
+</div>
+
+
+<!-- ═══ WORKSPACE ═══ -->
+<div class="screen hidden" id="s-work" style="flex-direction:column; align-items:stretch; justify-content:flex-start;">
+  <div class="topnav">
+    <div class="nav-logo">Chronica</div>
+    <div class="nav-doc">Kanun-i Osmani &nbsp;·&nbsp; Ottoman Turkish &nbsp;·&nbsp; ~1520 AD</div>
+    <div class="nav-status"><div class="live-dot"></div>Historian live</div>
+  </div>
+
+  <div style="display:flex; flex:1; overflow:hidden; padding-top:44px; height:100%;">
+
+    <!-- PDF -->
+    <div class="pdf-panel" id="pdf-panel">
+      <div class="pdf-toolbar">
+        <div class="pdf-title">kanun-i-osmani-1520.pdf</div>
+        <div class="pdf-pages">7 pages</div>
+      </div>
+
+      <div class="pdf-page">
+        <div class="pdf-page-num">Page 1 of 7</div>
+        <div class="ms-header">كانون نامه عثمانى</div>
+        <div class="ms-header" style="font-size:17px; opacity:0.6; margin-top:-8px;">Kanun-i Osmani</div>
+        <div class="ms-divider"></div>
+        <div class="ms-text">
+          <p class="ms-arabic">بسم الله الرحمن الرحيم</p>
+          <p>This document, compiled under the auspices of <span class="ms-hl">Sultan Suleiman I</span>, known among his subjects as al-Qanuni — the Lawgiver — sets forth the imperial statutes governing the administration of the <span class="ms-hl">Topkapı Palace</span> and the conduct of all persons therein.</p>
+          <div class="ms-margin">Topkapı records reference 400+ palace staff roles across 4 courtyard divisions</div>
+          <p>The palace shall be administered according to the four sacred courtyards, each representing a degree of proximity to the sovereign. The outermost courtyard, the <span class="ms-hl">Alay Meydanı</span>, shall remain open to subjects bearing petition. The second courtyard, the <span class="ms-hl">Divan-ı Hümayun</span>, shall be the seat of imperial council...</p>
+          <p>No person shall enter the third courtyard, the <span class="ms-hl">Enderun</span>, without written permission of the Grand Vizier, sealed with the imperial tughra. Violations shall be punishable by no fewer than forty lashes and permanent exile from the capital.</p>
+        </div>
+        <div class="hist-callout" id="callout-1">
+          <div class="callout-ico">🎙</div>
+          <div class="callout-text">"The Enderun punishment clause — remarkable. The forty-lash rule appears in Byzantine law too. I'm tracing whether this was inherited or independently arrived at. My research agent is checking now."</div>
+        </div>
+      </div>
+
+      <div class="pdf-page">
+        <div class="pdf-page-num">Page 2 of 7</div>
+        <div class="ms-text">
+          <p>On the matter of the <span class="ms-hl">Harem-i Hümayun</span>: The imperial harem shall be governed entirely by the Valide Sultan, mother of the reigning sovereign. Under her authority shall serve no fewer than three hundred women of the household, divided by rank...</p>
+          <p>The <span class="ms-hl">Haseki Sultan</span>, consort of the sovereign's affection, shall receive a stipend of no less than two thousand akçe per diem, and shall have the right to petition the sovereign directly, bypassing the Grand Vizier in matters pertaining to the household.</p>
+          <p>Craftsmen employed in the <span class="ms-hl">Nakkaşhane</span>, the imperial design workshop, shall produce tiles, manuscripts, and decorative works exclusively for palace use. The master tileworkers, sourced from <span class="ms-hl">İznik</span>, shall reside within the second courtyard during commission periods not exceeding six months...</p>
+        </div>
+        <div class="hist-callout" id="callout-2">
+          <div class="callout-ico">🎙</div>
+          <div class="callout-text">"The Nakkaşhane — this is the Iznik connection I needed. The craftsmen literally lived inside the palace during commissions. I'm building segment three around this passage right now."</div>
+        </div>
+      </div>
+
+      <div class="pdf-page">
+        <div class="pdf-page-num">Page 3 of 7</div>
+        <div class="ms-text">
+          <p>The daily ritual of the sovereign shall proceed as follows: At the first call to prayer, the <span class="ms-hl">Hünkar</span> shall be awakened by the senior page. The ablution ceremony shall be conducted with water drawn from the <span class="ms-hl">Bosphorus</span> at dawn, carried in silver vessels by two designated pages...</p>
+          <p>The morning meal, prepared in the <span class="ms-hl">Matbah-ı Amire</span>, shall consist of no fewer than twelve courses, prepared by kitchen staff numbering eight hundred souls. The tasting of all courses shall be performed first by the chief taster, in the presence of the head physician...</p>
+          <p>At the second prayer, the <span class="ms-hl">Divan</span> shall convene in the second courtyard. The Grand Vizier shall preside. Petitions shall be read in order of province: Rumelia first, then Anatolia, then the Arab lands...</p>
+        </div>
+      </div>
+
+      <div class="pdf-page">
+        <div class="pdf-page-num">Page 4 of 7</div>
+        <div class="ms-text">
+          <p>Regarding the <span class="ms-hl">Janissary Corps</span>: The Yeniçeri Ağası shall command no fewer than five thousand troops in peacetime, garrisoned in the barracks adjoining the first courtyard...</p>
+          <p>The training of palace pages in the <span class="ms-hl">Enderun Mektebi</span> shall encompass calligraphy, horsemanship, archery, music, and scripture. Pages shall be selected from the devşirme — the levy of Christian youths — between the ages of eight and eighteen...</p>
+        </div>
+      </div>
+
+      <div class="pdf-page">
+        <div class="pdf-page-num">Page 5 of 7</div>
+        <div class="ms-text">
+          <p>The <span class="ms-hl">Arz Odası</span>, the Audience Chamber, shall be maintained at the highest standard. Its <span class="ms-hl">İznik tile</span> panels, installed during the reign of Sultan Selim I, shall be cleaned monthly with rosewater. The cobalt pigment in these tiles, sourced from Persian Kashan, shall not be replicated with domestic materials...</p>
+          <p>The <span class="ms-hl">Mimar Başı</span>, the Chief Architect, shall submit a written report on the condition of all structures no fewer than twice annually. Any structural deterioration in the fourth courtyard shall be reported to the sovereign personally...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div class="right-panel">
+      <div class="historian-area">
+        <div class="hist-header">
+          <div class="hist-label">Historian — Live</div>
+          <div class="mic-toggle muted" id="mic-toggle" onclick="toggleMic()">
+            <span>🎙</span><span id="mic-lbl">Muted</span>
+          </div>
+        </div>
+        <div class="waveform">
+          <div class="wv"></div><div class="wv"></div><div class="wv"></div><div class="wv"></div>
+          <div class="wv"></div><div class="wv"></div><div class="wv"></div><div class="wv"></div>
+          <div class="wv"></div><div class="wv"></div><div class="wv"></div><div class="wv"></div>
+        </div>
+        <div class="transcript-wrap">
+          <span class="transcript-label" id="transcript-q" style="display:none;"></span>
+          <span id="transcript-text"></span><span class="t-cursor" id="t-cursor"></span>
+        </div>
+        <div class="ask-row">
+          <input class="ask-inp" id="ask-inp" type="text" placeholder="Ask the historian anything..." onkeydown="if(event.key==='Enter') sendAsk()"/>
+          <button class="ask-btn" onclick="sendAsk()">Ask</button>
+        </div>
+      </div>
+
+      <div class="research-area">
+        <div class="area-label">Research Activity</div>
+        <div class="ri" id="ri1" onclick="openAgent(0)"><div class="ri-dot"></div><div style="flex:1"><div class="ri-q">"Topkapı Palace architectural layout 16th century"</div><div class="ri-st">Queued</div></div><div class="ri-arrow">›</div></div>
+        <div class="ri" id="ri2" onclick="openAgent(1)"><div class="ri-dot"></div><div style="flex:1"><div class="ri-q">"Iznik tile workshops Ottoman court commission"</div><div class="ri-st">Queued</div></div><div class="ri-arrow">›</div></div>
+        <div class="ri" id="ri3" onclick="openAgent(2)"><div class="ri-dot"></div><div style="flex:1"><div class="ri-q">"Suleiman I Divan court ceremony daily ritual"</div><div class="ri-st">Queued</div></div><div class="ri-arrow">›</div></div>
+        <div class="ri" id="ri4" onclick="openAgent(3)"><div class="ri-dot"></div><div style="flex:1"><div class="ri-q">"Enderun palace school devshirme pages Ottoman"</div><div class="ri-st">Queued</div></div><div class="ri-arrow">›</div></div>
+        <div class="ri" id="ri5" onclick="openAgent(4)"><div class="ri-dot"></div><div style="flex:1"><div class="ri-q">"Ottoman Harem Valide Sultan hierarchy power"</div><div class="ri-st">Queued</div></div><div class="ri-arrow">›</div></div>
+      </div>
+
+      <div class="segments-area">
+        <div class="area-label">Segments</div>
+        <div class="seg-card generating show" id="sc1">
+          <div class="seg-play">◌</div>
+          <div style="flex:1"><div class="seg-title">The Palace at the Edge of the World</div><div class="seg-sub">Generating...</div></div>
+          <div class="seg-dur">~4:20</div>
+        </div>
+        <div class="seg-card generating show" id="sc2">
+          <div class="seg-play">◌</div>
+          <div style="flex:1"><div class="seg-title">The Laws That Shaped an Empire</div><div class="seg-sub">Generating...</div></div>
+          <div class="seg-dur">~3:45</div>
+        </div>
+        <div class="seg-card generating show" id="sc3">
+          <div class="seg-play">◌</div>
+          <div style="flex:1"><div class="seg-title">Craftsmen of the Nakkaşhane</div><div class="seg-sub">Generating...</div></div>
+          <div class="seg-dur">~5:10</div>
+        </div>
+        <div class="seg-card generating show" id="sc4">
+          <div class="seg-play">◌</div>
+          <div style="flex:1"><div class="seg-title">The Inner Courtyard</div><div class="seg-sub">Generating...</div></div>
+          <div class="seg-dur">~3:30</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ DOCUMENTARY ═══ -->
+<div class="screen hidden" id="s-doc" style="flex-direction:row; align-items:stretch; justify-content:stretch;">
+  <div class="doc-visual">
+    <div class="vl v-bg"></div>
+    <div class="vl v-glo"></div>
+    <div class="vl v-dst"></div>
+    <div class="arch-wrap">
+      <svg class="arch-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+        <path d="M320,760 L320,360 Q320,120 600,80 Q880,120 880,360 L880,760 Z" fill="none" stroke="#C9A250" stroke-width="1.8"/>
+        <path d="M380,760 L380,390 Q380,195 600,160 Q820,195 820,390 L820,760 Z" fill="none" stroke="#C9A250" stroke-width="0.9" opacity="0.45"/>
+        <circle cx="600" cy="120" r="38" fill="none" stroke="#C9A250" stroke-width="1.2" opacity="0.6"/>
+        <circle cx="600" cy="120" r="20" fill="none" stroke="#C9A250" stroke-width="0.6" opacity="0.35"/>
+        <g transform="translate(600,120)" opacity="0.55">
+          <path d="M0,-14 L3.5,-4 L14,-4 L5.5,2 L8.5,13 L0,7 L-8.5,13 L-5.5,2 L-14,-4 L-3.5,-4 Z" fill="#C9A250"/>
+        </g>
+        <rect x="308" y="580" width="16" height="180" fill="rgba(201,162,80,0.04)" stroke="#C9A250" stroke-width="0.6" opacity="0.3"/>
+        <rect x="876" y="580" width="16" height="180" fill="rgba(201,162,80,0.04)" stroke="#C9A250" stroke-width="0.6" opacity="0.3"/>
+        <path d="M490,300 Q520,270 550,300 Q520,330 490,300 Z" fill="none" stroke="#C9A250" stroke-width="0.7" opacity="0.3"/>
+        <path d="M650,300 Q680,270 710,300 Q680,330 650,300 Z" fill="none" stroke="#C9A250" stroke-width="0.7" opacity="0.3"/>
+      </svg>
+    </div>
+    <div class="vl v-vig"></div>
+    <div class="vl v-top"></div>
+    <div class="vl v-bot"></div>
+
+    <div class="doc-topbar">
+      <div class="dt-logo">Chronica</div>
+      <div class="dt-seg" id="dt-seg">Segment 1 of 4</div>
+    </div>
+    <div class="doc-caps">
+      <div class="cap-text" id="cap-text"></div>
+    </div>
+    <div class="doc-botbar">
+      <div class="back-btn" onclick="backToWork()">← Back to document</div>
+    </div>
+  </div>
+
+  <div class="doc-sidebar">
+    <div class="historian-area">
+      <div class="hist-header">
+        <div class="hist-label">Historian — Live</div>
+      </div>
+      <div class="waveform">
+        <div class="wv"></div><div class="wv"></div><div class="wv"></div><div class="wv"></div>
+        <div class="wv"></div><div class="wv"></div><div class="wv"></div><div class="wv"></div>
+        <div class="wv"></div><div class="wv"></div><div class="wv"></div><div class="wv"></div>
+      </div>
+      <div class="transcript-wrap">
+        <span class="transcript-label" id="doc-transcript-q" style="display:none;"></span>
+        <span id="doc-transcript-text"></span><span class="t-cursor"></span>
+      </div>
+      <div class="ask-row">
+        <input class="ask-inp" id="doc-ask-inp" type="text" placeholder="Interrupt the historian..." onkeydown="if(event.key==='Enter') sendDocAsk()"/>
+        <button class="ask-btn" onclick="sendDocAsk()">Ask</button>
+      </div>
+    </div>
+    <div class="segments-area" style="padding:16px 22px;">
+      <div class="doc-seg-label">Segments</div>
+      <div class="doc-seg-item active" onclick="playSeg(0)"><div class="doc-seg-bar"></div><div class="doc-seg-num">01</div><div class="doc-seg-name">The Palace at the Edge of the World</div></div>
+      <div class="doc-seg-item" onclick="playSeg(1)"><div class="doc-seg-bar"></div><div class="doc-seg-num">02</div><div class="doc-seg-name">The Laws That Shaped an Empire</div></div>
+      <div class="doc-seg-item" onclick="playSeg(2)"><div class="doc-seg-bar"></div><div class="doc-seg-num">03</div><div class="doc-seg-name">Craftsmen of the Nakkaşhane</div></div>
+      <div class="doc-seg-item" onclick="playSeg(3)"><div class="doc-seg-bar"></div><div class="doc-seg-num">04</div><div class="doc-seg-name">The Inner Courtyard</div></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ AGENT SESSION MODAL ═══ -->
+<div class="agent-overlay" id="agent-overlay" onclick="closeAgent(event)">
+  <div class="agent-modal" id="agent-modal">
+    <div class="agent-modal-head">
+      <div class="agent-head-left">
+        <div class="agent-tag">
+          <div class="agent-tag-dot" id="agent-tag-dot"></div>
+          <span id="agent-tag-label">Research Agent</span>
+        </div>
+        <div class="agent-query" id="agent-query-title"></div>
+      </div>
+      <button class="agent-close" onclick="closeAgent()">×</button>
+    </div>
+    <div class="agent-modal-body" id="agent-log"></div>
+  </div>
+</div>
+
+<!-- ═══ FLOATING VOICE BUTTON ═══ -->
+<div class="voice-btn" id="voice-btn" onclick="toggleVoice()">
+  <div class="vb-ring">
+    <span class="vb-mic-icon">🎙</span>
+    <div class="user-wave">
+      <div class="uw"></div><div class="uw"></div><div class="uw"></div>
+      <div class="uw"></div><div class="uw"></div><div class="uw"></div>
+      <div class="uw"></div>
+    </div>
+  </div>
+  <div class="vb-text-wrap">
+    <div class="vb-label" id="vb-label">Hold to speak</div>
+    <div class="vb-sublabel" id="vb-sub">Historian is narrating</div>
+  </div>
+</div>
+
+<!-- ═══ LIVE TOAST ═══ -->
+<div class="live-toast" id="live-toast">
+  <button class="toast-close" onclick="closeToast()">×</button>
+  <div class="toast-user">
+    <span>You said</span>
+  </div>
+  <div class="toast-user-text" id="toast-user-text"></div>
+  <div class="toast-hist-label">Historian responds</div>
+  <div class="toast-hist-text" id="toast-hist-text"></div>
+</div>
+
+<!-- Paused indicator -->
+<div class="hist-paused" id="hist-paused">— Historian paused —</div>
+
+
+<script>
+// ─── Screens ───
+function goTo(id) {
+  ['s-upload','s-work','s-doc'].forEach(s => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+// ─── Upload ───
+function startWork() {
+  goTo('s-work');
+  setTimeout(runHistorian, 400);
+  setTimeout(runResearch, 600);
+}
+
+// ─── Historian transcript ───
+const introLines = [
+  "I'm examining your document now... I can see this is written in Ottoman Turkish, Arabic script.",
+  "Fascinating — this is the Kanun-i Osmani, the imperial law code compiled under Suleiman I, circa 1520.",
+  "I'm finding research gaps. The Nakkaşhane reference needs more context — I'm dispatching a subagent to İznik workshop records now.",
+  "While I research, feel free to scroll through the document. I'll annotate passages as I process them.",
+  "My subagents have found 4 sources on Topkapı architecture and 3 on İznik tile production. Building segment one now.",
+];
+let lineIdx = 0, typeTimer = null;
+
+function runHistorian() { showLine(introLines[lineIdx]); }
+
+function showLine(text) {
+  if (typeTimer) clearInterval(typeTimer);
+  const el = document.getElementById('transcript-text');
+  const q  = document.getElementById('transcript-q');
+  q.style.display = 'none';
+  el.textContent = '';
+  let i = 0;
+  typeTimer = setInterval(() => {
+    if (i < text.length) {
+      el.textContent = text.slice(0, ++i);
+    } else {
+      clearInterval(typeTimer);
+      if (lineIdx === 1) document.getElementById('callout-1').classList.add('show');
+      if (lineIdx === 2) document.getElementById('callout-2').classList.add('show');
+      lineIdx = (lineIdx + 1) % introLines.length;
+      setTimeout(() => showLine(introLines[lineIdx]), 4200);
+    }
+  }, 22);
+}
+
+// ─── Research ───
+const riData = [
+  { id:'ri1', searchAt:0,    doneAt:2400, src:'4 sources verified' },
+  { id:'ri2', searchAt:700,  doneAt:3400, src:'3 sources verified' },
+  { id:'ri3', searchAt:1200, doneAt:4500, src:'5 sources verified' },
+  { id:'ri4', searchAt:1900, doneAt:5600, src:'2 sources verified' },
+  { id:'ri5', searchAt:2600, doneAt:6800, src:'3 sources verified' },
+];
+const segReadyAt = [3200, 5400, 7800, 10500];
+
+function runResearch() {
+  riData.forEach(item => {
+    const el = document.getElementById(item.id);
+    el.classList.add('show');
+    setTimeout(() => {
+      el.className = 'ri searching show';
+      el.querySelector('.ri-st').textContent = 'Searching...';
+    }, item.searchAt);
+    setTimeout(() => {
+      el.className = 'ri done show';
+      el.querySelector('.ri-st').textContent = item.src;
+    }, item.doneAt);
+  });
+  segReadyAt.forEach((t, i) => setTimeout(() => makeReady(i), t));
+}
+
+function makeReady(i) {
+  const card = document.getElementById('sc' + (i + 1));
+  card.className = 'seg-card ready show';
+  card.querySelector('.seg-play').textContent = '▶';
+  card.querySelector('.seg-sub').textContent = 'Ready — click to watch';
+  card.onclick = () => openDoc(i);
+}
+
+// ─── Mic ───
+let micOn = false;
+function toggleMic() {
+  micOn = !micOn;
+  document.getElementById('mic-toggle').classList.toggle('muted', !micOn);
+  document.getElementById('mic-lbl').textContent = micOn ? 'Live' : 'Muted';
+}
+
+// ─── Ask ───
+const answers = {
+  tiles:   "The İznik workshops supplied tiles under strict imperial contract — page five of your document actually references the Persian cobalt pigment. Each tile required forty days of firing. The Arz Odası panels you're reading about are among the finest surviving examples.",
+  harem:   "The Valide Sultan's power was extraordinary. Three hundred women under her authority, diplomatic marriages in her purview, and direct sovereign access that even the Grand Vizier couldn't match. Hürrem Sultan essentially redefined what that role could be.",
+  divan:   "The Divan met four times a week. Remarkably, the sultan could listen from a hidden window above — invisible to the council. An early surveillance architecture. The acoustic design was intentional, not incidental.",
+  default: "Based on what I'm reading in this document alongside my current research: the Ottoman court operated on graduated secrecy — each courtyard a degree more sacred, more restricted, more proximate to imperial power.",
+};
+
+function getAnswer(q) {
+  const lq = q.toLowerCase();
+  if (lq.includes('tile') || lq.includes('iznik') || lq.includes('çini')) return answers.tiles;
+  if (lq.includes('harem') || lq.includes('valide') || lq.includes('hurrem')) return answers.harem;
+  if (lq.includes('divan') || lq.includes('council') || lq.includes('vizier')) return answers.divan;
+  return answers.default;
+}
+
+function sendAsk() {
+  const inp = document.getElementById('ask-inp');
+  const q = inp.value.trim(); if (!q) return;
+  inp.value = '';
+  const ql  = document.getElementById('transcript-q');
+  const tel = document.getElementById('transcript-text');
+  ql.textContent = 'You asked: ' + q;
+  ql.style.display = 'block';
+  tel.textContent = '';
+  if (typeTimer) clearInterval(typeTimer);
+  setTimeout(() => typeInto(tel, getAnswer(q)), 500);
+}
+
+function sendDocAsk() {
+  const inp = document.getElementById('doc-ask-inp');
+  const q = inp.value.trim(); if (!q) return;
+  inp.value = '';
+  const ql  = document.getElementById('doc-transcript-q');
+  const tel = document.getElementById('doc-transcript-text');
+  ql.textContent = 'You asked: ' + q;
+  ql.style.display = 'block';
+  tel.textContent = '';
+  setTimeout(() => typeInto(tel, getAnswer(q)), 500);
+}
+
+function typeInto(el, text) {
+  let i = 0;
+  const t = setInterval(() => {
+    if (i < text.length) el.textContent = text.slice(0, ++i);
+    else clearInterval(t);
+  }, 18);
+}
+
+// ─── Documentary ───
+const segCaptions = [
+  ["In the year fifteen-twenty, at the heart of an empire stretching from Vienna to Baghdad...", "The palace of Topkapı stood not merely as a residence — but as the axis of the known world.", "Its walls had witnessed the signing of laws that would govern forty million souls."],
+  ["The Kanun-i Osmani — the Imperial Laws — were not merely rules. They were the architecture of an empire.", "Every courtyard threshold, every morning ritual was prescribed in ink.", "A civilization encoded in law, administered by a bureaucracy that would not be matched for centuries."],
+  ["Deep within the second courtyard, the craftsmen of the Nakkaşhane labored by lamplight.", "Tileworkers from İznik — masters of cobalt and white — fired their work for forty days in silence.", "Each piece destined for walls that only a hundred living souls would ever see."],
+  ["The Enderun — the innermost court — was the empire's deepest secret.", "Boys taken from Christian families, trained seven years in calligraphy, music, and statecraft.", "They would become viziers, admirals — the architects of a world they had not been born into."],
+];
+const docNarration = [
+  "Notice the visual — this warm amber light represents the gold inlay work described on page three of your document. You can scroll back there while I continue narrating.",
+  "Suleiman wrote poetry under the name Muhibbi — the Beloved. That duality of conqueror and poet shaped everything you're reading in that law code.",
+  "The Nakkaşhane on page two — I've verified from three external sources that the İznik craftsmen were paid triple the standard rate. That detail didn't make it into your document.",
+  "Feel free to ask me anything. I'm watching the document and the visual simultaneously.",
+];
+
+let currentSeg = 0, capIdx = 0, capTimer = null;
+
+function openDoc(segIdx) {
+  currentSeg = segIdx; capIdx = 0;
+  goTo('s-doc');
+  document.querySelectorAll('.doc-seg-item').forEach((el, i) => el.classList.toggle('active', i === segIdx));
+  document.getElementById('dt-seg').textContent = 'Segment ' + (segIdx + 1) + ' of 4';
+  startCaps();
+  const tel = document.getElementById('doc-transcript-text');
+  const ql  = document.getElementById('doc-transcript-q');
+  ql.style.display = 'none';
+  tel.textContent = '';
+  typeInto(tel, docNarration[segIdx]);
+}
+
+function startCaps() {
+  if (capTimer) clearInterval(capTimer);
+  showCap();
+  capTimer = setInterval(() => { capIdx = (capIdx + 1) % segCaptions[currentSeg].length; showCap(); }, 6000);
+}
+
+function showCap() {
+  const el = document.getElementById('cap-text');
+  el.style.opacity = 0;
+  setTimeout(() => { el.textContent = segCaptions[currentSeg][capIdx]; el.style.opacity = 1; }, 420);
+}
+
+function playSeg(i) { openDoc(i); }
+
+function backToWork() {
+  if (capTimer) clearInterval(capTimer);
+  goTo('s-work');
+}
+
+// ─── Agent Session ───
+const agentSessions = [
+  {
+    query: '"Topkapı Palace architectural layout 16th century"',
+    label: 'Architecture Agent',
+    logs: [
+      { icon:'🔍', action:'Web search initiated', detail:'Querying: "Topkapı Palace 16th century floor plan courtyard layout"', time:'0.0s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Encyclopaedia of Islam — Topkapı Sarayı entry', accepted:true }, time:'0.8s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Wikipedia: Topkapi Palace (general, low detail)', accepted:false }, time:'0.9s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Gülru Necipoğlu — Architecture, Ceremonial and Power (MIT Press)', accepted:true }, time:'1.1s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Journal of Ottoman Studies Vol. 14 — Spatial hierarchy in palace design', accepted:true }, time:'1.3s' },
+      { icon:'⚙️', action:'Extracting facts', detail:'Parsing 3 accepted sources for architectural details', time:'1.6s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Four courtyards (avlu) arranged in axial sequence — each requiring formal permission to enter' }, time:'2.0s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Harem complex added by Suleiman I, c.1520 — 400 rooms, 9 baths, 2 mosques' }, time:'2.3s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Audience Chamber (Arz Odası) positioned at exact center of third courtyard — symbolic axis mundi' }, time:'2.6s' },
+      { icon:'🎬', action:'Visual prompt built', detail:'Segment 1 visual: "wide establishing shot of Topkapı from Bosphorus, dawn light, minarets, 16th century Ottoman style"', time:'2.9s' },
+      { icon:'✓', action:'Research complete', detail:'4 sources processed · 3 facts added to context · Segment 1 enriched', time:'3.1s' },
+    ]
+  },
+  {
+    query: '"Iznik tile workshops Ottoman court commission"',
+    label: 'Material Culture Agent',
+    logs: [
+      { icon:'🔍', action:'Web search initiated', detail:'Querying: "Iznik pottery workshop 16th century imperial commission Ottoman"', time:'0.0s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Yanni Petsopoulos — Tulips, Arabesques and Turbans (Azimuth, 1982)', accepted:true }, time:'0.7s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'V&A Museum collection notes — Iznik dish, c.1545', accepted:true }, time:'1.0s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Ottoman crafts blog post (unverified, no citations)', accepted:false }, time:'1.1s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Muqarnas Journal — The Nakkaşhane and imperial tile production 1520–1580', accepted:true }, time:'1.4s' },
+      { icon:'⚙️', action:'Cross-referencing with document', detail:'Matching page 2 Nakkaşhane passage against Muqarnas findings', time:'1.8s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Cobalt blue pigment imported from Kashan, Persia — no domestic substitute. Trade disruption in 1570s ended the classic blue period' }, time:'2.2s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Craftsmen fired tiles at ~900°C for 40 days per batch — confirmed by kiln archaeology at Iznik site' }, time:'2.6s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Nakkaşhane artists were salaried imperial employees — not freelance. Their designs were state secrets' }, time:'3.0s' },
+      { icon:'🎬', action:'Visual prompt built', detail:'Segment 3 visual: "interior of Iznik kiln, craftsmen applying cobalt pigment by lamplight, tile panels drying on wooden racks, warm amber glow"', time:'3.3s' },
+      { icon:'✓', action:'Research complete', detail:'3 sources processed · 3 facts added · Document passage corroborated on page 2', time:'3.5s' },
+    ]
+  },
+  {
+    query: '"Suleiman I Divan court ceremony daily ritual"',
+    label: 'Court Protocol Agent',
+    logs: [
+      { icon:'🔍', action:'Web search initiated', detail:'Querying: "Ottoman imperial Divan ceremony protocol 16th century Suleiman"', time:'0.0s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Busbecq Letters — Habsburg ambassador eyewitness account of Divan, 1555', accepted:true }, time:'0.9s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Leslie Peirce — The Imperial Harem: Women and Sovereignty in the Ottoman Empire', accepted:true }, time:'1.2s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Cornell Fleischer — Bureaucrat and Intellectual in the Ottoman Empire', accepted:true }, time:'1.5s' },
+      { icon:'⚙️', action:'Extracting ceremonial details', detail:'Parsing eyewitness account for spatial and temporal structure of Divan meetings', time:'1.9s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Sultan observed Divan from concealed window (Kasr-ı Adl) — attendees unaware. Architectural surveillance baked into building design' }, time:'2.4s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Divan met 4 days/week. Sessions began at dawn, ended by midday. No session exceeded half a day by imperial statute' }, time:'2.8s' },
+      { icon:'🎬', action:'Visual prompt built', detail:'Segment 2 visual: "Divan chamber interior, robed viziers seated, high vaulted ceiling, latticed window above casting shadow, morning light from east"', time:'3.1s' },
+      { icon:'✓', action:'Research complete', detail:'3 primary sources · 2 facts added · Visual prompt finalized', time:'3.3s' },
+    ]
+  },
+  {
+    query: '"Enderun palace school devshirme pages Ottoman"',
+    label: 'Social History Agent',
+    logs: [
+      { icon:'🔍', action:'Web search initiated', detail:'Querying: "Enderun school Ottoman palace pages devshirme system training curriculum"', time:'0.0s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Barnette Miller — The Palace School of Muhammad the Conqueror (Harvard, 1941)', accepted:true }, time:'0.8s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Halil İnalcık — The Ottoman Empire: The Classical Age 1300–1600', accepted:true }, time:'1.1s' },
+      { icon:'⚙️', action:'Cross-referencing with document', detail:'Matching page 4 Enderun Mektebi clause against historical records of curriculum', time:'1.6s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Pages trained 7–14 years. Curriculum: Arabic, Persian, Ottoman Turkish, calligraphy, archery, wrestling, music. Top graduates became Grand Vizier' }, time:'2.1s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'17 of 48 Ottoman Grand Viziers in the 16th century were Enderun graduates of Christian origin — devshirme system intentionally created loyalty without kinship ties' }, time:'2.6s' },
+      { icon:'🎬', action:'Visual prompt built', detail:'Segment 4 visual: "young men in white turbans practicing calligraphy by candlelight in vaulted chamber, ink and parchment on low desks"', time:'2.9s' },
+      { icon:'✓', action:'Research complete', detail:'2 sources · 2 facts added · Document passage on page 4 fully corroborated', time:'3.1s' },
+    ]
+  },
+  {
+    query: '"Ottoman Harem Valide Sultan hierarchy power"',
+    label: 'Political Structures Agent',
+    logs: [
+      { icon:'🔍', action:'Web search initiated', detail:'Querying: "Valide Sultan Ottoman harem political role succession influence 16th century"', time:'0.0s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Leslie Peirce — The Imperial Harem (Oxford University Press)', accepted:true }, time:'0.7s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Harem: a travel blog post', accepted:false }, time:'0.8s' },
+      { icon:'📄', action:'Result fetched', detail:{ type:'source', text:'Baki Tezcan — The Second Ottoman Empire: Political and Social Transformation', accepted:true }, time:'1.1s' },
+      { icon:'⚙️', action:'Extracting power structures', detail:'Mapping hierarchy: Valide Sultan → Haseki → Kadın → Gözde → Cariye', time:'1.5s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Valide Sultan controlled Harem treasury independently — annual budget equivalent to a provincial governorate' }, time:'2.0s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Hürrem Sultan broke all precedent: freed concubine, legal wife, conducted independent diplomatic correspondence with Polish and French courts' }, time:'2.5s' },
+      { icon:'💡', action:'Key fact extracted', detail:{ type:'fact', text:'Period 1540–1687 known as "Sultanate of Women" — Valide Sultans effectively co-ruled during weak reigns', }, time:'2.9s' },
+      { icon:'🎬', action:'Visual prompt built', detail:'Segment 4 visual: "elaborately decorated harem chamber, mashrabiya windows, silk cushions on low divans, oil lamps, Persian carpet"', time:'3.2s' },
+      { icon:'✓', action:'Research complete', detail:'2 sources · 3 facts added · Document Harem passage on page 2 significantly enriched', time:'3.4s' },
+    ]
+  },
+];
+
+let agentLogTimers = [];
+
+function openAgent(idx) {
+  const session = agentSessions[idx];
+  const overlay = document.getElementById('agent-overlay');
+  const log     = document.getElementById('agent-log');
+  const title   = document.getElementById('agent-query-title');
+  const tagLbl  = document.getElementById('agent-tag-label');
+  const tagDot  = document.getElementById('agent-tag-dot');
+
+  // Clear previous
+  agentLogTimers.forEach(t => clearTimeout(t));
+  agentLogTimers = [];
+  log.textContent = '';
+  title.textContent = session.query;
+  tagLbl.textContent = session.label;
+
+  // Dot state based on research item state
+  const ri = document.getElementById('ri' + (idx + 1));
+  const isDone = ri.classList.contains('done');
+  const isRunning = ri.classList.contains('searching');
+  tagDot.className = 'agent-tag-dot' + (isRunning ? ' running' : '');
+
+  overlay.classList.add('open');
+
+  // Build log entries
+  session.logs.forEach((entry, i) => {
+    const el = document.createElement('div');
+    el.className = 'log-entry';
+
+    const iconEl = document.createElement('div');
+    iconEl.className = 'log-icon';
+    iconEl.textContent = entry.icon;
+
+    const contentEl = document.createElement('div');
+    contentEl.className = 'log-content';
+
+    const actionEl = document.createElement('div');
+    actionEl.className = 'log-action';
+    actionEl.textContent = entry.action;
+
+    contentEl.appendChild(actionEl);
+
+    if (typeof entry.detail === 'string') {
+      const d = document.createElement('div');
+      d.className = 'log-detail';
+      d.textContent = entry.detail;
+      contentEl.appendChild(d);
+    } else {
+      const d = document.createElement('div');
+      const cls = entry.detail.accepted === false ? 'log-detail source rejected'
+                : entry.detail.type === 'fact'    ? 'log-detail fact'
+                :                                   'log-detail source accepted';
+      d.className = cls;
+      d.textContent = entry.detail.text;
+      contentEl.appendChild(d);
+    }
+
+    const timeEl = document.createElement('div');
+    timeEl.className = 'log-time';
+    timeEl.textContent = entry.time;
+
+    el.appendChild(iconEl);
+    el.appendChild(contentEl);
+    el.appendChild(timeEl);
+    log.appendChild(el);
+
+    const delay = isDone ? i * 60 : i * 420;
+    const t = setTimeout(() => {
+      el.classList.add('show');
+      log.scrollTop = log.scrollHeight;
+    }, delay + 80);
+    agentLogTimers.push(t);
+  });
+}
+
+function closeAgent(e) {
+  if (e && e.target !== document.getElementById('agent-overlay')) return;
+  document.getElementById('agent-overlay').classList.remove('open');
+  agentLogTimers.forEach(t => clearTimeout(t));
+}
+
+// ─── Voice Interaction ───
+const mockUserPhrases = [
+  "Tell me more about the Iznik tiles",
+  "Who was the Grand Vizier under Suleiman?",
+  "What happened to this palace after Suleiman died?",
+  "Why were craftsmen forced to live inside the palace?",
+  "Can you explain the Harem's political role?",
+];
+const voiceAnswers = {
+  0: "The İznik tiles — your document references them on page five. What's remarkable is the cobalt pigment: it came exclusively from the Kashan mines in Persia. When the trade route was disrupted in the 1570s, Ottoman tile production never fully recovered that particular shade of blue. The panels in the Arz Odası are the last of their kind.",
+  1: "During Suleiman's peak years — around 1520 — the Grand Vizier was Piri Mehmed Pasha, a veteran administrator from Bayezid's court. He was replaced by İbrahim Pasha in 1523, who became so powerful Suleiman had him executed in 1536. The law code you're reading was partly designed to prevent exactly that kind of overreach.",
+  2: "The palace remained the imperial seat until 1856 when Abdülmecid I moved to Dolmabahçe. By then Topkapı was already museum-like — preserved but hollow. The last Ottoman caliph was expelled from it in 1924. It became a public museum the same year, which is remarkable: within living memory of the empire, its most sacred space was open to tourists.",
+  3: "Control and secrecy. The palace was a state machine — everything that happened inside was imperial intelligence. If craftsmen left after each commission, knowledge of the interior, the security arrangements, the sovereign's daily pattern would leak. The six-month residency limit was itself a compromise between isolation and practicality.",
+  4: "The Harem was fundamentally a succession machine. Producing heirs was its primary function, but managing which heir succeeded was its political one. The Valide Sultan could effectively choose the next sultan by supporting her son's faction. Hürrem Sultan broke every precedent — she married Suleiman, which no concubine had done, and her correspondence shows she was directing foreign policy.",
+};
+
+let voiceActive = false, voiceIdx = 0, voiceTypeTimer = null;
+
+function toggleVoice() {
+  if (voiceActive) return;
+  startListening();
+}
+
+function startListening() {
+  voiceActive = true;
+  const btn = document.getElementById('voice-btn');
+  const lbl = document.getElementById('vb-label');
+  const sub = document.getElementById('vb-sub');
+  const paused = document.getElementById('hist-paused');
+
+  btn.classList.add('listening');
+  lbl.textContent = 'Listening...';
+  sub.textContent = 'Historian paused';
+  paused.classList.add('show');
+
+  // Pause historian typewriter if running
+  if (typeTimer) clearInterval(typeTimer);
+
+  // After 2s simulate user finished speaking
+  setTimeout(() => {
+    finishListening();
+  }, 2200);
+}
+
+function finishListening() {
+  const btn = document.getElementById('voice-btn');
+  const lbl = document.getElementById('vb-label');
+  const sub = document.getElementById('vb-sub');
+
+  btn.classList.remove('listening');
+  lbl.textContent = 'Processing...';
+  sub.textContent = 'Historian responding';
+
+  // Show what user "said"
+  const phrase = mockUserPhrases[voiceIdx % mockUserPhrases.length];
+  const answer = voiceAnswers[voiceIdx % Object.keys(voiceAnswers).length];
+
+  const toast = document.getElementById('live-toast');
+  const toastUser = document.getElementById('toast-user-text');
+  const toastHist = document.getElementById('toast-hist-text');
+
+  toastUser.textContent = phrase;
+  toastHist.textContent = '';
+  toast.classList.add('show');
+  document.getElementById('hist-paused').classList.remove('show');
+
+  // Type historian response into toast
+  setTimeout(() => {
+    btn.classList.add('historian-talking');
+    lbl.textContent = 'Historian speaking';
+    sub.textContent = 'Click to interrupt';
+
+    // Also update sidebar transcript
+    const activeTranscript = document.getElementById('s-doc').classList.contains('hidden')
+      ? document.getElementById('transcript-text')
+      : document.getElementById('doc-transcript-text');
+    if (activeTranscript) {
+      const ql = document.getElementById('transcript-q') || document.getElementById('doc-transcript-q');
+      if (ql) { ql.textContent = 'You said: ' + phrase; ql.style.display = 'block'; }
+      activeTranscript.textContent = '';
+    }
+
+    let i = 0;
+    if (voiceTypeTimer) clearInterval(voiceTypeTimer);
+    voiceTypeTimer = setInterval(() => {
+      if (i < answer.length) {
+        toastHist.textContent = answer.slice(0, ++i);
+        if (activeTranscript) activeTranscript.textContent = answer.slice(0, i);
+      } else {
+        clearInterval(voiceTypeTimer);
+        // Resume after answer
+        setTimeout(() => {
+          btn.classList.remove('historian-talking');
+          lbl.textContent = 'Hold to speak';
+          sub.textContent = 'Historian is narrating';
+          voiceActive = false;
+          voiceIdx++;
+          // Resume historian narration
+          lineIdx = (lineIdx + 1) % introLines.length;
+          showLine(introLines[lineIdx]);
+        }, 2500);
+      }
+    }, 16);
+  }, 600);
+}
+
+function closeToast() {
+  document.getElementById('live-toast').classList.remove('show');
+}
+
+// Hide voice button on upload screen, show on others
+const origGoTo = goTo;
+window.goTo = function(id) {
+  origGoTo(id);
+  const vb = document.getElementById('voice-btn');
+  vb.style.display = (id === 's-upload') ? 'none' : 'flex';
+};
+</script>
+</body>
+</html>
