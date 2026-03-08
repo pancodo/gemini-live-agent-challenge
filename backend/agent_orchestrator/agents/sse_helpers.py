@@ -112,3 +112,41 @@ def build_pipeline_phase_event(
         "label": label,
         "message": message,
     }
+
+
+def build_segment_update_event(
+    *,
+    segment_id: str,
+    scene_id: str,
+    status: str,
+    title: str | None = None,
+    mood: str | None = None,
+    narration_script: str | None = None,
+) -> dict[str, Any]:
+    """Build a segment_update SSE event payload.
+
+    Emitted by Phase III when a segment transitions from skeleton to content.
+    The frontend SegmentCard morphs from shimmer skeleton to real title/mood
+    on "generating", and reveals full narration preview on "ready".
+
+    Args:
+        segment_id: e.g. "segment_0"
+        scene_id: Matching SceneBrief scene_id.
+        status: "generating" | "ready" | "error"
+        title: Segment display title (included once known).
+        mood: Emotional register string.
+        narration_script: Narration text (included when status is "ready").
+    """
+    event: dict[str, Any] = {
+        "type": "segment_update",
+        "segmentId": segment_id,
+        "sceneId": scene_id,
+        "status": status,
+    }
+    if title is not None:
+        event["title"] = title
+    if mood is not None:
+        event["mood"] = mood
+    if narration_script is not None:
+        event["narrationScript"] = narration_script
+    return event
