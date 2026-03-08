@@ -1,0 +1,313 @@
+@import "tailwindcss";
+
+/* ── Design Tokens ─────────────────────────────────────── */
+@theme {
+  /* Parchment palette */
+  --color-bg:     #F2EDE3;
+  --color-bg2:    #EBE4D8;
+  --color-bg3:    #E2D9CA;
+  --color-bg4:    #D6CCBA;
+  --color-gold:   #8B5E1A;
+  --color-gold-d: #5C3D0E;
+  --color-text:   #1E170C;
+  --color-muted:  #8A7A62;
+  --color-green:  #2E6E44;
+  --color-teal:   #1E5E5E;
+
+  /* Cinematic dark (Documentary Player) */
+  --color-bg-deep:  #0d0b09;
+  --color-bg-card:  #1a1510;
+
+  /* Interaction tokens */
+  --color-glow-primary:   #c4956a;
+  --color-glow-secondary: #d4a574;
+
+  /* Typography */
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-sans:  'DM Sans', system-ui, sans-serif;
+}
+
+/* ── CSS Custom Properties (for dynamic/JS-driven values) ─ */
+:root {
+  --bg:     #F2EDE3;
+  --bg2:    #EBE4D8;
+  --bg3:    #E2D9CA;
+  --bg4:    #D6CCBA;
+  --gold:   #8B5E1A;
+  --gold-d: #5C3D0E;
+  --text:   #1E170C;
+  --muted:  #8A7A62;
+  --green:  #2E6E44;
+  --teal:   #1E5E5E;
+
+  --bg-deep:   #0d0b09;
+  --bg-card:   #1a1510;
+
+  --glow-primary:   #c4956a;
+  --glow-secondary: #d4a574;
+  --shadow-warm:    rgba(139, 105, 20, 0.15);
+
+  /* Audio-reactive (overridden dynamically by useAudioVisualSync) */
+  --ken-speed:    28s;
+  --glow-opacity: 0.5;
+  --vig-spread:   110%;
+  --cap-shadow:   28px;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Film Grain Overlay ────────────────────────────────── */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.025;
+  filter: url(#grain);
+  mix-blend-mode: multiply;
+  animation: grain-shift 0.5s steps(4) infinite;
+}
+
+@keyframes grain-shift {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-2px, 2px); }
+  50%  { transform: translate(2px, -1px); }
+  75%  { transform: translate(-1px, -2px); }
+}
+
+/* ── Aurora Blobs (Upload + Workspace screens only) ────── */
+.aurora-blob {
+  position: fixed;
+  width: 40vw; height: 40vw;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: -1;
+}
+.aurora-blob:nth-child(1) {
+  background: #8b6914; top: -10%; left: -10%;
+  animation: drift 22s ease-in-out infinite alternate;
+}
+.aurora-blob:nth-child(2) {
+  background: #3d2e1a; bottom: -10%; right: -10%;
+  animation: drift 28s ease-in-out infinite alternate-reverse;
+}
+.aurora-blob:nth-child(3) {
+  background: #2a1f14; top: 50%; left: 40%;
+  animation: drift 32s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(40px, 25px) scale(1.08); }
+}
+
+/* ── Agent Card Animations ─────────────────────────────── */
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.agent-card.searching {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--bg2), var(--bg2)) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      transparent 25%,
+      var(--teal) 50%,
+      transparent 75%
+    ) border-box;
+  animation: rotate-border 3s linear infinite;
+}
+@keyframes rotate-border { to { --border-angle: 360deg; } }
+
+.agent-card.evaluating::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(196, 149, 106, 0.5) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  padding: 1px;
+}
+
+.agent-card {
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+  position: relative;
+}
+.agent-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    400px circle at var(--mouse-x) var(--mouse-y),
+    rgba(196, 149, 106, 0.10),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.agent-card:hover::after { opacity: 1; }
+
+/* ── Skeleton Animations ───────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes skeleton-pulse {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.seg-card.generating .seg-title {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  background-attachment: fixed;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.seg-card.ready .seg-title {
+  -webkit-text-fill-color: initial;
+  animation: content-reveal 0.4s ease-out;
+}
+@keyframes content-reveal {
+  from { opacity: 0; filter: blur(4px); }
+  to   { opacity: 1; filter: blur(0); }
+}
+
+/* ── Phase Divider (Expedition Log) ────────────────────── */
+.phase-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+}
+.phase-divider::before,
+.phase-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
+  transform: scaleX(0);
+  transform-origin: center;
+  animation: draw-rule 0.8s ease-out forwards;
+}
+.phase-divider-dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--gold);
+  opacity: 0;
+  animation: dot-appear 0.3s 0.4s ease-out forwards;
+}
+@keyframes draw-rule { to { transform: scaleX(1); } }
+@keyframes dot-appear { to { opacity: 1; } }
+
+/* ── Stat Flash ─────────────────────────────────────────── */
+.stat-value.updated {
+  animation: stat-flash 0.5s ease-out;
+}
+@keyframes stat-flash {
+  0%   { color: var(--green); transform: scale(1.1); }
+  100% { color: var(--gold);  transform: scale(1); }
+}
+
+/* ── Archival Corner Brackets ───────────────────────────── */
+.archival-frame {
+  position: relative;
+}
+.archival-frame::before,
+.archival-frame::after {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  border-color: var(--gold);
+  border-style: solid;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.archival-frame::before {
+  top: -2px; left: -2px;
+  border-width: 1px 0 0 1px;
+}
+.archival-frame::after {
+  bottom: -2px; right: -2px;
+  border-width: 0 1px 1px 0;
+}
+.archival-frame:hover::before,
+.archival-frame:hover::after { opacity: 0.6; }
+
+/* ── Ink Ripple ────────────────────────────────────────── */
+@keyframes ink-spread {
+  from { transform: scale(0); opacity: 0.3; }
+  to   { transform: scale(2.5); opacity: 0; }
+}
+
+/* ── Word-by-word caption reveal ───────────────────────── */
+@keyframes word-appear {
+  from { opacity: 0; filter: blur(4px); transform: translateY(4px); }
+  to   { opacity: 1; filter: blur(0);   transform: translateY(0); }
+}
+
+/* ── Iris transition ───────────────────────────────────── */
+@property --iris-r {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 150%;
+}
+
+/* ── Typewriter cursor ─────────────────────────────────── */
+.tw-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--gold);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s step-end infinite;
+}
+@keyframes cursor-blink {
+  50% { opacity: 0; }
+}
+
+/* ── Log source shimmer ─────────────────────────────────── */
+.log-source.evaluating {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Reduced Motion ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .grain-overlay, .aurora-blob { animation: none !important; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ── Documentary Player (always dark) ─────────────────── */
+.player-root {
+  background: var(--bg-deep);
+  color: #e8ddd0;
+  font-family: var(--font-serif);
+}
