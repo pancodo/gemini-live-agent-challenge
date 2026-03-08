@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { toast } from 'sonner';
 import { useResearchStore } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { useSSE } from '../../hooks/useSSE';
@@ -216,6 +217,40 @@ export function ResearchPanel() {
 
   // Start SSE stream
   useSSE(sessionId);
+
+  // ── Toast notifications on agent state transitions ──────
+  const prevAgentStatusRef = useRef<Record<string, AgentStatus>>({});
+
+  useEffect(() => {
+    const prev = prevAgentStatusRef.current;
+    const entries = Object.entries(agents);
+
+    for (const [agentId, agent] of entries) {
+      const prevStatus = prev[agentId];
+      if (prevStatus === agent.status) continue;
+
+      if (agent.status === 'done' && prevStatus !== undefined) {
+        toast.success(`Research complete: ${agent.query}`, {
+          description: `${agent.facts?.length ?? 0} facts verified`,
+          duration: 4000,
+        });
+      }
+
+      if (agent.status === 'error' && prevStatus !== undefined) {
+        toast.error('Research agent failed', {
+          description: agent.query,
+          duration: 5000,
+        });
+      }
+    }
+
+    // Update prev snapshot
+    const next: Record<string, AgentStatus> = {};
+    for (const [agentId, agent] of entries) {
+      next[agentId] = agent.status;
+    }
+    prevAgentStatusRef.current = next;
+  }, [agents]);
 
   // Group agents by phase
   const agentList = Object.values(agents);
