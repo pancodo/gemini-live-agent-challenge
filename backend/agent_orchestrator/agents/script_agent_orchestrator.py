@@ -1,0 +1,473 @@
+"""Phase III of the AI Historian documentary pipeline: Script Generation.
+
+Wraps the Script Agent (gemini-2.0-pro) in a custom ``BaseAgent`` orchestrator
+that handles SSE emission, output parsing, and Firestore persistence.
+
+Architecture
+------------
+``ScriptAgentOrchestrator`` is a custom ``BaseAgent`` subclass. It:
+
+1. Emits the ``pipeline_phase`` SSE event (phase 3, label "SYNTHESIS") so the
+   frontend Expedition Log advances to Phase III.
+2. Announces the inner script agent as ``queued`` then ``searching`` so the
+   Research Panel shows a status card.
+3. Runs the inner ADK ``Agent`` (``_INNER_SCRIPT_AGENT``) via
+   ``run_async(ctx)``, yielding every ADK event upstream.
+4. Parses the JSON output from ``session.state["script"]`` into a list of
+   ``SegmentScript`` objects.
+5. Writes each segment as a Firestore document under
+   ``/sessions/{sessionId}/segments/{segmentId}`` with a ``status: "pending"``
+   field (imageUrls/videoUrl are filled by Phase V).
+6. Emits ``segment_update`` SSE events — one per segment with
+   ``status: "generating"`` — so the frontend SegmentCard skeletons become
+   titled cards.
+7. Emits a ``stats_update`` event with ``segmentsReady`` equal to the number
+   of successfully parsed segments.
+
+Session state contract
+----------------------
+**Inputs** (must be set before Phase III runs):
+    - ``session.state["scene_briefs"]``        — ``list[dict]`` from Phase I
+    - ``session.state["aggregated_research"]`` — merged string from aggregator
+    - ``session.state["visual_bible"]``        — Imagen 3 style guide string
+    - ``session.state["document_map"]``        — document outline string
+
+**Outputs** (written by this agent):
+    - ``session.state["script"]`` — list[dict] of serialised ``SegmentScript``
+      objects (raw JSON string as returned by the inner ADK Agent, then
+      re-written as a list of dicts after parsing).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from google.adk.agents import Agent
+from google.adk.agents.base_agent import BaseAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.cloud import firestore
+from pydantic import ConfigDict, Field
+
+from .script_types import SegmentScript
+from .sse_helpers import (
+    SSEEmitter,
+    build_agent_status_event,
+    build_pipeline_phase_event,
+    build_segment_update_event,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Inner ADK Script Agent
+# ---------------------------------------------------------------------------
+# Defined at module level so it is reused across pipeline invocations.
+# The agent reads {scene_briefs} and {aggregated_research} from session.state
+# via ADK's template substitution mechanism.
+# ---------------------------------------------------------------------------
+
+_INNER_SCRIPT_AGENT = Agent(
+    name="script_agent",
+    model="gemini-2.0-pro",
+    description=(
+        "Generates documentary segments grounded in scene briefs and "
+        "aggregated research. One segment per SceneBrief."
+    ),
+    instruction="""\
+You are the scriptwriter for an AI-generated historical documentary.
+
+Scene Briefs (the planned scenes, grounded in the source document):
+{scene_briefs}
+
+Aggregated Research (corroborated historical facts and enriched Visual Bible):
+{aggregated_research}
+
+Generate one documentary segment per scene brief. Each segment must directly
+correspond to its scene brief — same scene_id, title from the brief, same era
+and location. Do not invent new scenes or reorder the narrative arc.
+
+For each scene brief, produce a JSON segment object:
+{
+  "id": "segment_N",
+  "scene_id": "scene_N",
+  "title": "Scene title (from the brief)",
+  "narration_script": "Full narration text, 60-120 seconds when spoken aloud",
+  "visual_descriptions": [
+    "Frame 1: detailed Imagen 3 prompt (starts with enriched_visual_bible prefix)",
+    "Frame 2: ...",
+    "Frame 3: ...",
+    "Frame 4: ..."
+  ],
+  "veo2_scene": "Optional: one dramatic scene description for Veo 2 video generation",
+  "mood": "cinematic | reflective | dramatic | scholarly",
+  "sources": ["citation 1", "citation 2"]
+}
+
+Produce a JSON array containing one object per scene brief, in the same order
+as the briefs. Do not wrap it in markdown fences or add a preamble.
+Ensure visual_descriptions are grounded in research facts — period-accurate,
+no anachronisms, specific to the era and location from each scene brief.
+Each visual prompt must specify: era, location, lighting, composition,
+subjects, and mood. Start every prompt with the enriched_visual_bible prefix
+from the aggregated research.
+""",
+    output_key="script",
+)
+
+
+# ---------------------------------------------------------------------------
+# JSON parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def _strip_fences(text: str) -> str:
+    """Remove markdown code fences that the model may wrap JSON in."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove opening fence (with optional language tag)
+        stripped = stripped.split("\n", 1)[-1]
+    if stripped.endswith("```"):
+        stripped = stripped.rsplit("```", 1)[0]
+    return stripped.strip()
+
+
+def _parse_script_output(raw: str) -> list[SegmentScript]:
+    """Parse the script_agent JSON output into SegmentScript objects.
+
+    The agent is instructed to produce a bare JSON array, but may wrap it in
+    a ``{"segments": [...]}`` object or markdown fences. Both forms are handled.
+
+    Args:
+        raw: Raw string from ``session.state["script"]``.
+
+    Returns:
+        List of validated ``SegmentScript`` objects. May be empty if parsing
+        fails — the caller logs the error and emits an SSE error event.
+    """
+    cleaned = _strip_fences(raw)
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.error("Script Agent output is not valid JSON: %s", exc)
+        return []
+
+    # Unwrap {"segments": [...]} envelope if present
+    if isinstance(parsed, dict):
+        parsed = parsed.get("segments", [])
+
+    if not isinstance(parsed, list):
+        logger.error(
+            "Script Agent output is not a JSON array (got %s)", type(parsed).__name__
+        )
+        return []
+
+    segments: list[SegmentScript] = []
+    for idx, item in enumerate(parsed):
+        if not isinstance(item, dict):
+            logger.warning("Skipping non-dict segment at index %d", idx)
+            continue
+        try:
+            segments.append(SegmentScript(**item))
+        except Exception as exc:
+            logger.warning("Skipping malformed segment at index %d: %s", idx, exc)
+
+    return segments
+
+
+# ---------------------------------------------------------------------------
+# Firestore persistence helper
+# ---------------------------------------------------------------------------
+
+
+async def _write_segment_to_firestore(
+    db: firestore.AsyncClient,
+    session_id: str,
+    segment: SegmentScript,
+) -> None:
+    """Write a single SegmentScript to Firestore.
+
+    Creates or overwrites the document at
+    ``/sessions/{sessionId}/segments/{segmentId}``.
+
+    The document includes stub arrays for ``imageUrls`` and ``videoUrl`` that
+    Phase V (Visual Director) will populate.
+
+    Args:
+        db: Async Firestore client.
+        session_id: Parent session.
+        segment: Parsed and validated segment to persist.
+    """
+    ref = (
+        db.collection("sessions")
+        .document(session_id)
+        .collection("segments")
+        .document(segment.id)
+    )
+    await ref.set(
+        {
+            "sceneId": segment.scene_id,
+            "title": segment.title,
+            "script": segment.narration_script,
+            "visualDescriptions": segment.visual_descriptions,
+            "veo2Scene": segment.veo2_scene,
+            "mood": segment.mood,
+            "sources": segment.sources,
+            "imageUrls": [],       # Populated by Phase V
+            "videoUrl": None,      # Populated by Phase V
+            "graphEdges": [],      # Reserved for future branching
+            "status": "pending",   # Updated to "ready" by Phase V
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# ScriptAgentOrchestrator — Phase III BaseAgent
+# ---------------------------------------------------------------------------
+
+
+class ScriptAgentOrchestrator(BaseAgent):
+    """Phase III orchestrator: run Script Agent → parse → store → emit events.
+
+    Wraps the inner ``_INNER_SCRIPT_AGENT`` (gemini-2.0-pro ADK Agent) in the
+    same BaseAgent orchestrator pattern used by Phases I and II. This gives
+    Phase III full SSE visibility without requiring the inner ADK Agent to know
+    anything about the SSE transport.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    firestore_project: str = Field(
+        ...,
+        description="GCP project ID for Firestore operations.",
+    )
+    emitter: SSEEmitter | None = Field(
+        default=None,
+        description="Optional SSE emitter for frontend progress events.",
+    )
+    sub_agents: list[BaseAgent] = Field(
+        default_factory=list,
+        description=(
+            "Declared for ADK BaseAgent compatibility. "
+            "The inner script agent is run directly via run_async(ctx)."
+        ),
+    )
+
+    async def _run_async_impl(
+        self,
+        ctx: InvocationContext,
+    ) -> AsyncGenerator[Any, None]:
+        """Execute Phase III: announce → run script agent → parse → persist.
+
+        Yields every ADK event produced by the inner script agent so the ADK
+        runtime can track execution correctly.
+        """
+        session_id: str = ctx.session.id
+        t_start = time.monotonic()
+
+        # ------------------------------------------------------------------
+        # Phase announcement
+        # ------------------------------------------------------------------
+        if self.emitter is not None:
+            await self.emitter.emit(
+                "pipeline_phase",
+                build_pipeline_phase_event(
+                    phase=3,
+                    label="SYNTHESIS",
+                    message="Writing narration and visual direction for each scene",
+                ),
+            )
+
+        # ------------------------------------------------------------------
+        # Announce script agent as queued
+        # ------------------------------------------------------------------
+        num_scenes = len(ctx.session.state.get("scene_briefs", []))
+        if self.emitter is not None:
+            await self.emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id="script_agent",
+                    status="queued",
+                    query=(
+                        f"Scripting {num_scenes} scene"
+                        f"{'s' if num_scenes != 1 else ''}"
+                    ),
+                ),
+            )
+
+        # ------------------------------------------------------------------
+        # Run the inner script agent
+        # ------------------------------------------------------------------
+        if self.emitter is not None:
+            await self.emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id="script_agent",
+                    status="searching",  # "working" maps to teal dot in frontend
+                    query="Composing narration and visual prompts from research",
+                ),
+            )
+
+        t_script_start = time.monotonic()
+        async for event in _INNER_SCRIPT_AGENT.run_async(ctx):
+            yield event
+        t_script_elapsed = time.monotonic() - t_script_start
+
+        logger.info(
+            "Script Agent completed in %.1fs for session %s",
+            t_script_elapsed,
+            session_id,
+        )
+
+        # ------------------------------------------------------------------
+        # Parse output
+        # ------------------------------------------------------------------
+        raw_script: str = ctx.session.state.get("script", "")
+        if not raw_script:
+            logger.error(
+                "Phase III: script_agent produced no output for session %s",
+                session_id,
+            )
+            if self.emitter is not None:
+                await self.emitter.emit(
+                    "agent_status",
+                    build_agent_status_event(
+                        agent_id="script_agent",
+                        status="error",
+                        elapsed=round(t_script_elapsed, 1),
+                    ),
+                )
+            return
+
+        segments = _parse_script_output(raw_script)
+
+        if not segments:
+            logger.error(
+                "Phase III: could not parse any SegmentScript from output for "
+                "session %s. Raw output (first 500 chars): %s",
+                session_id,
+                raw_script[:500],
+            )
+            if self.emitter is not None:
+                await self.emitter.emit(
+                    "agent_status",
+                    build_agent_status_event(
+                        agent_id="script_agent",
+                        status="error",
+                        elapsed=round(t_script_elapsed, 1),
+                    ),
+                )
+            return
+
+        logger.info(
+            "Phase III: parsed %d segments for session %s",
+            len(segments),
+            session_id,
+        )
+
+        # Re-write session.state["script"] as a clean list of dicts so
+        # downstream agents (aggregator, visual_director) get consistent data.
+        ctx.session.state["script"] = [seg.model_dump() for seg in segments]
+
+        # ------------------------------------------------------------------
+        # Persist to Firestore + emit per-segment SSE events
+        # ------------------------------------------------------------------
+        db = firestore.AsyncClient(project=self.firestore_project)
+
+        for segment in segments:
+            try:
+                await _write_segment_to_firestore(db, session_id, segment)
+                logger.debug(
+                    "Wrote segment %s to Firestore for session %s",
+                    segment.id,
+                    session_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to write segment %s to Firestore: %s",
+                    segment.id,
+                    exc,
+                )
+
+            if self.emitter is not None:
+                await self.emitter.emit(
+                    "segment_update",
+                    build_segment_update_event(
+                        segment_id=segment.id,
+                        scene_id=segment.scene_id,
+                        status="generating",
+                        title=segment.title,
+                        mood=segment.mood,
+                    ),
+                )
+
+        # ------------------------------------------------------------------
+        # Stats update and completion event
+        # ------------------------------------------------------------------
+        t_total_elapsed = time.monotonic() - t_start
+
+        if self.emitter is not None:
+            await self.emitter.emit(
+                "stats_update",
+                {
+                    "type": "stats_update",
+                    "segmentsReady": len(segments),
+                },
+            )
+            await self.emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id="script_agent",
+                    status="done",
+                    elapsed=round(t_total_elapsed, 1),
+                    facts=[
+                        f"{len(segments)} segment(s) scripted and written to Firestore",
+                        "session.state['script'] updated with validated SegmentScript list",
+                    ],
+                ),
+            )
+
+        logger.info(
+            "Phase III complete for session %s: %d segments in %.1fs",
+            session_id,
+            len(segments),
+            t_total_elapsed,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Factory function
+# ---------------------------------------------------------------------------
+
+
+def build_script_agent_orchestrator(
+    emitter: SSEEmitter | None = None,
+) -> ScriptAgentOrchestrator:
+    """Construct a ``ScriptAgentOrchestrator`` from environment variables.
+
+    Required environment variables:
+        - ``GCP_PROJECT_ID``: Google Cloud project ID for Firestore writes.
+
+    Args:
+        emitter: Optional SSE emitter for frontend progress events.
+
+    Returns:
+        Configured ``ScriptAgentOrchestrator`` ready for pipeline integration.
+    """
+    return ScriptAgentOrchestrator(
+        name="script_agent_orchestrator",
+        description=(
+            "Phase III: Runs the Script Agent (gemini-2.0-pro) to generate "
+            "narration and visual descriptions for each SceneBrief, then "
+            "validates the output, writes segments to Firestore, and emits "
+            "segment_update SSE events so the frontend Expedition Log updates."
+        ),
+        firestore_project=os.environ["GCP_PROJECT_ID"],
+        emitter=emitter,
+    )
