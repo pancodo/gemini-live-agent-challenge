@@ -1,61 +1,9 @@
 import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { useNavigate } from 'react-router-dom';
+import { motion, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
 import { Badge, Button } from '../ui';
+import { usePlayerStore } from '../../store/playerStore';
+import { useTextScramble } from '../../hooks/useTextScramble';
 import type { Segment } from '../../types';
-
-// ── Cipher Scramble Hook ────────────────────────────────────────
-
-const CIPHER_CHARS = '\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u03B1\u03B2\u03B3\u03B4\u03B5\u03B6\u03B7\u03B8';
-
-function useTextScramble(finalText: string, active: boolean): string {
-  const [display, setDisplay] = useState(finalText);
-  const rafRef = useRef<number>(0);
-  const startRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!active || !finalText) {
-      setDisplay(finalText);
-      return;
-    }
-
-    const duration = 600; // ms
-    startRef.current = performance.now();
-
-    function step(now: number): void {
-      const elapsed = now - startRef.current;
-      const progress = Math.min(elapsed / duration, 1);
-      const resolvedCount = Math.floor(progress * finalText.length);
-
-      let result = '';
-      for (let i = 0; i < finalText.length; i++) {
-        if (i < resolvedCount) {
-          result += finalText[i];
-        } else if (finalText[i] === ' ') {
-          result += ' ';
-        } else {
-          result += CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)];
-        }
-      }
-
-      setDisplay(result);
-
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(step);
-      } else {
-        setDisplay(finalText);
-      }
-    }
-
-    rafRef.current = requestAnimationFrame(step);
-
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, [finalText, active]);
-
-  return display;
-}
 
 // ── Props ───────────────────────────────────────────────────────
 
@@ -67,9 +15,15 @@ interface SegmentCardProps {
 // ── Component ───────────────────────────────────────────────────
 
 export function SegmentCard({ segment, index }: SegmentCardProps) {
-  const navigate = useNavigate();
+  const triggerIris = usePlayerStore((s) => s.triggerIris);
   const reducedMotion = useReducedMotion();
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Magnetic pull motion values (must be unconditional)
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const springX = useSpring(mx, { stiffness: 150, damping: 15 });
+  const springY = useSpring(my, { stiffness: 150, damping: 15 });
   const [hasBeenReady, setHasBeenReady] = useState(segment.status === 'ready');
 
   // Track transition to ready for cipher reveal
@@ -96,8 +50,28 @@ export function SegmentCard({ segment, index }: SegmentCardProps) {
   }, []);
 
   const handleWatch = useCallback(() => {
-    navigate(`/player/${segment.id}`);
-  }, [navigate, segment.id]);
+    triggerIris(`/player/${segment.id}`);
+  }, [triggerIris, segment.id]);
+
+  const handleWatchArea = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    if (reducedMotion) return;
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const distX = e.clientX - centerX;
+    const distY = e.clientY - centerY;
+    const dist = Math.sqrt(distX * distX + distY * distY);
+    if (dist < 60) {
+      mx.set(distX * 0.3);
+      my.set(distY * 0.3);
+    }
+  }, [mx, my, reducedMotion]);
+
+  const handleWatchLeave = useCallback(() => {
+    mx.set(0);
+    my.set(0);
+  }, [mx, my]);
 
   const isGenerating = segment.status === 'generating';
 
@@ -167,10 +141,16 @@ export function SegmentCard({ segment, index }: SegmentCardProps) {
 
       {/* Watch button */}
       {segment.status === 'ready' && (
-        <div className="flex justify-end">
-          <Button variant="secondary" size="sm" onClick={handleWatch}>
-            {'\u25B6'} Watch
-          </Button>
+        <div
+          className="flex justify-end"
+          onMouseMove={handleWatchArea}
+          onMouseLeave={handleWatchLeave}
+        >
+          <motion.div style={reducedMotion ? {} : { x: springX, y: springY }}>
+            <Button variant="secondary" size="sm" onClick={handleWatch}>
+              {'\u25B6'} Watch
+            </Button>
+          </motion.div>
         </div>
       )}
     </motion.div>
