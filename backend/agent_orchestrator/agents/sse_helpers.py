@@ -1,0 +1,114 @@
+"""SSE event emission helpers for the ADK agent pipeline.
+
+Provides typed helper functions for emitting Server-Sent Events to the
+frontend via the SSE stream. All event payloads conform to the TypeScript
+SSEEvent union type defined in frontend/src/types/index.ts.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
+
+
+class SSEEmitter(Protocol):
+    """Protocol for SSE event emission backends.
+
+    Implementations may write to an asyncio.Queue, a FastAPI StreamingResponse,
+    a Pub/Sub topic, or any other transport.
+    """
+
+    async def emit(self, event_type: str, data: dict[str, Any]) -> None:
+        """Emit a single SSE event."""
+        ...
+
+
+@dataclass
+class QueueSSEEmitter:
+    """Emits SSE events to an asyncio.Queue for consumption by FastAPI SSE endpoints."""
+
+    queue: Any  # asyncio.Queue[str] — using Any to avoid import-time asyncio dependency
+
+    async def emit(self, event_type: str, data: dict[str, Any]) -> None:
+        """Serialize and enqueue an SSE event."""
+        payload = json.dumps(data, default=str)
+        message = f"event: {event_type}\ndata: {payload}\n\n"
+        await self.queue.put(message)
+
+
+def build_agent_source_evaluation_event(
+    *,
+    agent_id: str,
+    url: str,
+    title: str,
+    accepted: bool,
+    reason: str,
+) -> dict[str, Any]:
+    """Build an agent_source_evaluation SSE event payload.
+
+    Matches the AgentSourceEvaluationEvent TypeScript interface:
+        {
+            type: 'agent_source_evaluation',
+            agentId: string,
+            source: { url, title, accepted, reason }
+        }
+    """
+    return {
+        "type": "agent_source_evaluation",
+        "agentId": agent_id,
+        "source": {
+            "url": url,
+            "title": title,
+            "accepted": accepted,
+            "reason": reason,
+        },
+    }
+
+
+def build_agent_status_event(
+    *,
+    agent_id: str,
+    status: str,
+    query: str | None = None,
+    facts: list[str] | None = None,
+    elapsed: float | None = None,
+) -> dict[str, Any]:
+    """Build an agent_status SSE event payload.
+
+    Matches the AgentStatusEvent TypeScript interface.
+    """
+    event: dict[str, Any] = {
+        "type": "agent_status",
+        "agentId": agent_id,
+        "status": status,
+    }
+    if query is not None:
+        event["query"] = query
+    if facts is not None:
+        event["facts"] = facts
+    if elapsed is not None:
+        event["elapsed"] = elapsed
+    return event
+
+
+def build_pipeline_phase_event(
+    *,
+    phase: int,
+    label: str,
+    message: str,
+) -> dict[str, Any]:
+    """Build a pipeline_phase SSE event payload.
+
+    Matches the PipelinePhaseEvent TypeScript interface.
+    """
+    return {
+        "type": "pipeline_phase",
+        "phase": phase,
+        "label": label,
+        "message": message,
+    }
