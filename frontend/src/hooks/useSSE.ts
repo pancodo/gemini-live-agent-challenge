@@ -16,6 +16,8 @@ export function useSSE(sessionId: string | null): void {
   const setAgent = useResearchStore((s) => s.setAgent);
   const setSegment = useResearchStore((s) => s.setSegment);
   const updateStats = useResearchStore((s) => s.updateStats);
+  const addPhaseMessage = useResearchStore((s) => s.addPhaseMessage);
+  const setScanEntities = useResearchStore((s) => s.setScanEntities);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -45,6 +47,15 @@ export function useSSE(sessionId: string | null): void {
             ...(event.facts !== undefined && { facts: event.facts }),
             ...(event.elapsed !== undefined && { elapsed: event.elapsed }),
           });
+          // When scan_agent completes, its facts are entity terms for PDF highlighting
+          if (
+            event.agentId.startsWith('scan') &&
+            event.status === 'done' &&
+            event.facts &&
+            event.facts.length > 0
+          ) {
+            setScanEntities(event.facts);
+          }
           break;
 
         case 'segment_update':
@@ -68,8 +79,7 @@ export function useSSE(sessionId: string | null): void {
           break;
 
         case 'pipeline_phase':
-          // Pipeline phase events are consumed by ExpeditionLog (owned by another agent).
-          // We store nothing here — this hook only manages research store state.
+          addPhaseMessage(event.phase, event.label, event.message);
           break;
 
         case 'error':
@@ -86,5 +96,5 @@ export function useSSE(sessionId: string | null): void {
       clearInterval(drip);
       pendingRef.current = [];
     };
-  }, [sessionId, setAgent, setSegment, updateStats]);
+  }, [sessionId, setAgent, setSegment, updateStats, addPhaseMessage, setScanEntities]);
 }
