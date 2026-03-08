@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { useSessionStore } from '../../store/sessionStore';
+import { useResearchStore } from '../../store/researchStore';
 import { Button } from '../ui';
 import { Spinner } from '../ui';
 
@@ -12,8 +13,62 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3.0;
 const ZOOM_STEP = 0.25;
 
+// ── Entity Highlighting ──────────────────────────────────────────
+
+/**
+ * Walk the text layer DOM and wrap any text node that contains an entity term
+ * with a <mark> element carrying the `entity-highlight` class.
+ * Runs after pdf.js has rendered text layer spans.
+ */
+function applyEntityHighlights(container: HTMLDivElement, entities: string[]): void {
+  if (entities.length === 0) return;
+
+  const escaped = entities
+    .filter((e) => e.trim().length > 0)
+    .map((e) => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+  if (escaped.length === 0) return;
+
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'gi');
+
+  const spans = container.querySelectorAll('span');
+  spans.forEach((span) => {
+    const textNode = span.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+    const text = textNode.textContent ?? '';
+    pattern.lastIndex = 0;
+    if (!pattern.test(text)) return;
+
+    pattern.lastIndex = 0;
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      const mark = document.createElement('mark');
+      mark.className = 'entity-highlight';
+      mark.textContent = match[0];
+      fragment.appendChild(mark);
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    span.replaceChildren(fragment);
+  });
+}
+
+// ── Component ────────────────────────────────────────────────────
+
 export function PDFViewer() {
   const documentUrl = useSessionStore((s) => s.documentUrl);
+  const scanEntities = useResearchStore((s) => s.scanEntities);
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
@@ -24,7 +79,9 @@ export function PDFViewer() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  const textLayerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const renderTasksRef = useRef<Map<number, { cancel: () => void }>>(new Map());
+  const highlightedPagesRef = useRef<Set<number>>(new Set());
 
   // Load PDF document
   const loadPdf = useCallback(async () => {
@@ -38,9 +95,7 @@ export function PDFViewer() {
       setPdf(doc);
       setNumPages(doc.numPages);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to load PDF document'
-      );
+      setError(err instanceof Error ? err.message : 'Failed to load PDF document');
     } finally {
       setLoading(false);
     }
@@ -50,26 +105,23 @@ export function PDFViewer() {
     loadPdf();
   }, [loadPdf]);
 
-  // Render all pages when pdf or zoom changes
-  useEffect(() => {
-    if (!pdf) return;
-
-    const dpr = window.devicePixelRatio || 1;
-
-    async function renderPage(pageNum: number) {
-      const page = await pdf!.getPage(pageNum);
+  // Render a single page: canvas layer + text layer
+  const renderPage = useCallback(
+    async (pageNum: number, page: PDFPageProxy, dpr: number) => {
       const canvas = canvasRefs.current.get(pageNum);
+      const textLayerDiv = textLayerRefs.current.get(pageNum);
       if (!canvas) return;
 
-      // Cancel any ongoing render for this page
       const existing = renderTasksRef.current.get(pageNum);
       if (existing) existing.cancel();
 
       const viewport = page.getViewport({ scale: zoom * dpr });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      canvas.style.width = `${viewport.width / dpr}px`;
-      canvas.style.height = `${viewport.height / dpr}px`;
+      const cssWidth = `${viewport.width / dpr}px`;
+      const cssHeight = `${viewport.height / dpr}px`;
+      canvas.style.width = cssWidth;
+      canvas.style.height = cssHeight;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -80,16 +132,71 @@ export function PDFViewer() {
       try {
         await renderTask.promise;
       } catch {
-        // Render cancelled or failed — ignore
+        return; // Cancelled or failed
+      }
+
+      // Text layer overlay
+      if (textLayerDiv) {
+        textLayerDiv.style.width = cssWidth;
+        textLayerDiv.style.height = cssHeight;
+        textLayerDiv.replaceChildren();
+        highlightedPagesRef.current.delete(pageNum);
+
+        const textContent = await page.getTextContent();
+
+        // pdf.js 4.x+ TextLayer API
+        const TextLayerCtor = (pdfjsLib as unknown as {
+          TextLayer: new (opts: {
+            container: HTMLDivElement;
+            viewport: unknown;
+            textContentSource: unknown;
+          }) => { render: () => Promise<void> };
+        }).TextLayer;
+        if (TextLayerCtor) {
+          const textLayer = new TextLayerCtor({
+            container: textLayerDiv,
+            viewport,
+            textContentSource: textContent,
+          });
+          await textLayer.render();
+        }
+
+        if (scanEntities.length > 0) {
+          applyEntityHighlights(textLayerDiv, scanEntities);
+          highlightedPagesRef.current.add(pageNum);
+        }
+      }
+    },
+    [zoom, scanEntities],
+  );
+
+  // Re-render all pages on pdf/zoom/renderPage changes
+  useEffect(() => {
+    if (!pdf) return;
+    const dpr = window.devicePixelRatio || 1;
+
+    async function renderAll() {
+      for (let i = 1; i <= pdf!.numPages; i++) {
+        const page = await pdf!.getPage(i);
+        renderPage(i, page, dpr);
       }
     }
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      renderPage(i);
-    }
-  }, [pdf, zoom]);
+    renderAll();
+  }, [pdf, zoom, renderPage]);
 
-  // Track current page via scroll position
+  // Apply highlights to already-rendered text layers when entities arrive
+  useEffect(() => {
+    if (scanEntities.length === 0) return;
+    textLayerRefs.current.forEach((div, pageNum) => {
+      if (!highlightedPagesRef.current.has(pageNum) && div.childElementCount > 0) {
+        applyEntityHighlights(div, scanEntities);
+        highlightedPagesRef.current.add(pageNum);
+      }
+    });
+  }, [scanEntities]);
+
+  // Track current page via scroll
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
@@ -114,22 +221,26 @@ export function PDFViewer() {
 
   const setCanvasRef = useCallback(
     (pageNum: number) => (el: HTMLCanvasElement | null) => {
-      if (el) {
-        canvasRefs.current.set(pageNum, el);
-      } else {
-        canvasRefs.current.delete(pageNum);
-      }
+      if (el) canvasRefs.current.set(pageNum, el);
+      else canvasRefs.current.delete(pageNum);
     },
-    []
+    [],
   );
 
-  // Loading state
+  const setTextLayerRef = useCallback(
+    (pageNum: number) => (el: HTMLDivElement | null) => {
+      if (el) textLayerRefs.current.set(pageNum, el);
+      else {
+        textLayerRefs.current.delete(pageNum);
+        highlightedPagesRef.current.delete(pageNum);
+      }
+    },
+    [],
+  );
+
   if (loading) {
     return (
-      <div
-        className="flex flex-col items-center justify-center h-full gap-3"
-        aria-busy="true"
-      >
+      <div className="flex flex-col items-center justify-center h-full gap-3" aria-busy="true">
         <Spinner size="lg" />
         <p className="text-[12px] text-[var(--muted)] font-sans uppercase tracking-[0.15em]">
           Loading document...
@@ -138,7 +249,6 @@ export function PDFViewer() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
@@ -150,13 +260,10 @@ export function PDFViewer() {
     );
   }
 
-  // No document state
   if (!pdf) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-[13px] text-[var(--muted)] font-sans">
-          No document loaded
-        </p>
+        <p className="text-[13px] text-[var(--muted)] font-sans">No document loaded</p>
       </div>
     );
   }
@@ -165,7 +272,6 @@ export function PDFViewer() {
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--bg4)] bg-[var(--bg2)] shrink-0">
-        {/* Zoom controls */}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -198,10 +304,16 @@ export function PDFViewer() {
           </Button>
         </div>
 
-        {/* Page counter */}
-        <span className="text-[11px] text-[var(--muted)] font-sans">
-          Page {currentPage} of {numPages}
-        </span>
+        <div className="flex items-center gap-3">
+          {scanEntities.length > 0 && (
+            <span className="text-[10px] text-[var(--gold)] font-sans uppercase tracking-[0.15em]">
+              {scanEntities.length} entities
+            </span>
+          )}
+          <span className="text-[11px] text-[var(--muted)] font-sans">
+            Page {currentPage} of {numPages}
+          </span>
+        </div>
       </div>
 
       {/* Pages container */}
@@ -214,13 +326,18 @@ export function PDFViewer() {
           <div
             key={pageNum}
             data-page={pageNum}
-            className="shadow-sm rounded bg-white"
+            className="shadow-sm rounded bg-white relative"
           >
             <canvas
               ref={setCanvasRef(pageNum)}
               className="block"
             />
-            {/* TODO: Add text layer overlay for entity highlighting when scan_agent completes */}
+            {/* Text layer overlay for entity highlighting */}
+            <div
+              ref={setTextLayerRef(pageNum)}
+              className="pdf-text-layer absolute top-0 left-0 overflow-hidden select-text pointer-events-none"
+              aria-hidden="true"
+            />
           </div>
         ))}
       </div>

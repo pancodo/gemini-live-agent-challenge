@@ -259,6 +259,33 @@ body {
 .archival-frame:hover::before,
 .archival-frame:hover::after { opacity: 0.6; }
 
+/* ── PDF Text Layer + Entity Highlights ─────────────────── */
+.pdf-text-layer {
+  line-height: 1;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pdf-text-layer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.entity-highlight {
+  color: transparent;
+  background: rgba(139, 94, 26, 0.22);
+  border-radius: 2px;
+  outline: 1px solid rgba(139, 94, 26, 0.35);
+  transition: background 0.2s ease;
+}
+
+.pdf-text-layer:hover .entity-highlight {
+  background: rgba(139, 94, 26, 0.30);
+}
+
 /* ── Ink Ripple ────────────────────────────────────────── */
 @keyframes ink-spread {
   from { transform: scale(0); opacity: 0.3; }
@@ -276,6 +303,36 @@ body {
   syntax: '<percentage>';
   inherits: false;
   initial-value: 150%;
+}
+
+.iris-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  mask-image: radial-gradient(
+    circle,
+    transparent var(--iris-r),
+    black calc(var(--iris-r) + 4%)
+  );
+  -webkit-mask-image: radial-gradient(
+    circle,
+    transparent var(--iris-r),
+    black calc(var(--iris-r) + 4%)
+  );
+  pointer-events: none;
+  display: none;
+}
+.iris-overlay.iris-close { animation: iris-close 0.65s ease-in forwards; }
+.iris-overlay.iris-open  { animation: iris-open  0.75s ease-out forwards; }
+
+@keyframes iris-close {
+  from { --iris-r: 150%; }
+  to   { --iris-r: 0%; }
+}
+@keyframes iris-open {
+  from { --iris-r: 0%; }
+  to   { --iris-r: 150%; }
 }
 
 /* ── Typewriter cursor ─────────────────────────────────── */
