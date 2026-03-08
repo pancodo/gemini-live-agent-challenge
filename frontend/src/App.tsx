@@ -1,10 +1,12 @@
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { UploadPage } from './pages/UploadPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { PlayerPage } from './pages/PlayerPage';
 import { useSessionStore } from './store/sessionStore';
+import { VoiceLayer } from './components/voice/VoiceLayer';
+import { IrisOverlay } from './components/player/IrisOverlay';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2, staleTime: 5000 } },
@@ -20,10 +22,25 @@ function PlayerGuard() {
   return sessionId ? <PlayerPage /> : <Navigate to="/workspace" replace />;
 }
 
+function RootLayout() {
+  return (
+    <>
+      <Outlet />
+      <VoiceLayer />
+      <IrisOverlay />
+    </>
+  );
+}
+
 const router = createBrowserRouter([
-  { path: '/', element: <UploadPage /> },
-  { path: '/workspace', element: <WorkspaceGuard /> },
-  { path: '/player/:segmentId', element: <PlayerGuard /> },
+  {
+    element: <RootLayout />,
+    children: [
+      { path: '/', element: <UploadPage /> },
+      { path: '/workspace', element: <WorkspaceGuard /> },
+      { path: '/player/:segmentId', element: <PlayerGuard /> },
+    ],
+  },
 ]);
 
 export default function App() {
