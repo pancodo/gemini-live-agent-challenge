@@ -18,6 +18,7 @@ export function useSSE(sessionId: string | null): void {
   const updateStats = useResearchStore((s) => s.updateStats);
   const addPhaseMessage = useResearchStore((s) => s.addPhaseMessage);
   const setScanEntities = useResearchStore((s) => s.setScanEntities);
+  const addEvaluatedSource = useResearchStore((s) => s.addEvaluatedSource);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -58,6 +59,10 @@ export function useSSE(sessionId: string | null): void {
           }
           break;
 
+        case 'agent_source_evaluation':
+          addEvaluatedSource(event.agentId, event.source);
+          break;
+
         case 'segment_update':
           setSegment(event.segmentId, {
             id: event.segmentId,
@@ -96,5 +101,5 @@ export function useSSE(sessionId: string | null): void {
       clearInterval(drip);
       pendingRef.current = [];
     };
-  }, [sessionId, setAgent, setSegment, updateStats, addPhaseMessage, setScanEntities]);
+  }, [sessionId, setAgent, setSegment, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource]);
 }

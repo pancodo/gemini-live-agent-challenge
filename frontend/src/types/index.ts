@@ -24,6 +24,13 @@ export interface AgentLog {
   data?: string;
 }
 
+export interface EvaluatedSource {
+  url: string;
+  accepted: boolean;
+  reason: string;
+  title?: string;
+}
+
 export interface AgentState {
   id: string;
   query: string;
@@ -33,6 +40,9 @@ export interface AgentState {
   facts?: string[];
   visualPrompt?: string;
   sourcesFound?: number;
+  evaluatedSources?: EvaluatedSource[];
+  currentActivity?: string;
+  visualResearchPrompt?: string;
 }
 
 // ── Segments ─────────────────────────────────────────────────
@@ -61,6 +71,7 @@ export type VoiceState =
 // ── SSE Events ───────────────────────────────────────────────
 export type SSEEventType =
   | 'agent_status'
+  | 'agent_source_evaluation'
   | 'segment_update'
   | 'pipeline_phase'
   | 'stats_update'
@@ -100,6 +111,12 @@ export interface StatsUpdateEvent {
   segmentsReady: number;
 }
 
+export interface AgentSourceEvaluationEvent {
+  type: 'agent_source_evaluation';
+  agentId: string;
+  source: EvaluatedSource;
+}
+
 export interface ErrorEvent {
   type: 'error';
   message: string;
@@ -108,6 +125,7 @@ export interface ErrorEvent {
 
 export type SSEEvent =
   | AgentStatusEvent
+  | AgentSourceEvaluationEvent
   | SegmentUpdateEvent
   | PipelinePhaseEvent
   | StatsUpdateEvent

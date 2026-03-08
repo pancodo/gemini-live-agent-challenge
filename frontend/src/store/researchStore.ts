@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AgentState, Segment } from '../types';
+import type { AgentState, EvaluatedSource, Segment } from '../types';
 
 export interface PhaseEntry {
   phase: 1 | 2 | 3 | 4;
@@ -19,6 +19,7 @@ interface ResearchStore {
   setSegment: (segmentId: string, state: Partial<Segment>) => void;
   updateStats: (stats: Partial<ResearchStore['stats']>) => void;
   addPhaseMessage: (phase: 1 | 2 | 3 | 4, label: string, message: string) => void;
+  addEvaluatedSource: (agentId: string, source: EvaluatedSource) => void;
   setScanEntities: (entities: string[]) => void;
   reset: () => void;
 }
@@ -62,6 +63,20 @@ export const useResearchStore = create<ResearchStore>()((set) => ({
           ...s.phases,
           { phase, label, messages: [message], startedAt: Date.now() },
         ],
+      };
+    }),
+  addEvaluatedSource: (agentId, source) =>
+    set((s) => {
+      const agent = s.agents[agentId];
+      if (!agent) return s;
+      return {
+        agents: {
+          ...s.agents,
+          [agentId]: {
+            ...agent,
+            evaluatedSources: [...(agent.evaluatedSources ?? []), source],
+          },
+        },
       };
     }),
   setScanEntities: (entities) => set({ scanEntities: entities }),
