@@ -1,15 +1,16 @@
 """ADK Pipeline — SequentialAgent orchestrating the full documentary generation flow.
 
-Current pipeline order (Phase I + Phase II integrated):
+Current pipeline order (Phase I + II + III + IV integrated):
     1. document_analyzer     — OCR, semantic chunking, parallel summarisation,
                                narrative curation → scene_briefs + visual_bible
     2. scene_research_orch   — Parallel scene research (one google_search agent
                                per SceneBrief) → research_0 … research_N
     3. aggregator_agent      — Merges all research_N outputs into unified context
-    4. script_agent          — Generates documentary segments with narration + visuals
-    5. visual_research_agent — Searches for period-accurate visual references
-                               (will be replaced by VisualResearchOrchestrator in Phase IV)
-    6. visual_director       — Generates Imagen 3 images + Veo 2 video per segment
+    4. script_orch           — Script Agent (gemini-2.0-pro) → SegmentScript list,
+                               Firestore write, segment_update SSE (Phase III)
+    5. visual_research_orch  — Per-scene 6-stage micro-pipeline → VisualDetailManifest
+                               per scene, Firestore write, segment_update(ready) SSE (Phase IV)
+    6. visual_director       — Reads manifests → Imagen 3 / Veo 2 generation (Phase V)
 
 Legacy agents (scan_agent, build_research_agents) remain in this file and are
 used by the legacy ``build_pipeline`` path. They will be removed once all
@@ -31,8 +32,10 @@ from google.adk.tools import google_search
 
 from .document_analyzer import build_document_analyzer
 from .scene_research_agent import build_scene_research_orchestrator
+from .script_agent_orchestrator import build_script_agent_orchestrator
 from .sse_helpers import SSEEmitter
 from .visual_research_agent import visual_research_agent
+from .visual_research_orchestrator import build_visual_research_orchestrator
 
 # ---------------------------------------------------------------------------
 # 1. Scan Agent
@@ -234,36 +237,37 @@ visual_director = Agent(
 You are the visual director for a historical documentary.
 
 Script segments: {script}
-Visual research (enriched prompts): {visual_research}
 Visual Bible: {visual_bible}
+Visual research manifests (enriched prompts, one per scene_id): {visual_research_manifest}
 
-For each segment, use the enriched prompts from the visual research agent
-when available. These contain period-accurate details sourced from archival
-photographs and artwork.
+Priority rule — for each segment:
+1. If session.state["visual_research_manifest"][segment.scene_id]["enriched_prompt"] exists
+   and is non-empty → use that as the SOLE Imagen 3 prompt base. It already incorporates
+   period-accurate archival research. Apply the Visual Bible style prefix and 16:9 framing.
+2. If no manifest exists or enriched_prompt is empty → fall back to the segment's
+   visual_descriptions from the script.
 
 For each segment, produce:
-1. Four Imagen 3 prompts — one per visual_description frame.
-   Use the enriched_prompt from visual_research as the base when it exists,
-   otherwise fall back to the original visual_descriptions from the script.
+1. Four Imagen 3 prompts (one per visual frame).
    Each prompt must:
    - Start with the Visual Bible style prefix
-   - Be 100-300 words of flowing descriptive text
-   - Specify 16:9 composition
+   - Be 100-300 words of flowing descriptive text, 16:9 composition
    - Include period-accurate details (lighting, materials, colors)
+   - End with "Exclude: [era_markers from manifest if present]"
    - Contain NO modern elements or anachronisms
 
 2. One Veo 2 prompt for the segment's dramatic scene (if veo2_scene exists).
-   - 8 seconds of footage
-   - Cinematic camera movement described
-   - Same Visual Bible style
+   - 8 seconds, cinematic camera movement, same Visual Bible style
 
 Output as JSON:
 {{
   "segments": [
     {{
       "segment_id": "segment_N",
+      "scene_id": "scene_N",
       "imagen_prompts": ["prompt_1", "prompt_2", "prompt_3", "prompt_4"],
       "veo2_prompt": "optional prompt for video generation",
+      "used_manifest": true,
       "mood": "cinematic"
     }}
   ]
@@ -315,41 +319,45 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 def build_new_pipeline(
     emitter: SSEEmitter | None = None,
 ) -> SequentialAgent:
-    """Assemble the Phase I + Phase II documentary generation pipeline.
+    """Assemble the Phase I + II + III + IV documentary generation pipeline.
 
-    This is the production pipeline. Phase I (DocumentAnalyzerAgent) replaces
-    the old scan_agent and produces grounded scene_briefs. Phase II
-    (SceneResearchOrchestrator) replaces the old parallel_research with
-    per-scene document-grounded research.
+    This is the production pipeline. Phases I–IV are fully integrated:
+    - Phase I  (DocumentAnalyzerAgent): OCR → chunks → summaries → scene_briefs
+    - Phase II (SceneResearchOrchestrator): per-scene google_search corroboration
+    - Phase III (ScriptAgentOrchestrator): script generation + Firestore + SSE
+    - Phase IV (VisualResearchOrchestrator): 6-stage per-scene visual research
+      micro-pipeline → VisualDetailManifest per scene → Firestore + SSE
 
-    Phases IV and V (VisualResearchOrchestrator, updated VisualDirector) will
-    be inserted in subsequent implementation steps.
+    Phase V (updated Visual Director reading manifests) is the final step and
+    is currently wired with the existing visual_director agent placeholder.
 
     Args:
-        emitter: Optional SSE emitter forwarded to Phase I and Phase II
-            orchestrators for frontend Expedition Log progress events.
+        emitter: Optional SSE emitter forwarded to all phase orchestrators
+            for frontend Expedition Log progress events.
 
     Returns:
         A SequentialAgent running:
-        document_analyzer -> scene_research -> aggregator -> script
-        -> visual_research -> visual_director
+        document_analyzer -> scene_research -> aggregator -> script_orch
+        -> visual_research_orch -> visual_director
     """
     document_analyzer = build_document_analyzer(emitter=emitter)
     scene_research = build_scene_research_orchestrator(emitter=emitter)
+    script_orch = build_script_agent_orchestrator(emitter=emitter)
+    visual_research_orch = build_visual_research_orchestrator(emitter=emitter)
 
     return SequentialAgent(
         name="historian_pipeline",
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
-            "scene research (Phase II), script generation, visual research, "
-            "and visual direction."
+            "scene research (Phase II), script generation (Phase III), "
+            "visual research (Phase IV), and visual direction (Phase V)."
         ),
         sub_agents=[
-            document_analyzer,       # Phase I: OCR → chunks → summaries → scene_briefs
+            document_analyzer,       # Phase I:  OCR → chunks → summaries → scene_briefs
             scene_research,          # Phase II: per-scene google_search corroboration
-            aggregator_agent,        # Merges research_{n} → aggregated_research
-            script_agent,            # scene_briefs + aggregated_research → script
-            visual_research_agent,   # TODO Phase IV: replace with VisualResearchOrchestrator
-            visual_director,         # TODO Phase V: update to read visual manifests
+            aggregator_agent,        # Merge:    research_{n} → aggregated_research
+            script_orch,             # Phase III: script + Firestore + segment_update SSE
+            visual_research_orch,    # Phase IV: 6-stage visual micro-pipeline per scene
+            visual_director,         # Phase V:  Imagen 3 / Veo 2 generation (reads manifests)
         ],
     )
