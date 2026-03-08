@@ -13,7 +13,7 @@ const MAX_ZOOM = 3.0;
 const ZOOM_STEP = 0.25;
 
 export function PDFViewer() {
-  const gcsPath = useSessionStore((s) => s.gcsPath);
+  const documentUrl = useSessionStore((s) => s.documentUrl);
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
@@ -28,13 +28,13 @@ export function PDFViewer() {
 
   // Load PDF document
   const loadPdf = useCallback(async () => {
-    if (!gcsPath) return;
+    if (!documentUrl) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const doc = await pdfjsLib.getDocument(gcsPath).promise;
+      const doc = await pdfjsLib.getDocument(documentUrl).promise;
       setPdf(doc);
       setNumPages(doc.numPages);
     } catch (err) {
@@ -44,7 +44,7 @@ export function PDFViewer() {
     } finally {
       setLoading(false);
     }
-  }, [gcsPath]);
+  }, [documentUrl]);
 
   useEffect(() => {
     loadPdf();

@@ -125,6 +125,7 @@ export interface SessionStatusResponse {
   status: SessionStatus;
   language: string | null;
   visualBible: string | null;
+  documentUrl?: string | null;
 }
 
 export interface AgentLogsResponse {

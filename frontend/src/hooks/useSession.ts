@@ -20,6 +20,7 @@ export function useSession(sessionId: string | null) {
         status: query.data.status,
         language: query.data.language,
         visualBible: query.data.visualBible,
+        documentUrl: query.data.documentUrl ?? null,
       });
     }
   }, [query.data, setSession]);

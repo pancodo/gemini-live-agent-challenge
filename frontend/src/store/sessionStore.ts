@@ -7,6 +7,7 @@ interface SessionStore {
   status: SessionStatus;
   language: string | null;
   visualBible: string | null;
+  documentUrl: string | null;
   setSession: (partial: Partial<Omit<SessionStore, 'setSession' | 'reset'>>) => void;
   reset: () => void;
 }
@@ -17,6 +18,7 @@ const initialState = {
   status: 'idle' as SessionStatus,
   language: null,
   visualBible: null,
+  documentUrl: null,
 };
 
 export const useSessionStore = create<SessionStore>()((set) => ({
