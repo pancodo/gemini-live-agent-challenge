@@ -13,6 +13,9 @@ interface PlayerStore {
   setKenBurnsPaused: (paused: boolean) => void;
   setIdle: (idle: boolean) => void;
   setPlaybackOffset: (offset: number) => void;
+  irisTargetPath: string | null;
+  triggerIris: (path: string) => void;
+  clearIris: () => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -28,4 +31,7 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
   setIdle: (isIdle) => set({ isIdle }),
   setPlaybackOffset: (playbackOffset) => set({ playbackOffset }),
+  irisTargetPath: null,
+  triggerIris: (irisTargetPath) => set({ irisTargetPath }),
+  clearIris: () => set({ irisTargetPath: null }),
 }));
