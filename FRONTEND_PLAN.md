@@ -920,8 +920,8 @@ The frontend is split into 5 sequential parts. Each part is self-contained and b
 
 | Part | Scope | Status |
 |---|---|---|
-| **Part 1** | Scaffold + Design System Foundation | [ ] Not started |
-| **Part 2** | Upload Page + Workspace Layout | [ ] Not started |
+| **Part 1** | Scaffold + Design System Foundation | [x] Complete |
+| **Part 2** | Upload Page + Workspace Layout | [x] Complete |
 | **Part 3** | Research Pipeline UI | [ ] Not started |
 | **Part 4** | Voice Button + Audio System | [ ] Not started |
 | **Part 5** | Documentary Player + Cinematic Transitions | [ ] Not started |
@@ -1064,9 +1064,9 @@ The frontend is split into 5 sequential parts. Each part is self-contained and b
 ---
 
 ## Status
-- [ ] Awaiting approval
-- [ ] Part 1 — Scaffold + Design System Foundation
-- [ ] Part 2 — Upload Page + Workspace Layout
+- [x] Approved
+- [x] Part 1 — Scaffold + Design System Foundation
+- [x] Part 2 — Upload Page + Workspace Layout
 - [ ] Part 3 — Research Pipeline UI
 - [ ] Part 4 — Voice Button + Audio System
 - [ ] Part 5 — Documentary Player + Cinematic Transitions
