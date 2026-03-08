@@ -1,16 +1,18 @@
 """ADK Pipeline — SequentialAgent orchestrating the full documentary generation flow.
 
-Current pipeline order (Phase I + II + III + IV integrated):
-    1. document_analyzer     — OCR, semantic chunking, parallel summarisation,
-                               narrative curation → scene_briefs + visual_bible
-    2. scene_research_orch   — Parallel scene research (one google_search agent
-                               per SceneBrief) → research_0 … research_N
-    3. aggregator_agent      — Merges all research_N outputs into unified context
-    4. script_orch           — Script Agent (gemini-2.0-pro) → SegmentScript list,
-                               Firestore write, segment_update SSE (Phase III)
-    5. visual_research_orch  — Per-scene 6-stage micro-pipeline → VisualDetailManifest
-                               per scene, Firestore write, segment_update(ready) SSE (Phase IV)
-    6. visual_director       — Reads manifests → Imagen 3 / Veo 2 generation (Phase V)
+Current pipeline order (Phases I–V fully integrated):
+    1. document_analyzer      — OCR, semantic chunking, parallel summarisation,
+                                narrative curation → scene_briefs + visual_bible
+    2. scene_research_orch    — Parallel scene research (one google_search agent
+                                per SceneBrief) → research_0 … research_N
+    3. aggregator_agent       — Merges all research_N outputs into unified context
+    4. script_orch            — Script Agent (gemini-2.0-pro) → SegmentScript list,
+                                Firestore write, segment_update SSE (Phase III)
+    5. visual_research_orch   — Per-scene 6-stage micro-pipeline → VisualDetailManifest
+                                per scene, Firestore write, segment_update(ready) SSE (Phase IV)
+    6. visual_director_orch   — Reads manifests → Imagen 3 (4 frames/scene) + Veo 2
+                                → GCS upload, Firestore imageUrls/videoUrl, segment_update(complete)
+                                SSE (Phase V)
 
 Legacy agents (scan_agent, build_research_agents) remain in this file and are
 used by the legacy ``build_pipeline`` path. They will be removed once all
@@ -34,6 +36,7 @@ from .document_analyzer import build_document_analyzer
 from .scene_research_agent import build_scene_research_orchestrator
 from .script_agent_orchestrator import build_script_agent_orchestrator
 from .sse_helpers import SSEEmitter
+from .visual_director_orchestrator import build_visual_director_orchestrator
 from .visual_research_agent import visual_research_agent
 from .visual_research_orchestrator import build_visual_research_orchestrator
 
@@ -319,17 +322,16 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 def build_new_pipeline(
     emitter: SSEEmitter | None = None,
 ) -> SequentialAgent:
-    """Assemble the Phase I + II + III + IV documentary generation pipeline.
+    """Assemble the complete Phase I–V documentary generation pipeline.
 
-    This is the production pipeline. Phases I–IV are fully integrated:
-    - Phase I  (DocumentAnalyzerAgent): OCR → chunks → summaries → scene_briefs
+    This is the production pipeline. All five phases are fully integrated:
+    - Phase I  (DocumentAnalyzerAgent):     OCR → chunks → summaries → scene_briefs
     - Phase II (SceneResearchOrchestrator): per-scene google_search corroboration
-    - Phase III (ScriptAgentOrchestrator): script generation + Firestore + SSE
+    - Phase III (ScriptAgentOrchestrator):  script generation + Firestore + SSE
     - Phase IV (VisualResearchOrchestrator): 6-stage per-scene visual research
       micro-pipeline → VisualDetailManifest per scene → Firestore + SSE
-
-    Phase V (updated Visual Director reading manifests) is the final step and
-    is currently wired with the existing visual_director agent placeholder.
+    - Phase V  (VisualDirectorOrchestrator): Imagen 3 (4 frames/scene) + Veo 2
+      generation → GCS upload → Firestore imageUrls/videoUrl → SSE complete
 
     Args:
         emitter: Optional SSE emitter forwarded to all phase orchestrators
@@ -337,27 +339,28 @@ def build_new_pipeline(
 
     Returns:
         A SequentialAgent running:
-        document_analyzer -> scene_research -> aggregator -> script_orch
-        -> visual_research_orch -> visual_director
+        document_analyzer → scene_research → aggregator → script_orch
+        → visual_research_orch → visual_director_orch
     """
     document_analyzer = build_document_analyzer(emitter=emitter)
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     script_orch = build_script_agent_orchestrator(emitter=emitter)
     visual_research_orch = build_visual_research_orchestrator(emitter=emitter)
+    visual_director_orch = build_visual_director_orchestrator(emitter=emitter)
 
     return SequentialAgent(
         name="historian_pipeline",
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
             "scene research (Phase II), script generation (Phase III), "
-            "visual research (Phase IV), and visual direction (Phase V)."
+            "visual research (Phase IV), and visual generation (Phase V)."
         ),
         sub_agents=[
-            document_analyzer,       # Phase I:  OCR → chunks → summaries → scene_briefs
-            scene_research,          # Phase II: per-scene google_search corroboration
-            aggregator_agent,        # Merge:    research_{n} → aggregated_research
-            script_orch,             # Phase III: script + Firestore + segment_update SSE
-            visual_research_orch,    # Phase IV: 6-stage visual micro-pipeline per scene
-            visual_director,         # Phase V:  Imagen 3 / Veo 2 generation (reads manifests)
+            document_analyzer,        # Phase I:   OCR → chunks → summaries → scene_briefs
+            scene_research,           # Phase II:  per-scene google_search corroboration
+            aggregator_agent,         # Merge:     research_{n} → aggregated_research
+            script_orch,              # Phase III: script + Firestore + segment_update SSE
+            visual_research_orch,     # Phase IV:  6-stage visual micro-pipeline per scene
+            visual_director_orch,     # Phase V:   Imagen 3 + Veo 2 → GCS + Firestore + SSE
         ],
     )

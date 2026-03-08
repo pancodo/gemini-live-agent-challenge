@@ -122,20 +122,28 @@ def build_segment_update_event(
     title: str | None = None,
     mood: str | None = None,
     narration_script: str | None = None,
+    image_urls: list[str] | None = None,
+    video_url: str | None = None,
 ) -> dict[str, Any]:
     """Build a segment_update SSE event payload.
 
-    Emitted by Phase III when a segment transitions from skeleton to content.
-    The frontend SegmentCard morphs from shimmer skeleton to real title/mood
-    on "generating", and reveals full narration preview on "ready".
+    Emitted across Phases III, IV, and V as a segment progresses through the
+    pipeline from skeleton to fully generated media.
+
+    Status progression:
+      "generating"       — Phase III: skeleton card gets a real title/mood
+      "ready"            — Phase IV: visual research manifest complete
+      "complete"         — Phase V: Imagen 3 images (and optional Veo 2 video) ready
 
     Args:
         segment_id: e.g. "segment_0"
         scene_id: Matching SceneBrief scene_id.
-        status: "generating" | "ready" | "error"
+        status: "generating" | "ready" | "complete" | "error"
         title: Segment display title (included once known).
         mood: Emotional register string.
         narration_script: Narration text (included when status is "ready").
+        image_urls: List of GCS URIs for generated Imagen 3 frames (Phase V).
+        video_url: GCS URI for generated Veo 2 video (Phase V, optional).
     """
     event: dict[str, Any] = {
         "type": "segment_update",
@@ -149,4 +157,8 @@ def build_segment_update_event(
         event["mood"] = mood
     if narration_script is not None:
         event["narrationScript"] = narration_script
+    if image_urls is not None:
+        event["imageUrls"] = image_urls
+    if video_url is not None:
+        event["videoUrl"] = video_url
     return event
