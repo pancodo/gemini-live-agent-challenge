@@ -411,7 +411,7 @@ class VisualResearchOrchestrator(BaseAgent):
             "Optional — if absent, PDFs fall back to plain text extraction."
         ),
     )
-    emitter: SSEEmitter | None = Field(
+    emitter: Any = Field(
         default=None,
         description="Optional SSE emitter for frontend progress events.",
     )

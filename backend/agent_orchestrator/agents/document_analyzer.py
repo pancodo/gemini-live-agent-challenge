@@ -589,7 +589,7 @@ class DocumentAnalyzerAgent(BaseAgent):
         ...,
         description="GCP project ID for Firestore operations.",
     )
-    emitter: SSEEmitter | None = Field(
+    emitter: Any = Field(
         default=None,
         description="Optional SSE emitter for frontend progress events.",
     )

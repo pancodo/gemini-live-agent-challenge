@@ -688,7 +688,7 @@ class VisualDirectorOrchestrator(BaseAgent):
         ...,
         description="GCS bucket name for generated image and video storage.",
     )
-    emitter: SSEEmitter | None = Field(
+    emitter: Any = Field(
         default=None,
         description="Optional SSE emitter for frontend progress events.",
     )
