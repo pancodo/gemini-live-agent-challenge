@@ -68,18 +68,21 @@ export function UploadPage() {
   return (
     <main className="min-h-screen bg-[var(--bg)] flex flex-col">
       {/* Top logo/header */}
-      <header className="pt-16 pb-4 text-center">
-        <h1
-          className="text-[11px] uppercase tracking-[0.5em] text-[var(--gold-d)]"
+      <header className="pt-16 pb-6 text-center">
+        <p
+          className="text-[10px] uppercase tracking-[0.55em] text-[var(--gold-d)] mb-4"
           style={{ fontFamily: 'var(--font-serif)' }}
         >
           AI Historian
-        </h1>
-        <p
-          className="mt-3 text-[22px] text-[var(--text)]"
-          style={{ fontFamily: 'var(--font-serif)' }}
+        </p>
+        <h1
+          className="text-[28px] text-[var(--text)] leading-snug max-w-md mx-auto"
+          style={{ fontFamily: 'var(--font-serif)', fontWeight: 400 }}
         >
-          Upload a historical document to begin your documentary
+          Upload a historical document
+        </h1>
+        <p className="mt-2 text-[13px] text-[var(--muted)] font-sans tracking-[0.02em]">
+          Begin your documentary in under 45 seconds
         </p>
       </header>
 
