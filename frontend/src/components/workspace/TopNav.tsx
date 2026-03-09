@@ -46,9 +46,15 @@ export function TopNav() {
       </span>
 
       {/* Center: Document name */}
-      <span className="text-[13px] text-[var(--muted)] font-sans truncate max-w-[40%] text-center">
-        {filename}
-      </span>
+      <div className="flex items-center gap-1.5 min-w-0 max-w-[40%]">
+        <svg width="12" height="14" viewBox="0 0 12 14" fill="none" className="shrink-0 text-[var(--muted)]" aria-hidden="true">
+          <path d="M2 1h6l3 3v9a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1" fill="none"/>
+          <path d="M8 1v3h3" stroke="currentColor" strokeWidth="1" fill="none"/>
+        </svg>
+        <span className="text-[12px] text-[var(--muted)] font-sans truncate">
+          {filename}
+        </span>
+      </div>
 
       {/* Right: Status + elapsed time */}
       <div className="flex items-center gap-3">
