@@ -497,7 +497,11 @@ class VisualResearchOrchestrator(BaseAgent):
         # ------------------------------------------------------------------
         # Initialise shared resources
         # ------------------------------------------------------------------
-        client = google_genai.Client()
+        client = google_genai.Client(
+            vertexai=True,
+            project=os.environ["GCP_PROJECT_ID"],
+            location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
+        )
         semaphore = asyncio.Semaphore(_SEMAPHORE_LIMIT)
         db = firestore.AsyncClient(project=self.firestore_project)
 
