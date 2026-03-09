@@ -269,7 +269,7 @@ export function ResearchPanel() {
     .filter((p) => p.agents.length > 0);
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto px-1">
+    <div className="flex flex-col gap-4 h-full overflow-y-auto px-4 py-4">
       {/* Historian Panel */}
       <HistorianPanel />
 

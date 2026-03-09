@@ -22,15 +22,16 @@ export function WorkspacePage() {
           {status === 'processing' && <ExpeditionLog />}
 
           {(status === 'ready' || status === 'playing') && (
-            <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
+            <div className="h-full overflow-y-auto">
               <ResearchPanel />
             </div>
           )}
 
           {(status === 'idle' || status === 'uploading') && (
-            <div className="flex items-center justify-center h-full p-4">
-              <p className="text-[12px] text-[var(--muted)] font-sans uppercase tracking-[0.15em]">
-                Waiting for document processing to begin...
+            <div className="flex flex-col items-center justify-center h-full gap-3 p-6">
+              <div className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] opacity-60 animate-pulse" />
+              <p className="text-[11px] text-[var(--muted)] font-sans uppercase tracking-[0.2em]">
+                Preparing document…
               </p>
             </div>
           )}
