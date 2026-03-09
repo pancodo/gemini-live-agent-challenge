@@ -3,8 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { useSessionStore } from '../../store/sessionStore';
 import { useResearchStore } from '../../store/researchStore';
-import { Button } from '../ui';
-import { Spinner } from '../ui';
+import { Button, Spinner } from '../ui';
 
 // Configure PDF.js worker via CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -271,47 +270,43 @@ export function PDFViewer() {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--bg4)] bg-[var(--bg2)] shrink-0">
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--bg4)] bg-[var(--bg2)] shrink-0 gap-3">
+        {/* Zoom control group */}
+        <div className="flex items-center gap-0 rounded border border-[var(--bg4)] bg-[var(--bg)] overflow-hidden shrink-0">
+          <button
             onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))}
             disabled={zoom <= MIN_ZOOM}
             aria-label="Zoom out"
+            className="px-2.5 py-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-r border-[var(--bg4)]"
           >
-            -
-          </Button>
-          <span className="text-[11px] text-[var(--muted)] font-sans tabular-nums min-w-[3.5rem] text-center">
+            −
+          </button>
+          <button
+            onClick={() => setZoom(1.0)}
+            aria-label="Reset zoom"
+            className="px-2.5 py-1.5 text-[11px] font-sans tabular-nums text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)] transition-colors border-r border-[var(--bg4)] min-w-[3.5rem] text-center"
+          >
             {Math.round(zoom * 100)}%
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
+          </button>
+          <button
             onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
             disabled={zoom >= MAX_ZOOM}
             aria-label="Zoom in"
+            className="px-2.5 py-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             +
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setZoom(1.0)}
-            aria-label="Reset zoom"
-          >
-            Reset
-          </Button>
+          </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Right side: entities + page counter */}
+        <div className="flex items-center gap-3 min-w-0">
           {scanEntities.length > 0 && (
-            <span className="text-[10px] text-[var(--gold)] font-sans uppercase tracking-[0.15em]">
+            <span className="text-[10px] text-[var(--gold)] font-sans uppercase tracking-[0.15em] shrink-0">
               {scanEntities.length} entities
             </span>
           )}
-          <span className="text-[11px] text-[var(--muted)] font-sans">
-            Page {currentPage} of {numPages}
+          <span className="text-[11px] text-[var(--muted)] font-sans tabular-nums shrink-0">
+            {currentPage} / {numPages}
           </span>
         </div>
       </div>
@@ -319,14 +314,15 @@ export function PDFViewer() {
       {/* Pages container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-4 flex flex-col items-center gap-4 bg-[var(--bg3)]/30"
+        className="flex-1 overflow-y-auto p-5 flex flex-col items-center gap-5 bg-[var(--bg3)]/40"
         onScroll={handleScroll}
       >
         {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
           <div
             key={pageNum}
             data-page={pageNum}
-            className="shadow-sm rounded bg-white relative"
+            className="relative bg-white rounded-sm"
+            style={{ boxShadow: '0 2px 12px rgba(30,23,12,0.12), 0 1px 3px rgba(30,23,12,0.08)' }}
           >
             <canvas
               ref={setCanvasRef(pageNum)}
