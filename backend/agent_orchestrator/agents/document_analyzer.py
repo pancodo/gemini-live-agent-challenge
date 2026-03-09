@@ -67,6 +67,37 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+_DOC_AI_PAGE_LIMIT = 15
+
+
+async def _ocr_pdf_bytes(
+    pdf_bytes: bytes,
+    processor_name: str,
+    *,
+    retries: int = 3,
+) -> str:
+    """OCR a single PDF chunk (≤ 30 pages) passed as raw bytes."""
+    client = documentai.DocumentProcessorServiceAsyncClient()
+    request = documentai.ProcessRequest(
+        name=processor_name,
+        raw_document=documentai.RawDocument(
+            content=pdf_bytes,
+            mime_type="application/pdf",
+        ),
+    )
+    last_exc: BaseException | None = None
+    for attempt in range(retries):
+        try:
+            response = await client.process_document(request=request)
+            return response.document.text
+        except Exception as exc:
+            last_exc = exc
+            wait = 2 ** attempt
+            logger.warning("OCR attempt %d/%d failed (%s), retrying in %ds", attempt + 1, retries, exc, wait)
+            await asyncio.sleep(wait)
+    raise RuntimeError(f"Document AI OCR failed after {retries} attempts: {last_exc}")
+
+
 async def _run_ocr(
     gcs_uri: str,
     processor_name: str,
@@ -75,55 +106,56 @@ async def _run_ocr(
 ) -> tuple[str, int]:
     """Run Google Document AI OCR on a PDF stored in GCS.
 
-    Args:
-        gcs_uri: Full GCS URI of the source PDF
-            (e.g. ``gs://bucket/path/doc.pdf``).
-        processor_name: Fully-qualified Document AI processor resource name.
-        retries: Maximum number of attempts before raising.
+    Automatically splits documents that exceed the 30-page processor limit
+    into chunks and concatenates the results.
 
     Returns:
         A tuple of ``(ocr_text, page_count)``.
-
-    Raises:
-        RuntimeError: If all retry attempts are exhausted.
     """
-    client = documentai.DocumentProcessorServiceAsyncClient()
+    import io
+    import pypdf
+    from google.cloud import storage as _gcs
 
-    request = documentai.ProcessRequest(
-        name=processor_name,
-        gcs_document=documentai.GcsDocument(
-            gcs_uri=gcs_uri,
-            mime_type="application/pdf",
-        ),
-    )
+    # Download PDF from GCS
+    loop = asyncio.get_event_loop()
+    bucket_name, blob_path = gcs_uri[len("gs://"):].split("/", 1)
 
-    last_exc: BaseException | None = None
-    for attempt in range(retries):
-        try:
-            response = await client.process_document(request=request)
-            text = response.document.text
-            page_count = len(response.document.pages)
-            logger.info(
-                "OCR completed: %d pages, %d characters extracted",
-                page_count,
-                len(text),
-            )
-            return text, page_count
-        except Exception as exc:
-            last_exc = exc
-            wait = 2**attempt
-            logger.warning(
-                "OCR attempt %d/%d failed (%s), retrying in %ds",
-                attempt + 1,
-                retries,
-                exc,
-                wait,
-            )
-            await asyncio.sleep(wait)
+    def _download() -> bytes:
+        client = _gcs.Client()
+        return client.bucket(bucket_name).blob(blob_path).download_as_bytes()
 
-    raise RuntimeError(
-        f"Document AI OCR failed after {retries} attempts: {last_exc}"
-    )
+    pdf_bytes = await loop.run_in_executor(None, _download)
+
+    # Count pages
+    reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+    total_pages = len(reader.pages)
+    logger.info("PDF has %d pages (limit per OCR call: %d)", total_pages, _DOC_AI_PAGE_LIMIT)
+
+    if total_pages <= _DOC_AI_PAGE_LIMIT:
+        text = await _ocr_pdf_bytes(pdf_bytes, processor_name, retries=retries)
+        logger.info("OCR completed: %d pages, %d characters", total_pages, len(text))
+        return text, total_pages
+
+    # Split into chunks and OCR each
+    chunks: list[str] = []
+    for start in range(0, total_pages, _DOC_AI_PAGE_LIMIT):
+        end = min(start + _DOC_AI_PAGE_LIMIT, total_pages)
+        logger.info("OCR chunk pages %d-%d of %d", start + 1, end, total_pages)
+
+        writer = pypdf.PdfWriter()
+        for page_num in range(start, end):
+            writer.add_page(reader.pages[page_num])
+
+        buf = io.BytesIO()
+        writer.write(buf)
+        chunk_bytes = buf.getvalue()
+
+        chunk_text = await _ocr_pdf_bytes(chunk_bytes, processor_name, retries=retries)
+        chunks.append(chunk_text)
+
+    full_text = "\n".join(chunks)
+    logger.info("OCR completed: %d pages total, %d characters", total_pages, len(full_text))
+    return full_text, total_pages
 
 
 async def _upload_ocr_text(
@@ -367,7 +399,11 @@ async def _summarise_all_chunks(
         New list of ``ChunkRecord`` objects with ``summary`` populated.
     """
     semaphore = asyncio.Semaphore(max_concurrent)
-    client = google_genai.Client()
+    client = google_genai.Client(
+        vertexai=True,
+        project=os.environ["GCP_PROJECT_ID"],
+        location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
+    )
 
     summaries = await asyncio.gather(
         *[_summarise_single_chunk(c, client, semaphore) for c in chunks]
