@@ -5,8 +5,11 @@ import { useSessionStore } from '../../store/sessionStore';
 import { useResearchStore } from '../../store/researchStore';
 import { Button, Spinner } from '../ui';
 
-// Configure PDF.js worker via CDN
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Serve worker from the local pdfjs-dist package (CDN may not have this version yet)
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url,
+).toString();
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3.0;
