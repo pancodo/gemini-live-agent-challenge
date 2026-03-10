@@ -549,7 +549,7 @@ Visual Bible Seed:
 {visual_bible_seed}
 
 YOUR TASK:
-Select 4-8 cinematically compelling moments from the document. Prioritise:
+Select exactly 4 cinematically compelling moments from the document (was 4-8 — restore range before submission). Prioritise:
   - Narrative turning points that create dramatic tension
   - High-contrast scenes (conflict, transformation, revelation)
   - Visually specific moments (described settings, objects, weather, light)
