@@ -81,7 +81,22 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_FRAMES_PER_SEGMENT: int = 4
+# Frame indices map to subject types in frame_prompts / _FRAME_MODIFIERS:
+#   0 = environment/architecture (wide, no people)
+#   1 = human activity (people as primary subject)
+#   2 = material detail (extreme close-up of one object)
+#   3 = dramatic atmosphere (light, shadow, mood)
+#
+# Frame count and type are chosen per narrative role so the visual budget
+# matches the scene's dramatic weight in the documentary arc.
+_NARRATIVE_FRAME_PLAN: dict[str, list[int]] = {
+    "opening":       [0],          # 1 frame — one wide establishing shot, no more
+    "rising_action": [0, 1],       # 2 frames — place + people entering the story
+    "climax":        [0, 1, 3],    # 3 frames — full visual depth for the peak moment
+    "resolution":    [1, 3],       # 2 frames — human presence + reflective atmosphere
+    "coda":          [3],          # 1 frame — one resonant atmospheric close
+}
+_DEFAULT_FRAME_PLAN: list[int] = [0, 1]  # fallback for unknown narrative roles
 _IMAGEN_MODEL: str = "imagen-3.0-fast-generate-001"
 _VEO2_MODEL: str = "veo-2.0-generate-001"
 _VEO2_POLL_INTERVAL_SECONDS: int = 20
@@ -103,6 +118,36 @@ _FRAME_MODIFIERS: list[str] = [
     "layering, architectural lines converging overhead, cinematic depth of field, "
     "heroic scale perspective.",
 ]
+
+
+def _frames_for_segment(
+    segment: dict[str, Any],
+    narrative_role: str,
+) -> list[int]:
+    """Return the Imagen 3 frame indices to generate for this segment.
+
+    Frame selection is driven by narrative role so visual spending matches
+    dramatic weight: opening and coda scenes get one frame; the climax gets
+    three; rising action and resolution get two.
+
+    Args:
+        segment: SegmentScript dict (used for logging only here).
+        narrative_role: The scene's position in the documentary arc
+            (from the matching SceneBrief).
+
+    Returns:
+        Ordered list of frame indices (0–3) to generate.
+    """
+    plan = _NARRATIVE_FRAME_PLAN.get(narrative_role, _DEFAULT_FRAME_PLAN)
+    logger.debug(
+        "Segment %s (narrative_role=%r): generating %d frame(s) %s",
+        segment.get("id", "unknown"),
+        narrative_role,
+        len(plan),
+        plan,
+    )
+    return plan
+
 
 _BASE_NEGATIVE_PROMPT: str = (
     "text, watermark, logo, letters, numbers, typography, signage, "
@@ -168,6 +213,8 @@ def _build_imagen_prompt(
     """Build an Imagen 3 (prompt, negative_prompt) pair for a single frame.
 
     Priority rule:
+      0. If ``manifest.frame_prompts`` has an entry for ``frame_idx`` → use that
+         subject-differentiated prompt directly (no frame modifier appended).
       1. If ``manifest.enriched_prompt`` exists → combine visual_bible prefix +
          enriched_prompt + frame-specific composition modifier.  The era_markers
          from ``manifest.detail_fields`` are appended to the negative prompt.
@@ -193,11 +240,41 @@ def _build_imagen_prompt(
     era: str = segment.get("era", "") or (manifest or {}).get("era", "")
     period_additions: str = get_period_negative_prompt_additions(era)
 
-    # --- Priority 1: Use enriched research prompt from Phase IV ---
+    # Build period-aware negative prompt prefix to anchor the era
+    period_prefix = ""
+    if era:
+        period_prefix = (
+            f"modern {era}, contemporary version, 21st century, tourists, "
+            f"modern infrastructure, "
+        )
+
+    # --- Priority 0: Use per-frame subject-differentiated prompts from Phase IV ---
+    if manifest and manifest.get("frame_prompts"):
+        frame_prompts: list[str] = manifest["frame_prompts"]
+        if frame_idx < len(frame_prompts) and frame_prompts[frame_idx]:
+            frame_prompt = frame_prompts[frame_idx]
+            # Ensure the era is explicit in the first 50 chars of the prompt
+            if era and era.lower() not in frame_prompt[:50].lower():
+                frame_prompt = f"[{era}] {frame_prompt}"
+            prompt = (
+                f"{visual_bible}\n\n"
+                f"{frame_prompt}\n\n"
+                f"Lighting: {lighting_directive}"
+            )
+            negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
+            if period_additions:
+                negative = f"{negative}, {period_additions}"
+            return prompt, negative
+
+    # --- Priority 1: Use shared enriched research prompt from Phase IV ---
     if manifest and manifest.get("enriched_prompt"):
         enriched: str = manifest["enriched_prompt"]
         detail_fields: dict[str, Any] = manifest.get("detail_fields", {})
         era_markers: list[str] = detail_fields.get("era_markers", [])
+
+        # Ensure the era is explicit in the first 50 chars of the prompt
+        if era and era.lower() not in enriched[:50].lower():
+            enriched = f"[{era}] {enriched}"
 
         prompt = (
             f"{visual_bible}\n\n"
@@ -206,7 +283,7 @@ def _build_imagen_prompt(
             f"Lighting: {lighting_directive}"
         )
 
-        negative = _BASE_NEGATIVE_PROMPT
+        negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
         if era_markers:
             # Era markers describe elements that should NOT appear
             # (e.g. "no mechanical clocks visible", "oil lanterns only").
@@ -227,21 +304,22 @@ def _build_imagen_prompt(
             f"Frame composition: {frame_modifier}\n\n"
             f"Lighting: {lighting_directive}"
         )
-        negative = _BASE_NEGATIVE_PROMPT
+        negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
         if period_additions:
             negative = f"{negative}, {period_additions}"
         return prompt, negative
 
     # --- Priority 3: Generic fallback ---
     title: str = segment.get("title", "historical documentary scene")
+    era_qualifier = f", {era}" if era else ""
     prompt = (
         f"{visual_bible}\n\n"
-        f"A {mood} historical documentary scene: {title}. "
+        f"A {mood} historical documentary scene: {title}{era_qualifier}. "
         f"Period-accurate, no anachronisms. "
         f"Frame composition: {frame_modifier}\n\n"
         f"Lighting: {lighting_directive}"
     )
-    negative = _BASE_NEGATIVE_PROMPT
+    negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
     if period_additions:
         negative = f"{negative}, {period_additions}"
     return prompt, negative
@@ -333,8 +411,9 @@ async def _generate_segment_images(
     visual_bible: str,
     session_id: str,
     bucket_name: str,
+    narrative_role: str = "",
 ) -> list[str]:
-    """Generate all four Imagen 3 frames for one segment concurrently.
+    """Generate Imagen 3 frames for one segment, selecting which frames based on narrative role.
 
     All four frames run in parallel via ``asyncio.gather``.  Frames that fail
     (filtered content, API error) are silently dropped — the segment still gets
@@ -355,13 +434,12 @@ async def _generate_segment_images(
     segment_id: str = segment.get("id", "unknown")
     frame_tasks = []
 
-    for frame_idx in range(_FRAMES_PER_SEGMENT):
+    for frame_idx in _frames_for_segment(segment, narrative_role):
         prompt, negative = _build_imagen_prompt(
             segment, manifest, visual_bible, frame_idx
         )
-        # Disable enhancement for long enriched prompts — they're already
-        # detailed enough and enhancement can dilute period-specific vocabulary.
-        use_enhance = len(prompt.split()) < 80
+        # Never let Imagen 3 enhance historical prompts — it modernizes them
+        use_enhance = False
         blob_name = (
             f"sessions/{session_id}/images/{segment_id}/frame_{frame_idx}.jpg"
         )
@@ -567,6 +645,7 @@ async def _run_segment_generation(
     bucket_name: str,
     emitter: SSEEmitter | None,
     image_url_store: dict[str, list[str]],
+    narrative_role: str = "",
 ) -> tuple[str, str, Any] | None:
     """Generate images for one segment, persist to Firestore, emit SSE.
 
@@ -607,13 +686,13 @@ async def _run_segment_generation(
                 agent_id=f"visual_director_{scene_id}",
                 status="searching",  # teal pulse dot in frontend
                 query=(
-                    f"Generating {_FRAMES_PER_SEGMENT} frames for "
+                    f"Generating {len(_frames_for_segment(segment, narrative_role))} frame(s) for "
                     f"{segment.get('title', scene_id)}"
                 ),
             ),
         )
 
-    # --- Generate 4 Imagen 3 frames (concurrent) ---
+    # --- Generate Imagen 3 frames (concurrent) ---
     image_urls = await _generate_segment_images(
         client=client,
         semaphore=semaphore,
@@ -622,6 +701,7 @@ async def _run_segment_generation(
         visual_bible=visual_bible,
         session_id=session_id,
         bucket_name=bucket_name,
+        narrative_role=narrative_role,
     )
 
     t_elapsed = round(time.monotonic() - t_start, 1)
@@ -629,7 +709,7 @@ async def _run_segment_generation(
         "Segment %s: generated %d/%d frames in %.1fs (manifest=%s)",
         segment_id,
         len(image_urls),
-        _FRAMES_PER_SEGMENT,
+        len(_frames_for_segment(segment, narrative_role)),
         t_elapsed,
         used_manifest,
     )
@@ -662,7 +742,7 @@ async def _run_segment_generation(
                 status="done",
                 elapsed=t_elapsed,
                 facts=[
-                    f"{len(image_urls)}/{_FRAMES_PER_SEGMENT} frames generated",
+                    f"{len(image_urls)}/{len(_frames_for_segment(segment, narrative_role))} frames generated",
                     (
                         "Used enriched Phase IV manifest prompt"
                         if used_manifest
@@ -676,18 +756,13 @@ async def _run_segment_generation(
             ),
         )
 
-    # --- Trigger Veo 2 (fire-and-forget) ---
-    veo2_scene: str | None = segment.get("veo2_scene")
-    if veo2_scene:
-        operation = await _trigger_veo2_generation(
-            client=client,
-            veo2_prompt=veo2_scene,
-            session_id=session_id,
-            scene_id=scene_id,
-            bucket_name=bucket_name,
-        )
-        if operation:
-            return (segment_id, scene_id, operation)
+    # --- Trigger Veo 2 (disabled — too expensive for dev/testing) ---
+    # Uncomment to re-enable before final submission:
+    # veo2_scene: str | None = segment.get("veo2_scene")
+    # if veo2_scene:
+    #     operation = await _trigger_veo2_generation(...)
+    #     if operation:
+    #         return (segment_id, scene_id, operation)
 
     return None
 
@@ -769,6 +844,14 @@ class VisualDirectorOrchestrator(BaseAgent):
         )
         visual_bible: str = ctx.session.state.get("visual_bible", "")
 
+        # Build scene_id → narrative_role lookup from Phase I scene briefs
+        # (narrative_role is on SceneBrief, not on SegmentScript)
+        scene_briefs_raw: list[dict[str, Any]] = ctx.session.state.get("scene_briefs", [])
+        narrative_role_map: dict[str, str] = {
+            b.get("scene_id", ""): b.get("narrative_role", "")
+            for b in scene_briefs_raw
+        }
+
         if not script_raw:
             logger.error(
                 "Phase V: session.state['script'] is empty for session %s. "
@@ -821,6 +904,7 @@ class VisualDirectorOrchestrator(BaseAgent):
         ) -> tuple[str, str, Any] | None:
             scene_id = seg.get("scene_id", "unknown")
             manifest = manifests.get(scene_id)
+            role = narrative_role_map.get(scene_id, "")
             return await _run_segment_generation(
                 client=client,
                 semaphore=semaphore,
@@ -832,6 +916,7 @@ class VisualDirectorOrchestrator(BaseAgent):
                 bucket_name=self.gcs_bucket,
                 emitter=self.emitter,
                 image_url_store=image_url_store,
+                narrative_role=role,
             )
 
         # ------------------------------------------------------------------
@@ -849,7 +934,11 @@ class VisualDirectorOrchestrator(BaseAgent):
         # (images done but veo2_scene wasn't available then — script is now)
         for seg in script_raw:
             seg_id = seg.get("id", "")
-            if seg_id in already_generated and seg.get("veo2_scene"):
+            scene_id_v = seg.get("scene_id", "")
+            role_v = narrative_role_map.get(scene_id_v, "")
+            # Only trigger Veo 2 for climax moments — not every segment with a veo2_scene
+            veo2_worthy = role_v == "climax" and seg.get("mood", "") in ("dramatic", "cinematic")
+            if seg_id in already_generated and seg.get("veo2_scene") and veo2_worthy:
                 scene_id = seg.get("scene_id", "unknown")
                 operation = await _trigger_veo2_generation(
                     client=client,
@@ -986,9 +1075,10 @@ class VisualDirectorOrchestrator(BaseAgent):
             )
 
         logger.info(
-            "Phase V complete for session %s: %d images, %d videos in %.1fs",
+            "Phase V complete for session %s: %d images across %d segments, %d videos in %.1fs",
             session_id,
             total_images,
+            len(image_url_store),
             total_videos,
             t_elapsed,
         )

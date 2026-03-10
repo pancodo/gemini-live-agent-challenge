@@ -976,6 +976,7 @@ async def stage_6_synthesize_manifest(
     segment_id: str,
     client: google_genai.Client,
     visual_bible: str = "",
+    narrative_role: str = "",
 ) -> VisualDetailManifest:
     """Synthesise all extracted fragments into a final VisualDetailManifest.
 
@@ -1068,6 +1069,94 @@ End with era exclusion line: "Exclude from all frames: [comma-separated era_mark
 Output ONLY the prompt text, no preamble.
 """
 
+    # --- Generate subject-differentiated frame prompts (only needed frames) ---
+
+    # Determine which frame indices this scene actually needs.
+    # Opening and coda scenes get 1 frame; climax gets 3; others get 2.
+    _STAGE6_FRAME_PLAN: dict[str, list[int]] = {
+        "opening":       [0],
+        "rising_action": [0, 1],
+        "climax":        [0, 1, 3],
+        "resolution":    [1, 3],
+        "coda":          [3],
+    }
+    needed_frames: list[int] = _STAGE6_FRAME_PLAN.get(narrative_role, [0, 1])
+
+    _FRAME_DESCRIPTIONS: dict[int, str] = {
+        0: "FRAME 0 — ENVIRONMENT: Architectural environment ONLY. No human figures. The space, its scale, textures, atmosphere. Include the specific era and location (e.g. \"circa {era}\").",
+        1: "FRAME 1 — HUMAN ACTIVITY: People in this space at medium distance. Workers, citizens, officials, or soldiers in period dress. Human activity as primary subject, environment as background.",
+        2: "FRAME 2 — MATERIAL DETAIL: Extreme close-up of ONE specific object or surface — carved stone, worn tool, textile, architectural ornament. The material IS the subject. No context scene.",
+        3: "FRAME 3 — ATMOSPHERE: Dramatic light/shadow relationship. Interior/exterior threshold, light beam, shadow contrast, environmental scale. Atmosphere as subject.",
+    }
+    era = scene_brief.get("era", "historical period")
+    frame_descriptions_text = "\n\n".join(
+        _FRAME_DESCRIPTIONS[i].replace("{era}", era) for i in needed_frames
+    )
+    frame_count = len(needed_frames)
+
+    frame_prompts_prompt = f"""\
+You are the visual director for an AI-generated historical documentary.
+
+{visual_bible_section}SCENE BRIEF:
+Title: {scene_brief.get('title', '')}
+Era: {scene_brief.get('era', '')}
+Location: {scene_brief.get('location', '')}
+Key entities: {', '.join(scene_brief.get('key_entities', []))}
+Mood: {scene_brief.get('mood', '')}
+Cinematic hook: {scene_brief.get('cinematic_hook', '')}
+
+PERIOD-ACCURATE VISUAL DETAILS (sourced from archival research):
+{details_text}
+
+Write {frame_count} Imagen 3 prompt(s) for this scene. Each must describe a DIFFERENT SUBJECT.
+
+{frame_descriptions_text}
+
+Each prompt must:
+- Start with "Cinematic still photograph."
+- Be 60–90 words
+- Contain the explicit era/century (e.g. "{scene_brief.get('era', 'historical era')}")
+- Use period-specific vocabulary from the extracted details above
+
+Output ONLY a JSON array of exactly {frame_count} string(s), in the order listed above:
+{json.dumps(['Frame ' + str(i) + ' text...' for i in needed_frames])}
+"""
+
+    frame_prompts: list[str] = ["", "", "", ""]
+    try:
+        fp_response = await client.aio.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=frame_prompts_prompt,
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=1024,
+                temperature=0.7,
+            ),
+        )
+        fp_text = fp_response.text.strip()
+        # Strip markdown fences if present
+        if fp_text.startswith("```"):
+            fp_text = fp_text.split("\n", 1)[-1]
+        if fp_text.endswith("```"):
+            fp_text = fp_text.rsplit("```", 1)[0]
+        parsed_fps = json.loads(fp_text.strip())
+        if isinstance(parsed_fps, list) and len(parsed_fps) == frame_count and all(isinstance(s, str) for s in parsed_fps):
+            # Map prompts back to their absolute frame indices (0-3) for direct
+            # index access by Phase V: frame_prompts[frame_idx]
+            indexed: list[str] = ["", "", "", ""]
+            for list_pos, frame_idx in enumerate(needed_frames):
+                if frame_idx < 4:
+                    indexed[frame_idx] = parsed_fps[list_pos]
+            frame_prompts = indexed
+            logger.debug(
+                "Stage 6 frame_prompts: generated %d/%d frames for scene %s (role=%r): indices %s",
+                frame_count, 4, scene_brief.get("scene_id"), narrative_role, needed_frames,
+            )
+        else:
+            logger.warning("Stage 6 frame_prompts parse: unexpected format for scene %s", scene_brief.get("scene_id"))
+    except Exception as exc:
+        logger.warning("Stage 6 frame_prompts generation failed for scene %s: %s", scene_brief.get("scene_id"), exc)
+
+    # --- Generate master enriched_prompt (used as fallback when frame_prompts is empty) ---
     try:
         response = await client.aio.models.generate_content(
             model="gemini-2.0-pro",
@@ -1090,6 +1179,7 @@ Output ONLY the prompt text, no preamble.
         scene_id=scene_brief.get("scene_id", ""),
         segment_id=segment_id,
         enriched_prompt=enriched_prompt,
+        frame_prompts=frame_prompts,
         detail_fields=merged,
         sources_accepted=len(accepted_sources),
         sources_rejected=len(rejected_sources),

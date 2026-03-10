@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _FAST_PATH_MAX_SOURCES: int = 3
-_DEEP_PATH_MAX_SOURCES: int = 10
+_DEEP_PATH_MAX_SOURCES: int = 5  # Was 10 — restore to 10 before final submission
 _SEMAPHORE_LIMIT: int = 8  # Max concurrent Gemini calls across all scenes
 
 
@@ -331,6 +331,7 @@ async def _run_scene_pipeline(
         segment_id,
         client,
         visual_bible=visual_bible,
+        narrative_role=scene_brief.get("narrative_role", ""),
     )
 
     t_elapsed = round(time.monotonic() - t_start, 1)
@@ -571,6 +572,7 @@ class VisualResearchOrchestrator(BaseAgent):
                         bucket_name=self.gcs_bucket,
                         emitter=self.emitter,
                         image_url_store=image_url_store,
+                        narrative_role=brief.get("narrative_role", ""),
                     )
 
         tasks = []

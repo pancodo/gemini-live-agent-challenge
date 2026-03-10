@@ -230,6 +230,15 @@ class VisualDetailManifest(BaseModel):
             "The Visual Director uses this as the primary generation prompt."
         ),
     )
+    frame_prompts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Four subject-differentiated Imagen 3 prompts (60–90 words each), one per frame type: "
+            "[0] environment/architecture only, [1] human activity in the space, "
+            "[2] close-up material/artifact detail, [3] dramatic atmospheric composition. "
+            "When non-empty, the Visual Director uses frame_prompts[frame_idx] instead of enriched_prompt."
+        ),
+    )
     detail_fields: MergedVisualDetail = Field(
         ...,
         description="Merged and deduplicated visual detail fields from all fragments.",
