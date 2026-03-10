@@ -207,7 +207,44 @@ export function DocumentaryPlayer() {
               'linear-gradient(to bottom, rgba(13,11,9,0.7) 0%, transparent 100%)',
           }}
         >
-          {/* Logo */}
+          {/* Left: Back button */}
+          <div className="flex items-center gap-3 min-w-[80px]">
+            <button
+              onClick={() => navigate('/workspace')}
+              className="p-2 rounded transition-colors duration-200"
+              style={{
+                color: 'rgba(232,221,208,0.6)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'rgba(232,221,208,0.9)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'rgba(232,221,208,0.6)';
+              }}
+              aria-label="Back to workspace"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M10 4L6 8L10 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Center: Logo */}
           <span
             style={{
               fontFamily: 'var(--font-serif)',
@@ -221,7 +258,8 @@ export function DocumentaryPlayer() {
             AI Historian
           </span>
 
-          <div className="flex items-center gap-4">
+          {/* Right: Controls */}
+          <div className="flex items-center gap-4 min-w-[80px] justify-end">
             {/* Segment index */}
             {readySegments.length > 0 && (
               <span
