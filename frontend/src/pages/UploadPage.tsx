@@ -45,6 +45,7 @@ const SAMPLE_DOCS = [
 function SampleDocuments() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
+  const resetResearch = useResearchStore((s) => s.reset);
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleSample = useCallback(
@@ -56,13 +57,14 @@ function SampleDocuments() {
         const blob = await res.blob();
         const file = new File([blob], doc.filename, { type: 'application/pdf' });
         const { sessionId, gcsPath } = await uploadDocument(file, doc.language);
+        resetResearch();
         setSession({ sessionId, gcsPath, status: 'processing' });
         navigate('/workspace');
       } catch {
         setLoading(null);
       }
     },
-    [navigate, setSession]
+    [navigate, setSession, resetResearch]
   );
 
   return (

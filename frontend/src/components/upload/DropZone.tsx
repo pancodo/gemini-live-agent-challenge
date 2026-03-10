@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useSessionStore } from '../../store/sessionStore';
+import { useResearchStore } from '../../store/researchStore';
 import { uploadDocument } from '../../services/upload';
 import { InkButton } from '../ui';
 import { FormatBadge } from './FormatBadge';
@@ -27,6 +28,7 @@ function formatFileSize(bytes: number): string {
 export function DropZone() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
+  const resetResearch = useResearchStore((s) => s.reset);
   const shouldReduceMotion = useReducedMotion();
 
   const [dropState, setDropState] = useState<DropState>('idle');
@@ -60,6 +62,7 @@ export function DropZone() {
           (pct) => setProgress(pct)
         );
 
+        resetResearch();
         setSession({
           sessionId,
           gcsPath,
@@ -74,7 +77,7 @@ export function DropZone() {
         );
       }
     },
-    [language, navigate, setSession]
+    [language, navigate, setSession, resetResearch]
   );
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
