@@ -1,4 +1,4 @@
-import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, Segment } from '../types';
+import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, Segment, UrlMeta } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -27,4 +27,10 @@ export async function getSegments(sessionId: string): Promise<Segment[]> {
   if (!res.ok) throw new Error(`Segments fetch failed: ${res.status}`);
   const data = await res.json() as { segments: Segment[] };
   return data.segments;
+}
+
+export async function getUrlMeta(url: string): Promise<UrlMeta> {
+  const res = await fetch(`${BASE_URL}/api/meta?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw new Error(`Meta fetch failed: ${res.status}`);
+  return res.json() as Promise<UrlMeta>;
 }

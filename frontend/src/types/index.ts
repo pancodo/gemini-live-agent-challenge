@@ -29,6 +29,18 @@ export interface EvaluatedSource {
   accepted: boolean;
   reason: string;
   title?: string;
+  imageUrl?: string;
+  description?: string;
+  favicon?: string;
+}
+
+export interface UrlMeta {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  favicon: string | null;
+  hostname: string;
 }
 
 export interface AgentState {

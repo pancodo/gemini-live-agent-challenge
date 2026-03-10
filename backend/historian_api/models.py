@@ -44,3 +44,12 @@ class SegmentResponse(BaseModel):
 
 class SegmentsResponse(BaseModel):
     segments: list[SegmentResponse]
+
+
+class UrlMetaResponse(BaseModel):
+    url: str
+    title: str | None = None
+    description: str | None = None
+    image: str | None = None
+    favicon: str | None = None
+    hostname: str

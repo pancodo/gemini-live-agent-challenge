@@ -4,20 +4,33 @@ Endpoints:
   GET  /api/session/create                          → generate signed GCS upload URL + create Firestore session
   GET  /api/session/{session_id}/status             → poll session state from Firestore
   GET  /api/session/{session_id}/agent/{agent_id}/logs → fetch agent log entries from Firestore
+  GET  /api/meta?url=<encoded_url>                  → fetch Open Graph metadata for a URL
 """
 from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
+from collections import OrderedDict
 from datetime import timedelta
+from urllib.parse import urljoin, urlparse
 
 import google.auth
 import google.auth.transport.requests
-from fastapi import APIRouter, HTTPException
+import httpx
+from bs4 import BeautifulSoup
+from fastapi import APIRouter, HTTPException, Query
 from google.cloud import firestore, storage
 
-from ..models import AgentLogsResponse, CreateSessionResponse, SessionStatusResponse, SegmentsResponse, SegmentResponse
+from ..models import (
+    AgentLogsResponse,
+    CreateSessionResponse,
+    SegmentResponse,
+    SegmentsResponse,
+    SessionStatusResponse,
+    UrlMetaResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -201,3 +214,145 @@ async def get_session_segments(session_id: str) -> SegmentsResponse:
 
     segments.sort(key=lambda s: s.id)
     return SegmentsResponse(segments=segments)
+
+
+# ---------------------------------------------------------------------------
+# URL metadata cache (in-memory, TTL 1 hour, max 500 entries)
+# ---------------------------------------------------------------------------
+
+_META_CACHE: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+_META_CACHE_TTL = 3600  # seconds
+_META_CACHE_MAX = 500
+
+
+def _cache_get(url: str) -> dict | None:
+    """Return cached meta dict if present and not expired, else None."""
+    entry = _META_CACHE.get(url)
+    if entry is None:
+        return None
+    ts, data = entry
+    if time.monotonic() - ts > _META_CACHE_TTL:
+        _META_CACHE.pop(url, None)
+        return None
+    # Move to end (most recently accessed)
+    _META_CACHE.move_to_end(url)
+    return data
+
+
+def _cache_set(url: str, data: dict) -> None:
+    """Store meta dict in cache, evicting oldest if over limit."""
+    _META_CACHE[url] = (time.monotonic(), data)
+    _META_CACHE.move_to_end(url)
+    while len(_META_CACHE) > _META_CACHE_MAX:
+        _META_CACHE.popitem(last=False)
+
+
+def _make_absolute(base_url: str, href: str | None) -> str | None:
+    """Convert a potentially relative URL to absolute. Return None if input is None/empty."""
+    if not href:
+        return None
+    if href.startswith(("http://", "https://", "//")):
+        if href.startswith("//"):
+            return "https:" + href
+        return href
+    return urljoin(base_url, href)
+
+
+def _extract_meta(url: str, html: str) -> dict:
+    """Parse HTML and extract Open Graph / Twitter meta + favicon."""
+    soup = BeautifulSoup(html, "html.parser")
+
+    def og(prop: str) -> str | None:
+        tag = soup.find("meta", attrs={"property": prop})
+        if tag:
+            return tag.get("content")  # type: ignore[return-value]
+        return None
+
+    def meta_name(name: str) -> str | None:
+        tag = soup.find("meta", attrs={"name": name})
+        if tag:
+            return tag.get("content")  # type: ignore[return-value]
+        return None
+
+    title = og("og:title")
+    if not title:
+        title_tag = soup.find("title")
+        if title_tag:
+            title = title_tag.get_text(strip=True)
+
+    description = og("og:description") or meta_name("description")
+
+    image = _make_absolute(url, og("og:image") or meta_name("twitter:image"))
+
+    # Favicon: look for <link rel="icon"> or <link rel="shortcut icon">
+    favicon: str | None = None
+    for rel_val in (["icon"], ["shortcut", "icon"]):
+        link_tag = soup.find("link", rel=rel_val)
+        if link_tag and link_tag.get("href"):
+            favicon = _make_absolute(url, link_tag["href"])  # type: ignore[arg-type]
+            break
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname or parsed.netloc
+
+    # Google favicon fallback
+    if not favicon:
+        favicon = f"https://www.google.com/s2/favicons?domain={hostname}&sz=64"
+
+    return {
+        "url": url,
+        "title": title,
+        "description": description,
+        "image": image,
+        "favicon": favicon,
+        "hostname": hostname,
+    }
+
+
+@router.get("/meta", response_model=UrlMetaResponse)
+async def get_url_meta(url: str = Query(..., description="URL to fetch metadata for")) -> UrlMetaResponse:
+    """Fetch Open Graph metadata for a URL (server-side proxy to avoid CORS)."""
+    # Validate URL shape
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return UrlMetaResponse(
+            url=url,
+            title=None,
+            description=None,
+            image=None,
+            favicon=f"https://www.google.com/s2/favicons?domain=unknown&sz=64",
+            hostname=parsed.hostname or "unknown",
+        )
+
+    # Check cache
+    cached = _cache_get(url)
+    if cached is not None:
+        return UrlMetaResponse(**cached)
+
+    # Fetch
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(5.0),
+            follow_redirects=True,
+            headers={"User-Agent": "AIHistorianBot/1.0 (metadata preview)"},
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            html = resp.text
+    except Exception:
+        logger.debug("Meta fetch failed for %s", url, exc_info=True)
+        hostname = parsed.hostname or "unknown"
+        fallback = {
+            "url": url,
+            "title": None,
+            "description": None,
+            "image": None,
+            "favicon": f"https://www.google.com/s2/favicons?domain={hostname}&sz=64",
+            "hostname": hostname,
+        }
+        _cache_set(url, fallback)
+        return UrlMetaResponse(**fallback)
+
+    meta = _extract_meta(url, html)
+    _cache_set(url, meta)
+    return UrlMetaResponse(**meta)

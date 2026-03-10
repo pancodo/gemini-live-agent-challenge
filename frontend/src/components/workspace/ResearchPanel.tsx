@@ -10,6 +10,20 @@ import type { AgentState, AgentStatus } from '../../types';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+function extractHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function faviconUrl(url: string): string {
+  return `https://www.google.com/s2/favicons?domain=${extractHostname(url)}&sz=32`;
+}
+
+const MAX_VISIBLE_CHIPS = 3;
+
 const PHASE_LABELS: [string, string][] = [
   ['I', 'Translation & Scan'],
   ['II', 'Field Research'],
@@ -186,6 +200,56 @@ function AgentCard({ agent, onClick }: AgentCardProps) {
           isActive={isActive}
         />
       </div>
+
+      {/* Source chips — visible only while agent is active */}
+      <AnimatePresence>
+        {isActive && (agent.evaluatedSources?.length ?? 0) > 0 && (() => {
+          const sources = agent.evaluatedSources!;
+          const visibleSources = sources.slice(0, MAX_VISIBLE_CHIPS);
+          const remaining = sources.length - visibleSources.length;
+
+          return (
+            <motion.div
+              key="chips"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-wrap gap-1.5 mt-2 overflow-hidden"
+            >
+              {visibleSources.map((src, index) => (
+                <motion.div
+                  key={src.url}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg3)] border border-[var(--bg4)] text-[11px] font-sans text-[var(--muted)]"
+                >
+                  <img
+                    src={faviconUrl(src.url)}
+                    width={12}
+                    height={12}
+                    className="rounded-sm"
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span>{extractHostname(src.url)}</span>
+                </motion.div>
+              ))}
+              {remaining > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: visibleSources.length * 0.05 }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg3)] border border-[var(--bg4)] text-[11px] font-sans text-[var(--muted)]"
+                >
+                  + {remaining} more
+                </motion.div>
+              )}
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </motion.div>
   );
 }
