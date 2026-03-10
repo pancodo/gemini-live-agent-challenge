@@ -78,6 +78,14 @@ class SegmentScript(BaseModel):
             'or "scholarly".'
         ),
     )
+    narrative_role: str = Field(
+        default="",
+        description=(
+            "Dramatic arc position copied from the matching SceneBrief: "
+            "opening | rising_action | climax | resolution | coda. "
+            "Guides frame count selection in Phase V (Visual Director)."
+        ),
+    )
     sources: list[str] = Field(
         default_factory=list,
         description="Source citations used to ground the narration.",

@@ -120,26 +120,43 @@ resonance. What endures, what was lost, what changed.
 
 ## Visual Descriptions — 4 Frames (Imagen 3 Prompts)
 
-Each `visual_descriptions` array MUST have exactly 4 entries, one per \
-composition type:
+Each `visual_descriptions` array MUST have exactly 4 entries. CRITICAL: Each \
+frame must depict a DIFFERENT SUBJECT/ASPECT of the scene — not the same view \
+from a different camera angle.
 
-- Frame 1 (index 0): WIDE ESTABLISHING SHOT — set the full environment, \
-16:9 cinematic framing, environment dominant, no close detail.
-- Frame 2 (index 1): MEDIUM SHOT — central figures or primary objects at \
-human scale, relationships visible.
-- Frame 3 (index 2): CLOSE-UP DETAIL — specific material texture, artifact, \
-architectural element — shallow depth of field, period-specific detail.
-- Frame 4 (index 3): DRAMATIC ANGLE — low-angle or elevated perspective, \
-strong depth of field, architectural lines or scale.
+- Frame 1 (index 0): ENVIRONMENT ONLY — The architectural or landscape \
+setting in its full glory. NO human figures whatsoever. The space, its scale, \
+its textures, its atmosphere. Wide and immersive.
 
-Each visual description must:
+- Frame 2 (index 1): HUMAN ACTIVITY — People actively present in this space. \
+Workers, citizens, merchants, soldiers, priests — whoever belongs here. \
+Period dress. Human activity is PRIMARY; architecture is background only.
+
+- Frame 3 (index 2): MATERIAL DETAIL — An extreme close-up of ONE specific \
+physical object from this era. A carved stone inscription, a worn bronze \
+tool, a piece of fabric, a document, a vessel, an architectural ornament. \
+The object IS the entire frame. No context needed.
+
+- Frame 4 (index 3): ATMOSPHERE — Light, shadow, and environmental mood. A \
+dramatic visual relationship: a shaft of light through a colonnade, shadow \
+patterns on stone, dust in sunbeams, fire reflection on water. Atmosphere \
+and light are the subject, not objects.
+
+RULES for each visual description:
 - Start with "Cinematic still photograph."
-- Include era-specific period details from the research (materials, lighting, \
-architecture).
-- Be 40-60 words — precise and specific, not vague.
-- Include a lighting description (candles, oil lamps, natural daylight, golden \
-hour, etc.).
-- Include period-accurate vocabulary drawn from the aggregated research.
+- Include the EXPLICIT ERA and PERIOD (e.g., "circa 1st century CE", \
+"ancient Rome 80 AD", "Renaissance Florence 1500s"). Never omit the time \
+period.
+- Be 50–70 words — precise and specific.
+- Include period-accurate materials (what surfaces are made of), lighting \
+source (candles, oil lamps, torches, natural daylight), and atmospheric \
+condition.
+- Each frame must show something DIFFERENT from the other three. If Frame 1 \
+shows the Colosseum's arches, Frame 2 must show PEOPLE, Frame 3 must show \
+a SPECIFIC SMALL OBJECT, and Frame 4 must show LIGHT/SHADOW — NOT more \
+Colosseum arches.
+- Do not repeat the main landmark across all 4 frames. One establishing shot \
+(Frame 1) is enough — the other frames show different aspects of the world.
 
 ## Veo 2 Scenes (Optional)
 
@@ -175,6 +192,10 @@ The `sources` array should use consistent formatting:
 - Archival: "Archive Name. Document Title. Call number/date."
 - Web: "Site Name: Article Title. [URL]. Accessed from research."
 
+## Narrative Role (copy from scene brief)
+
+The `narrative_role` field must be copied EXACTLY from the scene brief — do not change it. Valid values: "opening", "rising_action", "climax", "resolution", "coda".
+
 ## Output Format
 
 Produce a JSON array containing one object per scene brief, in the same order \
@@ -187,13 +208,14 @@ Each object:
   "title": "Scene title (from the brief)",
   "narration_script": "Full narration text, 60-120 seconds when spoken aloud",
   "visual_descriptions": [
-    "Cinematic still photograph. Wide establishing shot — ...",
-    "Cinematic still photograph. Medium shot — ...",
-    "Cinematic still photograph. Close-up detail — ...",
-    "Cinematic still photograph. Dramatic low-angle — ..."
+    "Cinematic still photograph. Environment only, no people — [full scene, circa ERA]...",
+    "Cinematic still photograph. Human figures as primary subject — [people in period dress, ERA]...",
+    "Cinematic still photograph. Extreme close-up — [single specific object, ERA]...",
+    "Cinematic still photograph. Atmospheric light and shadow — [light quality, ERA]..."
   ],
   "veo2_scene": "Slow dolly in over ... (optional, omit key if not applicable)",
   "mood": "cinematic",
+  "narrative_role": "climax",
   "sources": ["formatted citation 1", "formatted citation 2"]
 }
 """
@@ -203,7 +225,7 @@ def _make_inner_script_agent() -> Agent:
     """Create a fresh script Agent per pipeline run — ADK agents cannot be reused."""
     return Agent(
         name="script_agent",
-        model="gemini-2.0-pro",
+        model="gemini-2.0-flash",  # Was gemini-2.0-pro — switch back to pro before submission
         description=(
             "Generates documentary segments grounded in scene briefs and "
             "aggregated research. One segment per SceneBrief."
@@ -309,6 +331,7 @@ async def _write_segment_to_firestore(
             "visualDescriptions": segment.visual_descriptions,
             "veo2Scene": segment.veo2_scene,
             "mood": segment.mood,
+            "narrativeRole": segment.narrative_role,
             "sources": segment.sources,
             "imageUrls": [],       # Populated by Phase V
             "videoUrl": None,      # Populated by Phase V
@@ -438,6 +461,16 @@ class ScriptAgentOrchestrator(BaseAgent):
             return
 
         segments = _parse_script_output(raw_script)
+
+        # Enrich segments with narrative_role from scene_briefs if missing
+        scene_briefs_raw: list[dict[str, Any]] = ctx.session.state.get("scene_briefs", [])
+        narrative_role_by_scene: dict[str, str] = {
+            b.get("scene_id", ""): b.get("narrative_role", "")
+            for b in scene_briefs_raw
+        }
+        for seg in segments:
+            if not seg.narrative_role:
+                seg.narrative_role = narrative_role_by_scene.get(seg.scene_id, "")
 
         if not segments:
             logger.error(
