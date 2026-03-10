@@ -28,3 +28,19 @@ class AgentLogsResponse(BaseModel):
 
 class ProcessRequest(BaseModel):
     gcsPath: str
+
+
+class SegmentResponse(BaseModel):
+    id: str
+    sceneId: str
+    title: str
+    script: str
+    mood: str
+    status: str
+    imageUrls: list[str] = []
+    videoUrl: str | None = None
+    sources: list[str] = []
+
+
+class SegmentsResponse(BaseModel):
+    segments: list[SegmentResponse]

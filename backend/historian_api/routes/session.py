@@ -17,7 +17,7 @@ import google.auth.transport.requests
 from fastapi import APIRouter, HTTPException
 from google.cloud import firestore, storage
 
-from ..models import AgentLogsResponse, CreateSessionResponse, SessionStatusResponse
+from ..models import AgentLogsResponse, CreateSessionResponse, SessionStatusResponse, SegmentsResponse, SegmentResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -138,3 +138,66 @@ async def get_agent_logs(session_id: str, agent_id: str) -> AgentLogsResponse:
         logs=data.get("logs", []),
         facts=data.get("facts", []),
     )
+
+
+def _gs_to_signed_url(gs_uri: str) -> str:
+    """Convert a gs://bucket/path URI to a 1-hour signed HTTPS GET URL."""
+    try:
+        without_scheme = gs_uri[5:]  # strip "gs://"
+        bucket_name, _, blob_name = without_scheme.partition("/")
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        blob = get_gcs().bucket(bucket_name).blob(blob_name)
+        return blob.generate_signed_url(
+            credentials=credentials,
+            version="v4",
+            expiration=timedelta(hours=1),
+            method="GET",
+        )
+    except Exception:
+        return gs_uri  # fallback: return original URI
+
+
+@router.get("/session/{session_id}/segments", response_model=SegmentsResponse)
+async def get_session_segments(session_id: str) -> SegmentsResponse:
+    """Return all segments for a session with signed image URLs."""
+    try:
+        db = get_db()
+        docs = (
+            await db.collection("sessions")
+            .document(session_id)
+            .collection("segments")
+            .get()
+        )
+    except Exception as exc:
+        logger.exception("Firestore segments read failed for %s", session_id)
+        raise HTTPException(status_code=500, detail="Could not read segments") from exc
+
+    segments: list[SegmentResponse] = []
+    for doc in docs:
+        d = doc.to_dict() or {}
+        raw_image_urls: list[str] = d.get("imageUrls", [])
+        signed_image_urls = [
+            _gs_to_signed_url(u) if u.startswith("gs://") else u
+            for u in raw_image_urls
+        ]
+        video_url = d.get("videoUrl")
+        if video_url and video_url.startswith("gs://"):
+            video_url = _gs_to_signed_url(video_url)
+        segments.append(
+            SegmentResponse(
+                id=doc.id,
+                sceneId=d.get("sceneId", ""),
+                title=d.get("title", ""),
+                script=d.get("script", ""),
+                mood=d.get("mood", ""),
+                status=d.get("status", "pending"),
+                imageUrls=signed_image_urls,
+                videoUrl=video_url,
+                sources=d.get("sources", []),
+            )
+        )
+
+    segments.sort(key=lambda s: s.id)
+    return SegmentsResponse(segments=segments)
