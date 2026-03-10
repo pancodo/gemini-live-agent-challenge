@@ -8,22 +8,34 @@ import { uploadDocument } from '../services/upload';
 
 const SAMPLE_DOCS = [
   {
-    filename: 'sample-herodotus-egypt.pdf',
-    label: 'Herodotus — Histories, Book II',
-    meta: 'c. 440 BC · 84 pages · Nile, Pyramids, Pharaohs, Mummies',
+    filename: 'sample-pompeii.pdf',
+    label: 'Pompeii',
+    meta: '29 pages · Roman city buried by Vesuvius, 79 AD',
     language: 'English',
   },
   {
-    filename: 'sample-marco-polo-travels.pdf',
-    label: 'Marco Polo — The Travels',
-    meta: '13th century · 75 pages · Persia, Silk Road, Kublai Khan',
+    filename: 'sample-tutankhamun.pdf',
+    label: 'Tutankhamun',
+    meta: '29 pages · Egyptian pharaoh, golden mask, tomb discovery',
     language: 'English',
   },
   {
-    filename: 'sample-ibn-battuta-travels.pdf',
-    label: 'Ibn Battuta — Travels in Asia & Africa',
-    meta: '14th century · scanned manuscript · OCR challenge',
-    language: 'Arabic',
+    filename: 'sample-fall-of-constantinople.pdf',
+    label: 'Fall of Constantinople',
+    meta: '28 pages · 1453 · Ottoman siege, end of Byzantium',
+    language: 'English',
+  },
+  {
+    filename: 'sample-machu-picchu.pdf',
+    label: 'Machu Picchu',
+    meta: '26 pages · Inca citadel, Andes mountains',
+    language: 'English',
+  },
+  {
+    filename: 'sample-colosseum.pdf',
+    label: 'Colosseum',
+    meta: '22 pages · Roman amphitheater, gladiators, spectacles',
+    language: 'English',
   },
 ];
 
