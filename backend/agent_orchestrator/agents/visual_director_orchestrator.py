@@ -836,28 +836,63 @@ class VisualDirectorOrchestrator(BaseAgent):
 
         # ------------------------------------------------------------------
         # Progressive delivery: scene 0 first → remaining scenes concurrently
+        # Phase IV may have already generated images inline for some segments.
+        # Check session.state["image_urls"] and skip those — only generate
+        # images for segments that Phase IV did not process inline.
         # ------------------------------------------------------------------
+        already_generated: dict[str, list[str]] = ctx.session.state.get(
+            "image_urls", {}
+        )
         veo2_pending: list[tuple[str, str, Any]] = []
 
-        # Scene 0: run ahead — its segment_update fires before any other scene
-        if script_raw:
-            result = await _generate(script_raw[0])
+        # Trigger Veo 2 for segments that Phase IV already processed inline
+        # (images done but veo2_scene wasn't available then — script is now)
+        for seg in script_raw:
+            seg_id = seg.get("id", "")
+            if seg_id in already_generated and seg.get("veo2_scene"):
+                scene_id = seg.get("scene_id", "unknown")
+                operation = await _trigger_veo2_generation(
+                    client=client,
+                    veo2_prompt=seg["veo2_scene"],
+                    session_id=session_id,
+                    scene_id=scene_id,
+                    bucket_name=self.gcs_bucket,
+                )
+                if operation:
+                    veo2_pending.append((seg_id, scene_id, operation))
+
+        # Collect segments that still need Imagen 3 (Phase IV didn't process inline)
+        pending_image_segs = [s for s in script_raw if s.get("id", "") not in already_generated]
+
+        if pending_image_segs:
+            logger.info(
+                "Phase V: %d segment(s) need image generation (not processed inline by Phase IV)",
+                len(pending_image_segs),
+            )
+            # Scene 0 (if still pending) runs ahead
+            first_pending = pending_image_segs[0]
+            result = await _generate(first_pending)
             if isinstance(result, tuple):
                 veo2_pending.append(result)
 
-        # All remaining scenes: run concurrently
-        if len(script_raw) > 1:
-            remaining_results: list[Any] = await asyncio.gather(
-                *[_generate(seg) for seg in script_raw[1:]],
-                return_exceptions=True,
+            # Remaining pending scenes run concurrently
+            if len(pending_image_segs) > 1:
+                remaining_results: list[Any] = await asyncio.gather(
+                    *[_generate(seg) for seg in pending_image_segs[1:]],
+                    return_exceptions=True,
+                )
+                for r in remaining_results:
+                    if isinstance(r, tuple):
+                        veo2_pending.append(r)
+                    elif isinstance(r, Exception):
+                        logger.warning(
+                            "Phase V: segment generation raised exception: %s", r
+                        )
+        else:
+            logger.info(
+                "Phase V: all %d segments already have images from Phase IV inline generation — skipping Imagen 3",
+                len(script_raw),
             )
-            for r in remaining_results:
-                if isinstance(r, tuple):
-                    veo2_pending.append(r)
-                elif isinstance(r, Exception):
-                    logger.warning(
-                        "Phase V: segment generation raised exception: %s", r
-                    )
 
         # ------------------------------------------------------------------
         # Persist image URL store to session state

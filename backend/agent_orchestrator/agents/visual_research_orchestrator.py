@@ -67,6 +67,7 @@ from .sse_helpers import (
     build_segment_update_event,
 )
 from .visual_detail_types import EvaluatedSource, VisualDetailManifest
+from .visual_director_orchestrator import _run_segment_generation
 from .visual_research_stages import (
     stage_0_generate_queries,
     stage_1_discover_sources,
@@ -416,6 +417,10 @@ class VisualResearchOrchestrator(BaseAgent):
             "Optional — if absent, PDFs fall back to plain text extraction."
         ),
     )
+    gcs_bucket: str = Field(
+        default="",
+        description="GCS bucket for Imagen 3 image uploads. When non-empty, image generation runs inline after each manifest completes.",
+    )
     emitter: Any = Field(
         default=None,
         description="Optional SSE emitter for frontend progress events.",
@@ -511,6 +516,8 @@ class VisualResearchOrchestrator(BaseAgent):
             location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
         )
         semaphore = asyncio.Semaphore(_SEMAPHORE_LIMIT)
+        imagen_semaphore = asyncio.Semaphore(8)
+        image_url_store: dict[str, list[str]] = {}
         db = firestore.AsyncClient(project=self.firestore_project)
 
         # Initialise manifest store in session state
@@ -525,7 +532,12 @@ class VisualResearchOrchestrator(BaseAgent):
             seg: dict[str, Any],
             fast_path: bool,
         ) -> None:
-            """Run the pipeline for one scene and store the result in session state."""
+            """Run the pipeline for one scene and store the result in session state.
+
+            When gcs_bucket is set, image generation runs inline immediately after
+            the manifest is ready — giving the frontend progressive delivery without
+            waiting for all scenes to finish Phase IV.
+            """
             manifest = await _run_scene_pipeline(
                 scene_brief=brief,
                 segment=seg,
@@ -542,12 +554,35 @@ class VisualResearchOrchestrator(BaseAgent):
                     manifest.model_dump()
                 )
 
+                # ── Inline image generation ──────────────────────────────────
+                # Immediately generate Imagen 3 frames for this scene as soon
+                # as its manifest is ready, without waiting for other scenes.
+                # Phase V will skip image generation for segments already here.
+                if self.gcs_bucket:
+                    visual_bible = ctx.session.state.get("visual_bible", "")
+                    await _run_segment_generation(
+                        client=client,
+                        semaphore=imagen_semaphore,
+                        db=db,
+                        segment=seg,
+                        manifest=manifest.model_dump(),
+                        visual_bible=visual_bible,
+                        session_id=session_id,
+                        bucket_name=self.gcs_bucket,
+                        emitter=self.emitter,
+                        image_url_store=image_url_store,
+                    )
+
         tasks = []
         for i, (brief, seg) in enumerate(pairs):
             tasks.append(_run_and_store(brief, seg, fast_path=(i == 0)))
 
         # Run all tracks concurrently — fast path finishes first by construction
         await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Persist inline-generated image URLs so Phase V can skip those segments
+        if image_url_store:
+            ctx.session.state["image_urls"] = image_url_store
 
         # ------------------------------------------------------------------
         # Completion summary
@@ -617,5 +652,6 @@ def build_visual_research_orchestrator(
         ),
         firestore_project=os.environ["GCP_PROJECT_ID"],
         processor_name=os.environ.get("DOCUMENT_AI_PROCESSOR_NAME"),
+        gcs_bucket=os.environ.get("GCS_BUCKET_NAME", ""),
         emitter=emitter,
     )
