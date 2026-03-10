@@ -557,6 +557,12 @@ class SceneResearchOrchestrator(BaseAgent):
                 ),
             )
 
+        # Pre-populate unused research slots so the aggregator's {research_N}
+        # template variables resolve without KeyError. ADK raises KeyError for
+        # any template variable absent from session.state.
+        for slot in range(num_scenes, 10):
+            ctx.session.state[f"research_{slot}"] = ""
+
         logger.info(
             "Phase II complete for session %s: %d/%d scenes in %.1fs",
             session_id,
