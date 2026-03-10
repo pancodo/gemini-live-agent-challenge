@@ -1,10 +1,13 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DropZone } from '../components/upload';
+import { Badge } from '../components/ui';
 import { useSessionStore } from '../store/sessionStore';
+import type { RecentSession } from '../store/sessionStore';
 import { useResearchStore } from '../store/researchStore';
 import { usePlayerStore } from '../store/playerStore';
 import { uploadDocument } from '../services/upload';
+import type { SessionStatus } from '../types';
 
 const SAMPLE_DOCS = [
   {
@@ -86,6 +89,83 @@ function SampleDocuments() {
                 <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const STATUS_VARIANTS: Record<SessionStatus, 'gold' | 'teal' | 'green' | 'muted' | 'red'> = {
+  idle: 'muted',
+  uploading: 'teal',
+  processing: 'teal',
+  ready: 'green',
+  playing: 'gold',
+};
+
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? '' : 's'} ago`;
+}
+
+function RecentSessions() {
+  const navigate = useNavigate();
+  const recentSessions = useSessionStore((s) => s.recentSessions);
+  const setSession = useSessionStore((s) => s.setSession);
+
+  if (recentSessions.length === 0) return null;
+
+  const visible = recentSessions.slice(0, 3);
+
+  const handleResume = (entry: RecentSession) => {
+    setSession({
+      sessionId: entry.sessionId,
+      gcsPath: entry.gcsPath,
+      language: entry.language,
+      status: 'processing',
+    });
+    navigate('/workspace');
+  };
+
+  return (
+    <div className="w-full max-w-xl mt-6">
+      <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--muted)] font-sans mb-2 text-center">
+        Recent Sessions
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {visible.map((entry) => (
+          <button
+            key={entry.sessionId}
+            onClick={() => handleResume(entry)}
+            className="flex items-center justify-between px-4 py-2.5 rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] hover:border-[var(--gold)]/40 hover:bg-[var(--bg3)] transition-colors text-left"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="min-w-0">
+                <p className="text-[13px] text-[var(--text)] font-sans truncate">
+                  {entry.label}
+                </p>
+                <p className="text-[11px] text-[var(--muted)] font-sans mt-0.5">
+                  {formatRelativeTime(entry.createdAt)}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 flex-shrink-0 ml-3">
+              <Badge variant={STATUS_VARIANTS[entry.status]}>
+                {entry.status}
+              </Badge>
+              <span className="text-[11px] text-[var(--muted)] font-sans whitespace-nowrap">
+                Resume &rarr;
+              </span>
+            </div>
           </button>
         ))}
       </div>
@@ -176,6 +256,7 @@ export function UploadPage() {
       <section className="flex-1 flex flex-col items-center justify-center px-8 pb-16">
         <DropZone />
         <SampleDocuments />
+        <RecentSessions />
       </section>
 
       <footer className="pb-6 text-center">

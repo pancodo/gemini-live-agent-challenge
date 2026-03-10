@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { AgentState, EvaluatedSource, Segment } from '../types';
 
 export interface PhaseEntry {
-  phase: 1 | 2 | 3 | 4;
+  phase: 1 | 2 | 3 | 4 | 5;
   label: string;
   messages: string[];
   startedAt: number;
@@ -18,7 +18,7 @@ interface ResearchStore {
   setAgent: (agentId: string, state: Partial<AgentState>) => void;
   setSegment: (segmentId: string, state: Partial<Segment>) => void;
   updateStats: (stats: Partial<ResearchStore['stats']>) => void;
-  addPhaseMessage: (phase: 1 | 2 | 3 | 4, label: string, message: string) => void;
+  addPhaseMessage: (phase: 1 | 2 | 3 | 4 | 5, label: string, message: string) => void;
   addEvaluatedSource: (agentId: string, source: EvaluatedSource) => void;
   setScanEntities: (entities: string[]) => void;
   reset: () => void;

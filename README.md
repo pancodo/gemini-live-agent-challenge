@@ -8,53 +8,53 @@ Built for the **[Gemini Live Agent Challenge](https://geminiliveagentchallenge.d
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Browser (React 19 / TypeScript)           │
-│                                                              │
-│  ┌──────────┐  ┌─────────────────┐  ┌────────────────────┐  │
-│  │ PDF      │  │ Research Panel  │  │ Documentary Player │  │
-│  │ Viewer   │  │ Agent Cards     │  │ Ken Burns + Veo 2  │  │
-│  └──────────┘  └─────────────────┘  └────────────────────┘  │
-│                                                              │
-│  WebSocket (voice) ←──────────────────────────────────┐     │
-│  SSE (agent events) ←─────────────────────────────┐   │     │
-└───────────────────────────────────────────────────│───│─────┘
-                                                    │   │
-              REST + SSE                            │   │ WebSocket
-┌─────────────────────────┐         ┌───────────────┘   │
-│   historian-api          │         │  live-relay        │
-│   FastAPI · Cloud Run    │         │  Node.js 20        │
-│   2 CPU · 2Gi            │         │  Cloud Run · 1Gi   │
-└────────────┬────────────┘         └──────────┬─────────┘
-             │                                 │
-             │ in-process (Python)             │ wss://
-┌────────────▼────────────┐       ┌────────────▼──────────────┐
-│  agent-orchestrator      │       │  Gemini Live API           │
-│  Python 3.12 · ADK       │       │  gemini-2.5-flash-native-  │
-│  4 CPU · 4Gi · Cloud Run │       │  audio-preview-12-2025     │
-│                          │       └───────────────────────────┘
-│  Phase I   Document AI OCR → Semantic Chunker → Curator      │
-│  Phase II  ParallelAgent — N × google_search researchers     │
-│  Phase III Script Agent (gemini-2.0-pro) → 5–7 segments     │
-│  Phase IV  Visual Research Orchestrator — web/wiki sources   │
-│  Phase V   Visual Director → Imagen 3 + Veo 2 clips         │
-└────────────┬────────────────────────────────────────────────┘
-             │
-┌────────────▼─────────────────────────────────────────────────┐
-│  Google Cloud Data Layer                                      │
-│                                                               │
-│  Firestore        Session state · agent logs · segments       │
-│  Cloud Storage    historian-docs (uploads)                    │
-│                   historian-assets (images + videos)          │
-│  Pub/Sub          document-scanned → scan-complete →          │
-│                   segment-ready → session-ended               │
-│  Document AI      Multilingual OCR (OCR_PROCESSOR)           │
-│  Vertex AI        Imagen 3 (imagen-3.0-fast-generate-001)    │
-│                   Veo 2   (veo-2.0-generate-001)             │
-│  Secret Manager   Gemini API key · Document AI processor name │
-│  Artifact Registry  Docker images for all Cloud Run services  │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Browser["Browser — React 19 / TypeScript"]
+        UI["PDF Viewer · Research Panel\nDocumentary Player · Voice Button"]
+    end
+
+    subgraph CloudRun["Google Cloud Run"]
+        API["historian-api\nFastAPI · Python 3.12\n2 CPU · 2 Gi"]
+        ORCH["agent-orchestrator\nGoogle ADK · Python 3.12\n4 CPU · 4 Gi"]
+        RELAY["live-relay\nNode.js 20 WebSocket proxy\n1 CPU · 1 Gi"]
+    end
+
+    subgraph Pipeline["ADK Agent Pipeline"]
+        P1["Phase I — Document Analyzer\nDocument AI OCR → Semantic Chunker\n→ Parallel Summarizer → Narrative Curator\n→ scene_briefs · visual_bible"]
+        P2["Phase II — Scene Research\nParallelAgent: N × google_search\nper scene brief → research_0…N"]
+        P3["Phase III — Script Agent\ngemini-2.0-pro\n→ 5–7 SegmentScript objects"]
+        P4["Phase IV — Visual Research\n6-stage micro-pipeline per scene\nweb scraping · Wikipedia · Gemini multimodal\n→ VisualDetailManifest per scene"]
+        P5["Phase V — Visual Director\nImagen 3: 4 frames × N scenes\nVeo 2: dramatic clips async\n→ imageUrls · videoUrl → GCS"]
+    end
+
+    subgraph GCP["Google Cloud Data & AI"]
+        FS[("Firestore\nsessions · agents\nsegments · manifests")]
+        GCS[("Cloud Storage\nhistorian-docs uploads\nhistorian-assets images/videos")]
+        PS["Pub/Sub\ndocument-scanned\nscan-complete · segment-ready"]
+        DAI["Document AI\nMultilingual OCR"]
+        VAI["Vertex AI\nImagen 3 · Veo 2"]
+        SM["Secret Manager\nGemini API key\nDocument AI processor"]
+    end
+
+    GEMINI["Gemini Live API\ngemini-2.5-flash-native-audio\nreal-time voice · interruption"]
+
+    Browser -->|"REST + SSE"| API
+    Browser <-->|"WebSocket PCM audio"| RELAY
+    RELAY <-->|"wss:// BidiGenerateContent"| GEMINI
+
+    API --> ORCH
+    ORCH --> P1 --> P2 --> P3
+    P2 --> P4
+    P3 & P4 -->|"parallel"| P5
+
+    P1 <--> DAI
+    P1 & P3 & P4 & P5 <--> FS
+    P1 & P5 <--> GCS
+    P5 <--> VAI
+    API <--> SM
+    ORCH <--> SM
+    API & ORCH --> PS
 ```
 
 ---
@@ -122,7 +122,7 @@ docker build -t ${REGISTRY}/historian-api:latest backend/historian_api/
 docker push ${REGISTRY}/historian-api:latest
 
 # agent-orchestrator (ADK pipeline)
-docker build -t ${REGISTRY}/agent-orchestrator:latest backend/historian_api/
+docker build -t ${REGISTRY}/agent-orchestrator:latest backend/agent_orchestrator/
 docker push ${REGISTRY}/agent-orchestrator:latest
 
 # live-relay (Node.js WebSocket proxy)

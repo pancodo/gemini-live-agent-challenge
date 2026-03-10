@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useResearchStore } from '../../store/researchStore';
+import { useVoiceStore } from '../../store/voiceStore';
 import { KenBurnsStage } from './KenBurnsStage';
 import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
@@ -19,6 +21,12 @@ import { PlayerSidebar } from './PlayerSidebar';
  */
 export function DocumentaryPlayer() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsRef = useRef<HTMLDivElement>(null);
+  const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
+  const navigate = useNavigate();
+  const voiceState = useVoiceStore((s) => s.state);
+  const setVoiceState = useVoiceStore((s) => s.setState);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const isIdle = usePlayerStore((s) => s.isIdle);
@@ -104,13 +112,49 @@ export function DocumentaryPlayer() {
         navigateSegment('prev');
       } else if (e.key === 'ArrowRight' && hasNext) {
         navigateSegment('next');
-      } else if (e.key === 'Escape' && sidebarOpen) {
-        setSidebarOpen(false);
+      } else if (e.key === 'Escape') {
+        if (sidebarOpen) {
+          setSidebarOpen(false);
+        } else {
+          navigate('/workspace');
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (document.fullscreenEnabled) {
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            document.documentElement.requestFullscreen();
+          }
+        }
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        if (voiceState === 'idle') {
+          setVoiceState('listening');
+        } else if (voiceState === 'listening') {
+          setVoiceState('idle');
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [hasPrev, hasNext, navigateSegment, sidebarOpen]);
+  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate, voiceState, setVoiceState]);
+
+  // ── Click-outside to close shortcuts tooltip ────────────────
+  useEffect(() => {
+    if (!shortcutsOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (
+        shortcutsRef.current &&
+        !shortcutsRef.current.contains(e.target as Node) &&
+        shortcutsBtnRef.current &&
+        !shortcutsBtnRef.current.contains(e.target as Node)
+      ) {
+        setShortcutsOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    return () => window.removeEventListener('mousedown', onMouseDown);
+  }, [shortcutsOpen]);
 
   // ── Chrome opacity/transform ─────────────────────────────────
   const chromeStyle = {
@@ -195,6 +239,52 @@ export function DocumentaryPlayer() {
                 {readySegments.length}
               </span>
             )}
+
+            {/* Shortcuts hint */}
+            <div className="relative">
+              <button
+                ref={shortcutsBtnRef}
+                onClick={() => setShortcutsOpen((o) => !o)}
+                className="p-2 rounded transition-colors duration-200"
+                style={{
+                  color: 'rgba(232,221,208,0.6)',
+                  background: 'transparent',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 400,
+                  fontSize: 13,
+                  lineHeight: 1,
+                  width: 28,
+                  height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                aria-label="Keyboard shortcuts"
+              >
+                ?
+              </button>
+              {shortcutsOpen && (
+                <div
+                  ref={shortcutsRef}
+                  className="absolute top-full right-0 mt-2 rounded-lg p-3 z-50"
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid rgba(214,204,186,0.4)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 11,
+                    color: 'rgba(232,221,208,0.7)',
+                    whiteSpace: 'pre',
+                    lineHeight: 1.8,
+                    minWidth: 200,
+                  }}
+                >
+                  {'← →   Previous / Next chapter\n'}
+                  {'Space  Toggle voice\n'}
+                  {'F      Fullscreen\n'}
+                  {'Esc    Back to workspace'}
+                </div>
+              )}
+            </div>
 
             {/* Sidebar toggle */}
             <button

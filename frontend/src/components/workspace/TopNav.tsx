@@ -1,6 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { useSessionStore } from '../../store/sessionStore';
+import { useResearchStore } from '../../store/researchStore';
+import type { PhaseEntry } from '../../store/researchStore';
 import { Badge } from '../ui';
+import { useSettings } from '../../hooks/useSettings';
+
+const PHASE_NAMES: ReadonlyArray<{ phase: 1 | 2 | 3 | 4 | 5; label: string }> = [
+  { phase: 1, label: 'Translation & Scan' },
+  { phase: 2, label: 'Field Research' },
+  { phase: 3, label: 'Synthesis' },
+  { phase: 4, label: 'Visual Composition' },
+  { phase: 5, label: 'Generation' },
+] as const;
+
+type DotState = 'done' | 'active' | 'pending';
+
+function PhaseDot({ state }: { state: DotState }) {
+  if (state === 'done') {
+    return <span className="w-1.5 h-1.5 rounded-full bg-[var(--green)]" />;
+  }
+  if (state === 'active') {
+    return <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] animate-pulse" />;
+  }
+  return <span className="w-1.5 h-1.5 rounded-full border border-[var(--muted)]/40" />;
+}
+
+function deriveActivePhase(phases: PhaseEntry[]): number {
+  if (phases.length === 0) return 0;
+  return Math.max(...phases.map((p) => p.phase));
+}
 
 const STATUS_VARIANTS: Record<string, 'gold' | 'teal' | 'green' | 'muted' | 'red'> = {
   idle: 'muted',
@@ -10,10 +40,116 @@ const STATUS_VARIANTS: Record<string, 'gold' | 'teal' | 'green' | 'muted' | 'red
   playing: 'gold',
 };
 
+function GearIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="7" y1="0.5" x2="7" y2="2.5" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="7" y1="11.5" x2="7" y2="13.5" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="0.5" y1="7" x2="2.5" y2="7" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="11.5" y1="7" x2="13.5" y2="7" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="2.4" y1="2.4" x2="3.8" y2="3.8" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="10.2" y1="10.2" x2="11.6" y2="11.6" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="2.4" y1="11.6" x2="3.8" y2="10.2" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="10.2" y1="3.8" x2="11.6" y2="2.4" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className={`relative w-8 h-4 rounded-full transition-colors duration-200 cursor-pointer ${on ? 'bg-[var(--gold)]' : 'bg-[var(--bg4)]'}`}
+    >
+      <span
+        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-[left] duration-200 ${on ? 'left-[calc(100%-14px)]' : 'left-0.5'}`}
+      />
+    </button>
+  );
+}
+
 export function TopNav() {
   const status = useSessionStore((s) => s.status);
   const gcsPath = useSessionStore((s) => s.gcsPath);
+  const reset = useSessionStore((s) => s.reset);
+  const phases = useResearchStore((s) => s.phases);
+
+  const [settings, updateSetting] = useSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Apply reduced-motion class to document root
+  useEffect(() => {
+    if (settings.reducedMotion) {
+      document.documentElement.classList.add('reduced-motion');
+    } else {
+      document.documentElement.classList.remove('reduced-motion');
+    }
+  }, [settings.reducedMotion]);
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [settingsOpen]);
+
+  const activePhaseNum = deriveActivePhase(phases);
+  const activePhaseEntry = PHASE_NAMES.find((p) => p.phase === activePhaseNum);
+  const currentPhaseLabel = activePhaseEntry
+    ? `Phase ${activePhaseNum === 1 ? 'I' : activePhaseNum === 2 ? 'II' : activePhaseNum === 3 ? 'III' : activePhaseNum === 4 ? 'IV' : 'V'} \u2014 ${activePhaseEntry.label}`
+    : '';
   const [elapsed, setElapsed] = useState(0);
+
+  // Extract filename from gcsPath
+  const filename = gcsPath ? gcsPath.split('/').pop() ?? 'Document' : 'No document';
+
+  // Inline rename state
+  const [isEditing, setIsEditing] = useState(false);
+  const [docName, setDocName] = useState(filename);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync docName when gcsPath changes (new session)
+  useEffect(() => {
+    setDocName(filename);
+  }, [filename]);
+
+  // Auto-focus input when entering edit mode
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  const handleSave = useCallback(() => {
+    const trimmed = inputRef.current?.value.trim();
+    if (trimmed) {
+      setDocName(trimmed);
+    }
+    setIsEditing(false);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        handleSave();
+      } else if (e.key === 'Escape') {
+        setIsEditing(false);
+        // Revert — docName stays unchanged since we never called setDocName
+      }
+    },
+    [handleSave],
+  );
 
   // Elapsed timer while processing
   useEffect(() => {
@@ -25,39 +161,99 @@ export function TopNav() {
     return () => clearInterval(timer);
   }, [status]);
 
-  // Extract filename from gcsPath
-  const filename = gcsPath ? gcsPath.split('/').pop() ?? 'Document' : 'No document';
-
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
   return (
+    <div className="sticky top-0 z-100">
     <header
-      className="sticky top-0 z-100 flex items-center justify-between h-[44px] px-5 bg-[var(--bg2)] border-b border-[var(--bg4)]"
+      className="flex items-center justify-between h-[44px] px-5 bg-[var(--bg2)] border-b border-[var(--bg4)]"
       role="banner"
     >
-      {/* Left: Logo */}
-      <span
-        className="text-[11px] uppercase tracking-[0.4em] text-[var(--gold-d)]"
+      {/* Left: Logo as home link */}
+      <Link
+        to="/"
+        onClick={reset}
+        className="text-[11px] uppercase tracking-[0.4em] text-[var(--gold-d)] no-underline hover:no-underline"
         style={{ fontFamily: 'var(--font-serif)' }}
       >
         AI Historian
-      </span>
+      </Link>
 
-      {/* Center: Document name */}
-      <div className="flex items-center gap-1.5 min-w-0 max-w-[40%]">
+      {/* Center: Editable document name */}
+      <div
+        className="group flex items-center gap-1.5 min-w-0 max-w-[40%] cursor-pointer"
+        onClick={() => {
+          if (!isEditing) setIsEditing(true);
+        }}
+      >
         <svg width="12" height="14" viewBox="0 0 12 14" fill="none" className="shrink-0 text-[var(--muted)]" aria-hidden="true">
           <path d="M2 1h6l3 3v9a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1" fill="none"/>
           <path d="M8 1v3h3" stroke="currentColor" strokeWidth="1" fill="none"/>
         </svg>
-        <span className="text-[12px] text-[var(--muted)] font-sans truncate">
-          {filename}
-        </span>
+
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            defaultValue={docName}
+            onBlur={handleSave}
+            onKeyDown={handleKeyDown}
+            className="text-[12px] text-[var(--muted)] font-sans truncate bg-transparent outline-none border-b border-[var(--gold)]/40 min-w-0 w-full"
+            aria-label="Rename document"
+          />
+        ) : (
+          <>
+            <span className="text-[12px] text-[var(--muted)] font-sans truncate">
+              {docName}
+            </span>
+            {/* Pencil icon — visible on hover */}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity duration-150 text-[var(--muted)]"
+              aria-hidden="true"
+            >
+              <path
+                d="M7.5 1.5l1 1-5.5 5.5H2V7L7.5 1.5z"
+                stroke="currentColor"
+                strokeWidth="0.8"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+          </>
+        )}
       </div>
 
-      {/* Right: Status + elapsed time */}
+      {/* Right: Settings + Status + elapsed time */}
       <div className="flex items-center gap-3">
+        <div ref={settingsRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((o) => !o)}
+            className="text-[var(--muted)] hover:text-[var(--gold-d)] transition-colors duration-150 cursor-pointer p-1"
+            aria-label="Settings"
+            aria-expanded={settingsOpen}
+          >
+            <GearIcon />
+          </button>
+          {settingsOpen && (
+            <div className="absolute right-0 top-[calc(100%+8px)] bg-[var(--bg2)] border border-[var(--bg4)] rounded-lg p-3 w-52 z-50 shadow-md">
+              <div className="flex items-center justify-between py-1.5">
+                <span className="font-sans text-[12px] text-[var(--text)]">Reduced motion</span>
+                <Toggle on={settings.reducedMotion} onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)} />
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="font-sans text-[12px] text-[var(--text)]">Auto-watch</span>
+                <Toggle on={settings.autoWatch} onToggle={() => updateSetting('autoWatch', !settings.autoWatch)} />
+              </div>
+            </div>
+          )}
+        </div>
         <Badge variant={STATUS_VARIANTS[status] ?? 'muted'}>
           {status}
         </Badge>
@@ -68,5 +264,30 @@ export function TopNav() {
         )}
       </div>
     </header>
+    <AnimatePresence>
+      {status === 'processing' && activePhaseNum > 0 && (
+        <motion.div
+          key="phase-indicator"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.3 }}
+          className="overflow-hidden"
+        >
+          <div className="flex items-center gap-2 px-5 py-1.5 bg-[var(--bg2)] border-b border-[var(--bg4)]">
+            {PHASE_NAMES.map((p) => {
+              let state: DotState = 'pending';
+              if (p.phase < activePhaseNum) state = 'done';
+              else if (p.phase === activePhaseNum) state = 'active';
+              return <PhaseDot key={p.phase} state={state} />;
+            })}
+            <span className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em] ml-2">
+              {currentPhaseLabel}
+            </span>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </div>
   );
 }

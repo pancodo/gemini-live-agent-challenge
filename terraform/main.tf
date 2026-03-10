@@ -20,7 +20,6 @@ provider "google" {
 variable "project_id" {
   description = "GCP project ID"
   type        = string
-  default     = "reference-tine-482314-c6"
 }
 
 variable "region" {
@@ -396,6 +395,19 @@ resource "google_cloud_run_v2_service" "agent_orchestrator" {
         name  = "GOOGLE_CLOUD_LOCATION"
         value = var.region
       }
+      env {
+        name  = "GOOGLE_CLOUD_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name = "DOCUMENT_AI_PROCESSOR_NAME"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.documentai_processor.secret_id
+            version = "latest"
+          }
+        }
+      }
 
       ports {
         container_port = 8080
@@ -413,6 +425,7 @@ resource "google_cloud_run_v2_service" "agent_orchestrator" {
   depends_on = [
     google_project_service.run,
     google_service_account.historian_sa,
+    google_secret_manager_secret.documentai_processor,
   ]
 }
 

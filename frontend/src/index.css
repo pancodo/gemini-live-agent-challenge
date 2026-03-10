@@ -362,6 +362,14 @@ body {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
+/* ── User-toggled Reduced Motion ──────────────────────── */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
 /* ── Documentary Player (always dark) ─────────────────── */
 .player-root {
   background: var(--bg-deep);
