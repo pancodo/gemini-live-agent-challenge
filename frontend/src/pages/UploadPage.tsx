@@ -235,25 +235,16 @@ function DevSeedBar() {
 export function UploadPage() {
   return (
     <main className="min-h-screen bg-[var(--bg)] flex flex-col">
-      <header className="pt-16 pb-6 text-center">
-        <p
-          className="text-[10px] uppercase tracking-[0.55em] text-[var(--gold-d)] mb-4"
-          style={{ fontFamily: 'var(--font-serif)' }}
-        >
-          AI Historian
-        </p>
+      <section className="flex-1 flex flex-col items-center justify-center px-8 pb-8 pt-8">
         <h1
-          className="text-[28px] text-[var(--text)] leading-snug max-w-md mx-auto"
+          className="text-[22px] text-[var(--text)] text-center mb-2"
           style={{ fontFamily: 'var(--font-serif)', fontWeight: 400 }}
         >
           Upload a historical document
         </h1>
-        <p className="mt-2 text-[13px] text-[var(--muted)] font-sans tracking-[0.02em]">
+        <p className="text-[13px] text-[var(--muted)] font-sans text-center mb-6">
           Begin your documentary in under 45 seconds
         </p>
-      </header>
-
-      <section className="flex-1 flex flex-col items-center justify-center px-8 pb-16">
         <DropZone />
         <SampleDocuments />
         <RecentSessions />
