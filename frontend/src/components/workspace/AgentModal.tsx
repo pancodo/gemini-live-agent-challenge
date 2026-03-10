@@ -1,12 +1,19 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
-import { Modal, Badge } from '../ui';
+import { Badge } from '../ui';
 import { getAgentLogs, getUrlMeta } from '../../services/api';
 import { typewriteEntry } from '../../hooks/useTypewriter';
-import type { AgentState, AgentStatus, AgentLog, AgentLogsResponse, EvaluatedSource, UrlMeta } from '../../types';
+import type {
+  AgentState, AgentStatus, AgentLog,
+  AgentLogsResponse, EvaluatedSource, UrlMeta,
+} from '../../types';
 
-// ── Props ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────
 
 interface AgentModalProps {
   agentId: string | null;
@@ -15,79 +22,143 @@ interface AgentModalProps {
   onClose: () => void;
 }
 
-// ── Helpers ─────────────────────────────────────────────────────
-
 type Tab = 'sources' | 'facts' | 'log';
+type SourceFilter = 'all' | 'accepted' | 'rejected';
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
 
 function extractHostname(url: string): string {
-  try { return new URL(url).hostname.replace('www.', ''); }
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
   catch { return url; }
 }
 
-function statusBadgeVariant(status: AgentStatus): 'teal' | 'gold' | 'green' | 'red' | 'muted' {
-  switch (status) {
-    case 'searching': return 'teal';
-    case 'evaluating': return 'gold';
-    case 'done': return 'green';
-    case 'error': return 'red';
-    default: return 'muted';
-  }
+function statusBadgeVariant(s: AgentStatus): 'teal' | 'gold' | 'green' | 'red' | 'muted' {
+  if (s === 'searching') return 'teal';
+  if (s === 'evaluating') return 'gold';
+  if (s === 'done') return 'green';
+  if (s === 'error') return 'red';
+  return 'muted';
 }
-
-// ── useUrlMeta hook ──────────────────────────────────────────────
 
 function useUrlMeta(url: string, enabled: boolean) {
   return useQuery<UrlMeta>({
     queryKey: ['urlMeta', url],
     queryFn: () => getUrlMeta(url),
     enabled,
-    staleTime: 1000 * 60 * 60, // 1 hour
+    staleTime: 1000 * 60 * 60,
     retry: 1,
   });
 }
 
-// ── Tab Bar ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Close Button
+// ─────────────────────────────────────────────────────────────
 
-interface TabBarProps {
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      onClick={onClose}
+      aria-label="Close panel"
+      className="flex items-center justify-center w-8 h-8 rounded-lg text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)] transition-colors"
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Live Pulse Bar
+// ─────────────────────────────────────────────────────────────
+
+function LiveBar({ isLive }: { isLive: boolean }) {
+  const reducedMotion = useReducedMotion();
+  if (!isLive) return null;
+  return (
+    <div className="h-px w-full bg-[var(--bg4)]/40 overflow-hidden">
+      <motion.div
+        className="h-full bg-gradient-to-r from-transparent via-[var(--gold)] to-transparent"
+        animate={reducedMotion ? {} : { x: ['-100%', '100%'] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ width: '40%' }}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Stats Bar
+// ─────────────────────────────────────────────────────────────
+
+function StatsBar({
+  accepted, rejected, facts, elapsed,
+}: {
+  accepted: number; rejected: number; facts: number; elapsed: number;
+}) {
+  const chips = [
+    { label: 'accepted', value: accepted, color: 'text-[var(--green)]' },
+    { label: 'rejected', value: rejected, color: 'text-red-400' },
+    { label: 'facts', value: facts, color: 'text-[var(--teal)]' },
+  ].filter((c) => c.value > 0);
+
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      {chips.map((c) => (
+        <span key={c.label} className={`font-sans text-[11px] ${c.color}`}>
+          <span className="font-semibold">{c.value}</span>
+          <span className="text-[var(--muted)] ml-1">{c.label}</span>
+        </span>
+      ))}
+      <span className="font-sans text-[11px] text-[var(--muted)] ml-auto" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {elapsed}s
+      </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tab Bar
+// ─────────────────────────────────────────────────────────────
+
+function TabBar({ active, onChange, counts }: {
   active: Tab;
   onChange: (t: Tab) => void;
   counts: { sources: number; facts: number; log: number };
-}
-
-function TabBar({ active, onChange, counts }: TabBarProps) {
+}) {
   const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'sources', label: 'Sources', count: counts.sources },
-    { id: 'facts',   label: 'Facts',   count: counts.facts },
-    { id: 'log',     label: 'Field Log', count: counts.log },
+    { id: 'sources',  label: 'Sources',   count: counts.sources },
+    { id: 'facts',    label: 'Facts',     count: counts.facts },
+    { id: 'log',      label: 'Field Log', count: counts.log },
   ];
 
   return (
-    <div className="flex gap-1 px-6 pb-0 border-b border-[var(--bg4)]/60 mb-0">
+    <div className="flex border-b border-[var(--bg4)]/50">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`relative flex items-center gap-1.5 px-3 py-2.5 font-sans text-[11px] uppercase tracking-[0.15em] transition-colors duration-150 ${
-            active === tab.id
-              ? 'text-[var(--gold)]'
-              : 'text-[var(--muted)] hover:text-[var(--text)]'
+          className={`relative flex items-center gap-1.5 px-4 py-3 font-sans text-[11px] uppercase tracking-[0.12em] transition-colors ${
+            active === tab.id ? 'text-[var(--text)]' : 'text-[var(--muted)] hover:text-[var(--text)]/70'
           }`}
         >
           {tab.label}
           {tab.count > 0 && (
-            <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full font-sans text-[9px] ${
+            <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-sans font-medium transition-colors ${
               active === tab.id
-                ? 'bg-[var(--gold)] text-white'
+                ? 'bg-[var(--text)] text-[var(--bg)]'
                 : 'bg-[var(--bg4)] text-[var(--muted)]'
             }`}>
               {tab.count}
             </span>
           )}
           {active === tab.id && (
-            <motion.span
-              layoutId="tab-underline"
-              className="absolute bottom-0 left-0 right-0 h-px bg-[var(--gold)]"
-              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            <motion.div
+              layoutId="drawer-tab-line"
+              className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--text)] rounded-t-full"
+              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             />
           )}
         </button>
@@ -96,15 +167,57 @@ function TabBar({ active, onChange, counts }: TabBarProps) {
   );
 }
 
-// ── OG Image Zone ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Source Filter Pills
+// ─────────────────────────────────────────────────────────────
 
-interface OgImageZoneProps {
+function FilterPills({ active, onChange, accepted, rejected }: {
+  active: SourceFilter;
+  onChange: (f: SourceFilter) => void;
+  accepted: number;
+  rejected: number;
+}) {
+  const filters: { id: SourceFilter; label: string; count: number }[] = [
+    { id: 'all',      label: 'All',      count: accepted + rejected },
+    { id: 'accepted', label: 'Accepted', count: accepted },
+    { id: 'rejected', label: 'Rejected', count: rejected },
+  ];
+
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {filters.map((f) => (
+        <button
+          key={f.id}
+          onClick={() => onChange(f.id)}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-sans text-[11px] border transition-all ${
+            active === f.id
+              ? f.id === 'accepted'
+                ? 'bg-[var(--green)]/15 border-[var(--green)]/40 text-[var(--green)]'
+                : f.id === 'rejected'
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : 'bg-[var(--text)]/8 border-[var(--bg4)] text-[var(--text)]'
+              : 'bg-transparent border-[var(--bg4)]/50 text-[var(--muted)] hover:border-[var(--bg4)]'
+          }`}
+        >
+          {f.id === 'accepted' && <span className="text-[9px]">✓</span>}
+          {f.id === 'rejected' && <span className="text-[9px]">✕</span>}
+          {f.label}
+          <span className="opacity-60">{f.count}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// OG Image Zone
+// ─────────────────────────────────────────────────────────────
+
+function OgImageZone({ imageUrl, hostname, isLoading }: {
   imageUrl: string | null | undefined;
   hostname: string;
   isLoading: boolean;
-}
-
-function OgImageZone({ imageUrl, hostname, isLoading }: OgImageZoneProps) {
+}) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -113,233 +226,186 @@ function OgImageZone({ imageUrl, hostname, isLoading }: OgImageZoneProps) {
   const showFallback = !isLoading && (!showImage || imgError);
 
   return (
-    <div className="relative w-full h-[160px] overflow-hidden rounded-t-xl bg-[var(--bg3)]">
-      {/* Skeleton shimmer — shown while loading metadata or while image hasn't decoded yet */}
-      {showSkeleton && (
-        <div className="absolute inset-0 log-source evaluating" aria-hidden="true" />
-      )}
-
-      {/* Actual OG image */}
+    <div className="relative w-full h-[140px] overflow-hidden bg-[var(--bg3)] rounded-t-xl">
+      {showSkeleton && <div className="absolute inset-0 log-source evaluating" />}
       {showImage && (
         <img
           src={imageUrl}
           alt={hostname}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-            imageLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImageLoaded(true)}
           onError={() => { setImgError(true); setImageLoaded(false); }}
         />
       )}
-
-      {/* Gradient fallback when no image or error */}
       {showFallback && (
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={{ background: 'linear-gradient(135deg, var(--bg3) 0%, var(--bg4) 100%)' }}
         >
-          <span
-            className="font-serif text-[48px] font-normal leading-none select-none"
-            style={{ color: 'var(--gold)', opacity: 0.45 }}
-          >
+          <span className="font-serif text-[40px] leading-none select-none" style={{ color: 'var(--gold)', opacity: 0.35 }}>
             {hostname[0]?.toUpperCase() ?? '?'}
           </span>
         </div>
       )}
-
-      {/* Subtle bottom fade to blend into card body */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none"
-        style={{ background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.18))' }}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.22) 100%)' }} />
     </div>
   );
 }
 
-// ── Source Card ─────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Source Card
+// ─────────────────────────────────────────────────────────────
 
-interface SourceCardProps {
-  source: EvaluatedSource;
-  index: number;
-  isLive: boolean;
-}
-
-function SourceCard({ source, index, isLive }: SourceCardProps) {
+function SourceCard({ source, index, isLive }: { source: EvaluatedSource; index: number; isLive: boolean }) {
   const [faviconError, setFaviconError] = useState(false);
   const host = extractHostname(source.url);
 
-  // Only fetch metadata when the source doesn't already have an imageUrl
   const needsMeta = !source.imageUrl;
   const { data: meta, isLoading: metaLoading } = useUrlMeta(source.url, needsMeta);
 
-  // Resolve display values: prefer pre-populated fields, fall back to fetched meta
-  const resolvedImageUrl = source.imageUrl ?? meta?.image ?? null;
-  const resolvedTitle = source.title ?? meta?.title ?? host;
-  const resolvedDescription = source.description ?? meta?.description ?? null;
-  const resolvedFavicon = source.favicon ?? meta?.favicon ?? null;
+  const imageUrl = source.imageUrl ?? meta?.image ?? null;
+  const title = source.title ?? meta?.title ?? host;
+  const description = source.description ?? meta?.description ?? null;
+  const favicon = source.favicon ?? meta?.favicon ?? `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
   const isImageLoading = needsMeta && metaLoading;
-
-  // Fallback favicon via Google S2 service if no direct favicon URL
-  const faviconSrc = resolvedFavicon
-    ? resolvedFavicon
-    : `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
 
   return (
     <motion.div
-      initial={isLive ? { opacity: 0, y: 10, scale: 0.97 } : false}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 24, delay: index * 0.04 }}
-      className={`relative flex flex-col rounded-xl border overflow-hidden transition-colors ${
+      initial={isLive ? { opacity: 0, y: 8 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 26, delay: index * 0.035 }}
+      className={`group relative flex flex-col rounded-xl border overflow-hidden hover:shadow-md transition-shadow ${
         source.accepted
-          ? 'border-[var(--green)]/30 bg-[var(--green)]/5'
-          : 'border-red-500/20 bg-red-500/5'
+          ? 'border-[var(--green)]/25 bg-[var(--bg)]/60'
+          : 'border-[var(--bg4)]/60 bg-[var(--bg)]/60 opacity-70 hover:opacity-90'
       }`}
     >
-      {/* OG image zone — full width, 160px tall */}
-      <OgImageZone
-        imageUrl={resolvedImageUrl}
-        hostname={host}
-        isLoading={isImageLoading}
-      />
+      <OgImageZone imageUrl={imageUrl} hostname={host} isLoading={isImageLoading} />
 
-      {/* Accepted / Rejected ribbon — layered over the top-right of the image */}
-      <div className={`absolute top-0 right-0 px-2 py-0.5 font-sans text-[9px] uppercase tracking-[0.2em] rounded-bl-lg z-10 ${
+      {/* Status badge — sits at bottom of image */}
+      <div className={`absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full backdrop-blur-sm font-sans text-[9px] uppercase tracking-[0.15em] z-10 ${
         source.accepted
-          ? 'bg-[var(--green)]/80 text-white'
-          : 'bg-red-500/80 text-white'
+          ? 'bg-[var(--green)]/90 text-white'
+          : 'bg-black/50 text-white/70'
       }`}>
-        {source.accepted ? '✓ Accepted' : '✕ Rejected'}
+        {source.accepted ? '✓' : '✕'}
+        {source.accepted ? ' Accepted' : ' Rejected'}
       </div>
 
-      {/* Card body */}
-      <div className="flex flex-col gap-2 p-4">
-        {/* Favicon + domain row */}
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-1.5 p-3">
+        {/* Favicon + domain */}
+        <div className="flex items-center gap-1.5">
           {!faviconError ? (
-            <img
-              src={faviconSrc}
-              alt={host}
-              width={16}
-              height={16}
-              className="rounded-sm shrink-0 object-contain"
-              onError={() => setFaviconError(true)}
-            />
+            <img src={favicon} alt="" width={14} height={14} className="rounded-sm shrink-0" onError={() => setFaviconError(true)} />
           ) : (
-            <span className="w-4 h-4 rounded-sm bg-[var(--bg4)] flex items-center justify-center text-[8px] text-[var(--muted)] shrink-0 font-sans">
-              {host[0]?.toUpperCase()}
-            </span>
+            <span className="w-3.5 h-3.5 rounded-sm bg-[var(--bg4)] shrink-0 flex items-center justify-center text-[8px] text-[var(--muted)]">{host[0]?.toUpperCase()}</span>
           )}
-          <span className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.1em] truncate">
-            {host}
-          </span>
+          <span className="font-sans text-[10px] text-[var(--muted)] truncate">{host}</span>
         </div>
 
-        {/* Title — bold, 2 lines max */}
-        <p className="font-serif text-[14px] font-semibold text-[var(--text)] leading-snug line-clamp-2">
-          {resolvedTitle}
-        </p>
+        {/* Title */}
+        <p className="font-serif text-[13px] text-[var(--text)] leading-snug line-clamp-2">{title}</p>
 
-        {/* Description snippet — 2 lines, muted */}
-        {resolvedDescription && (
-          <p className="font-sans text-[12px] text-[var(--muted)] leading-relaxed line-clamp-2">
-            {resolvedDescription}
-          </p>
+        {/* Description */}
+        {description && (
+          <p className="font-sans text-[11px] text-[var(--muted)] leading-relaxed line-clamp-2">{description}</p>
         )}
 
         {/* Reason */}
         {source.reason && (
-          <p className="font-sans text-[11px] text-[var(--muted)]/80 leading-relaxed border-t border-[var(--bg4)]/50 pt-2 mt-0.5">
-            <span className="font-sans text-[10px] uppercase tracking-[0.12em] text-[var(--muted)] mr-1">
-              Reason:
-            </span>
+          <p className="font-sans text-[10px] text-[var(--muted)]/70 line-clamp-2 border-t border-[var(--bg4)]/40 pt-1.5 mt-0.5">
             {source.reason}
           </p>
         )}
 
-        {/* Open source link */}
         <a
           href={source.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 font-sans text-[11px] text-[var(--gold)] hover:text-[var(--gold-d)] transition-colors self-end mt-auto pt-1"
           onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-0.5 font-sans text-[10px] text-[var(--gold)] hover:underline self-start mt-auto pt-0.5"
         >
-          <span>Open source</span>
-          <span className="text-[10px]">↗</span>
+          Visit ↗
         </a>
       </div>
     </motion.div>
   );
 }
 
-// ── Shimmer Source Card ──────────────────────────────────────────
-
 function ShimmerCard() {
   return (
-    <div className="rounded-xl border border-[var(--bg4)]/60 bg-[var(--bg)]/50 overflow-hidden">
-      {/* Image zone shimmer */}
-      <div className="w-full h-[160px] log-source evaluating" />
-      {/* Body shimmer */}
-      <div className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-sm bg-[var(--bg4)] log-source evaluating" />
-          <div className="h-2.5 w-20 rounded bg-[var(--bg4)] log-source evaluating" />
+    <div className="rounded-xl border border-[var(--bg4)]/50 overflow-hidden">
+      <div className="w-full h-[140px] log-source evaluating" />
+      <div className="p-3 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3.5 h-3.5 rounded-sm bg-[var(--bg4)] log-source evaluating" />
+          <div className="h-2.5 w-16 rounded bg-[var(--bg4)] log-source evaluating" />
         </div>
-        <div className="h-4 w-3/4 rounded bg-[var(--bg4)] log-source evaluating" />
-        <div className="h-3 w-full rounded bg-[var(--bg4)] log-source evaluating" />
-        <div className="h-3 w-2/3 rounded bg-[var(--bg4)] log-source evaluating" />
+        <div className="h-3.5 w-3/4 rounded bg-[var(--bg4)] log-source evaluating" />
+        <div className="h-2.5 w-full rounded bg-[var(--bg4)] log-source evaluating" />
+        <div className="h-2.5 w-2/3 rounded bg-[var(--bg4)] log-source evaluating" />
       </div>
     </div>
   );
 }
 
-// ── Facts Tab ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Facts Tab
+// ─────────────────────────────────────────────────────────────
 
-function FactsTab({ facts }: { facts: string[] }) {
+function FactsTab({ facts, visualResearchPrompt }: { facts: string[]; visualResearchPrompt?: string }) {
   if (facts.length === 0) {
-    return (
-      <p className="font-sans text-[13px] text-[var(--muted)] text-center py-10">
-        No facts extracted yet.
-      </p>
-    );
+    return <EmptyState label="No facts extracted yet." />;
   }
 
   return (
-    <motion.div
-      className="space-y-2"
-      variants={{ show: { transition: { staggerChildren: 0.06 } } }}
-      initial="hidden"
-      animate="show"
-    >
-      {facts.map((fact, i) => (
-        <motion.div
-          key={i}
-          variants={{
-            hidden: { opacity: 0, x: -8 },
-            show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
-          }}
-          className="flex gap-3 items-start rounded-lg border border-[var(--green)]/20 bg-[var(--green)]/5 px-4 py-3"
-        >
-          <span className="text-[var(--green)] text-[11px] mt-0.5 shrink-0 font-serif">
-            {String(i + 1).padStart(2, '0')}
-          </span>
-          <p className="font-sans text-[13px] text-[var(--text)] leading-relaxed">{fact}</p>
-        </motion.div>
-      ))}
+    <div className="space-y-3">
+      {/* Timeline */}
+      <div className="relative pl-6">
+        {/* Vertical connector line */}
+        <div className="absolute left-[9px] top-2 bottom-2 w-px bg-[var(--bg4)]" />
 
-      {/* Visual Prompt — inside facts tab if available */}
-    </motion.div>
+        <motion.div
+          className="space-y-3"
+          variants={{ show: { transition: { staggerChildren: 0.055 } } }}
+          initial="hidden"
+          animate="show"
+        >
+          {facts.map((fact, i) => (
+            <motion.div
+              key={i}
+              variants={{
+                hidden: { opacity: 0, x: -6 },
+                show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 320, damping: 24 } },
+              }}
+              className="relative"
+            >
+              {/* Timeline dot */}
+              <div className="absolute -left-6 top-[5px] w-[10px] h-[10px] rounded-full border-2 border-[var(--green)] bg-[var(--bg2)]" />
+              <div className="bg-[var(--bg)]/70 border border-[var(--bg4)]/50 rounded-lg px-3 py-2.5">
+                <p className="font-sans text-[12px] text-[var(--text)] leading-relaxed">{fact}</p>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+
+      {/* Visual prompt blockquote */}
+      {visualResearchPrompt && (
+        <div className="rounded-xl border border-[var(--gold)]/20 bg-[var(--gold)]/5 px-4 py-3 mt-2">
+          <p className="font-serif text-[9px] uppercase tracking-[0.3em] text-[var(--gold)] mb-1.5">Visual Prompt</p>
+          <p className="font-serif text-[13px] italic text-[var(--text)]/75 leading-relaxed">
+            {'\u201C'}{visualResearchPrompt}{'\u201D'}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
-// ── Log Tab ─────────────────────────────────────────────────────
-
-interface LogTabProps {
-  logs: AgentLog[];
-  isLive: boolean;
-  visualResearchPrompt?: string;
-}
+// ─────────────────────────────────────────────────────────────
+// Log Tab
+// ─────────────────────────────────────────────────────────────
 
 function TypewriterEntry({ log, shouldAnimate }: { log: AgentLog; shouldAnimate: boolean }) {
   const textRef = useRef<HTMLSpanElement>(null);
@@ -355,63 +421,60 @@ function TypewriterEntry({ log, shouldAnimate }: { log: AgentLog; shouldAnimate:
   return (
     <motion.li
       variants={{
-        hidden: { opacity: 0, y: 8, filter: 'blur(3px)' },
+        hidden: { opacity: 0, y: 6, filter: 'blur(2px)' },
         show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { type: 'spring', stiffness: 280, damping: 22 } },
       }}
-      className="flex gap-3 items-start"
+      className="flex gap-3 items-start py-1"
     >
-      <span className="text-[var(--gold)] text-[10px] mt-1 shrink-0">{'\u25C6'}</span>
-      <span ref={textRef} className="flex-1 font-sans text-[13px] text-[var(--text)] leading-relaxed">
+      <span className="text-[var(--gold)] text-[9px] mt-1.5 shrink-0">◆</span>
+      <span ref={textRef} className="flex-1 font-sans text-[12px] text-[var(--text)] leading-relaxed">
         {shouldAnimate ? '' : log.step}
       </span>
-      <span className="font-sans text-[10px] text-[var(--muted)] shrink-0 mt-0.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {log.ts}
-      </span>
+      <span className="font-sans text-[10px] text-[var(--muted)] shrink-0 mt-0.5 tabular-nums">{log.ts}</span>
     </motion.li>
   );
 }
 
-function LogTab({ logs, isLive, visualResearchPrompt }: LogTabProps) {
-  return (
-    <div className="space-y-4">
-      {logs.length > 0 ? (
-        <motion.ul
-          className="space-y-3"
-          variants={{ show: { transition: { staggerChildren: 0.07 } } }}
-          initial="hidden"
-          animate="show"
-        >
-          <AnimatePresence>
-            {logs.map((log, i) => (
-              <TypewriterEntry key={`${log.ts}-${i}`} log={log} shouldAnimate={isLive} />
-            ))}
-          </AnimatePresence>
-        </motion.ul>
-      ) : (
-        <p className="font-sans text-[13px] text-[var(--muted)] text-center py-10">
-          No log entries yet.
-        </p>
-      )}
+function LogTab({ logs, isLive }: { logs: AgentLog[]; isLive: boolean }) {
+  if (logs.length === 0) return <EmptyState label={isLive ? 'Waiting for log entries…' : 'No log entries.'} />;
 
-      {/* Visual prompt as cinematic blockquote */}
-      {visualResearchPrompt && (
-        <div className="mt-4 rounded-xl border border-[var(--gold)]/20 bg-[var(--gold)]/5 px-5 py-4">
-          <p className="font-serif text-[10px] uppercase tracking-[0.3em] text-[var(--gold)] mb-2">
-            Visual Prompt
-          </p>
-          <p className="font-serif text-[14px] italic text-[var(--text)]/80 leading-relaxed">
-            {'\u201C'}{visualResearchPrompt}{'\u201D'}
-          </p>
-        </div>
-      )}
+  return (
+    <motion.ul
+      className="divide-y divide-[var(--bg4)]/30"
+      variants={{ show: { transition: { staggerChildren: 0.06 } } }}
+      initial="hidden"
+      animate="show"
+    >
+      <AnimatePresence>
+        {logs.map((log, i) => (
+          <TypewriterEntry key={`${log.ts}-${i}`} log={log} shouldAnimate={isLive} />
+        ))}
+      </AnimatePresence>
+    </motion.ul>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Empty State
+// ─────────────────────────────────────────────────────────────
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-14 gap-2">
+      <span className="text-[var(--bg4)] text-2xl">◈</span>
+      <p className="font-sans text-[12px] text-[var(--muted)]">{label}</p>
     </div>
   );
 }
 
-// ── Component ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// AgentModal — right-side drawer
+// ─────────────────────────────────────────────────────────────
 
 export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('sources');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const reducedMotion = useReducedMotion();
 
   const { data: logsData } = useQuery<AgentLogsResponse>({
     queryKey: ['agentLogs', sessionId, agentId],
@@ -425,121 +488,187 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
   const evaluatedSources = agent?.evaluatedSources ?? [];
   const facts = agent?.facts ?? [];
 
-  // Auto-switch to facts tab when facts arrive
+  const acceptedSources = evaluatedSources.filter((s) => s.accepted);
+  const rejectedSources = evaluatedSources.filter((s) => !s.accepted);
+
+  const visibleSources =
+    sourceFilter === 'accepted' ? acceptedSources :
+    sourceFilter === 'rejected' ? rejectedSources :
+    evaluatedSources;
+
+  // Auto-switch tabs as data arrives
+  useEffect(() => {
+    if (evaluatedSources.length > 0) { setActiveTab('sources'); setSourceFilter('all'); }
+  }, [evaluatedSources.length]);
   useEffect(() => {
     if (facts.length > 0 && evaluatedSources.length === 0) setActiveTab('facts');
   }, [facts.length, evaluatedSources.length]);
 
-  // Switch to sources tab when sources arrive
-  useEffect(() => {
-    if (evaluatedSources.length > 0) setActiveTab('sources');
-  }, [evaluatedSources.length]);
-
-  const acceptedCount = evaluatedSources.filter((s) => s.accepted).length;
-  const rejectedCount = evaluatedSources.length - acceptedCount;
-
-  const handleClose = useCallback(() => { onClose(); }, [onClose]);
+  const handleClose = useCallback(() => onClose(), [onClose]);
 
   return (
-    <Modal
-      open={!!agentId}
-      onOpenChange={(open) => { if (!open) handleClose(); }}
-      title={agent?.query ?? 'Agent Details'}
-      description={undefined}
-      className="w-[780px] max-w-[95vw]"
-    >
-      {/* Header meta row */}
-      <div className="flex items-center gap-3 px-6 pb-4 -mt-1">
-        <Badge variant={statusBadgeVariant(agent?.status ?? 'queued')}>
-          {agent?.status ?? 'queued'}
-        </Badge>
-        <span className="font-sans text-[10px] text-[var(--muted)]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {agent?.elapsed ?? 0}s elapsed
-        </span>
-        {evaluatedSources.length > 0 && (
-          <>
-            <span className="text-[var(--bg4)]">·</span>
-            <span className="font-sans text-[10px] text-[var(--green)]">{acceptedCount} accepted</span>
-            <span className="font-sans text-[10px] text-[var(--muted)]">/</span>
-            <span className="font-sans text-[10px] text-red-400">{rejectedCount} rejected</span>
-          </>
-        )}
-      </div>
+    <Dialog.Root open={!!agentId} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <Dialog.Portal>
+        <AnimatePresence>
+          {!!agentId && (
+            <>
+              {/* Backdrop — lighter than modal, keeps workspace visible */}
+              <Dialog.Overlay asChild>
+                <motion.div
+                  key="backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-50"
+                />
+              </Dialog.Overlay>
 
-      {/* Tab bar */}
-      <TabBar
-        active={activeTab}
-        onChange={setActiveTab}
-        counts={{ sources: evaluatedSources.length, facts: facts.length, log: logs.length }}
-      />
+              {/* Drawer — slides in from right */}
+              <Dialog.Content asChild>
+                <motion.div
+                  key="drawer"
+                  initial={reducedMotion ? { opacity: 0 } : { x: '100%', opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={reducedMotion ? { opacity: 0 } : { x: '100%', opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 32, mass: 0.9 }}
+                  className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-[520px] max-w-[95vw] bg-[var(--bg2)] border-l border-[var(--bg4)] shadow-2xl overflow-hidden"
+                >
+                  {/* ── Header ── */}
+                  <div className="flex flex-col gap-3 px-5 pt-5 pb-3 shrink-0">
+                    <div className="flex items-start gap-3">
+                      {/* Status dot */}
+                      <motion.div
+                        className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                          isLive ? 'bg-[var(--teal)]' :
+                          agent?.status === 'done' ? 'bg-[var(--green)]' :
+                          agent?.status === 'error' ? 'bg-red-500' :
+                          'bg-[var(--muted)]'
+                        }`}
+                        animate={isLive ? { scale: [1, 1.4, 1], opacity: [1, 0.5, 1] } : {}}
+                        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                      />
 
-      {/* Tab content */}
-      <div className="px-6 py-5 min-h-[280px]">
-        <AnimatePresence mode="wait">
-          {activeTab === 'sources' && (
-            <motion.div
-              key="sources"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-            >
-              {evaluatedSources.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {evaluatedSources.map((src, i) => (
-                    <SourceCard key={src.url + i} source={src} index={i} isLive={isLive} />
-                  ))}
-                  {agent?.status === 'evaluating' && (
-                    <>
-                      <ShimmerCard />
-                      <ShimmerCard />
-                    </>
-                  )}
-                </div>
-              ) : agent?.status === 'evaluating' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <ShimmerCard />
-                  <ShimmerCard />
-                  <ShimmerCard />
-                  <ShimmerCard />
-                </div>
-              ) : (
-                <p className="font-sans text-[13px] text-[var(--muted)] text-center py-10">
-                  {isLive ? 'Fetching sources\u2026' : 'No sources recorded.'}
-                </p>
-              )}
-            </motion.div>
-          )}
+                      {/* Query title */}
+                      <Dialog.Title className="flex-1 font-serif text-[17px] font-normal text-[var(--text)] leading-snug">
+                        {agent?.query ?? 'Agent Details'}
+                      </Dialog.Title>
 
-          {activeTab === 'facts' && (
-            <motion.div
-              key="facts"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-            >
-              <FactsTab facts={facts} />
-            </motion.div>
-          )}
+                      <CloseButton onClose={handleClose} />
+                    </div>
 
-          {activeTab === 'log' && (
-            <motion.div
-              key="log"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-            >
-              <LogTab
-                logs={logs}
-                isLive={isLive}
-                visualResearchPrompt={agent?.visualResearchPrompt}
-              />
-            </motion.div>
+                    {/* Status badge + stats */}
+                    <div className="flex items-center gap-2 pl-5">
+                      <Badge variant={statusBadgeVariant(agent?.status ?? 'queued')}>
+                        {agent?.status ?? 'queued'}
+                      </Badge>
+                      <StatsBar
+                        accepted={acceptedSources.length}
+                        rejected={rejectedSources.length}
+                        facts={facts.length}
+                        elapsed={agent?.elapsed ?? 0}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live scanning bar */}
+                  <LiveBar isLive={isLive} />
+
+                  {/* ── Tab Bar ── */}
+                  <div className="px-5 shrink-0">
+                    <TabBar
+                      active={activeTab}
+                      onChange={setActiveTab}
+                      counts={{ sources: evaluatedSources.length, facts: facts.length, log: logs.length }}
+                    />
+                  </div>
+
+                  {/* ── Scrollable Content ── */}
+                  <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--bg4) transparent' }}>
+                    <div className="px-5 py-4">
+                      <VisuallyHidden>
+                        <Dialog.Description>
+                          Research agent details for: {agent?.query}
+                        </Dialog.Description>
+                      </VisuallyHidden>
+
+                      <AnimatePresence mode="wait">
+                        {/* ── Sources ── */}
+                        {activeTab === 'sources' && (
+                          <motion.div
+                            key="sources"
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="space-y-3"
+                          >
+                            {/* Filter pills */}
+                            {evaluatedSources.length > 0 && (
+                              <FilterPills
+                                active={sourceFilter}
+                                onChange={setSourceFilter}
+                                accepted={acceptedSources.length}
+                                rejected={rejectedSources.length}
+                              />
+                            )}
+
+                            {/* Source grid */}
+                            {visibleSources.length > 0 ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                {visibleSources.map((src, i) => (
+                                  <SourceCard key={src.url + i} source={src} index={i} isLive={isLive} />
+                                ))}
+                                {agent?.status === 'evaluating' && <ShimmerCard />}
+                              </div>
+                            ) : agent?.status === 'evaluating' ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                {[0, 1, 2, 3].map((i) => <ShimmerCard key={i} />)}
+                              </div>
+                            ) : (
+                              <EmptyState label={
+                                sourceFilter !== 'all'
+                                  ? `No ${sourceFilter} sources.`
+                                  : isLive ? 'Fetching sources…' : 'No sources recorded.'
+                              } />
+                            )}
+                          </motion.div>
+                        )}
+
+                        {/* ── Facts ── */}
+                        {activeTab === 'facts' && (
+                          <motion.div
+                            key="facts"
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                          >
+                            <FactsTab facts={facts} visualResearchPrompt={agent?.visualResearchPrompt} />
+                          </motion.div>
+                        )}
+
+                        {/* ── Log ── */}
+                        {activeTab === 'log' && (
+                          <motion.div
+                            key="log"
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                          >
+                            <LogTab logs={logs} isLive={isLive} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </motion.div>
+              </Dialog.Content>
+            </>
           )}
         </AnimatePresence>
-      </div>
-    </Modal>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
