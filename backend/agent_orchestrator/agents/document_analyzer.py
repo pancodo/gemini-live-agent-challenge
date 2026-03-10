@@ -581,16 +581,18 @@ Output a single JSON object with exactly two keys:
 Output ONLY the JSON object -- no markdown fences, no preamble.
 """
 
-narrative_curator = Agent(
-    name="narrative_curator",
-    model="gemini-2.0-pro",
-    description=(
-        "Reads the full Document Map and selects 4-8 cinematically compelling "
-        "scenes, producing structured SceneBriefs and a Visual Bible."
-    ),
-    instruction=_NARRATIVE_CURATOR_INSTRUCTION,
-    output_key="narrative_curator_output",
-)
+def _make_narrative_curator() -> Agent:
+    """Create a fresh narrative_curator Agent each call — ADK agents cannot be shared across pipeline instances."""
+    return Agent(
+        name="narrative_curator",
+        model="gemini-2.0-flash",
+        description=(
+            "Reads the full Document Map and selects 4-8 cinematically compelling "
+            "scenes, producing structured SceneBriefs and a Visual Bible."
+        ),
+        instruction=_NARRATIVE_CURATOR_INSTRUCTION,
+        output_key="narrative_curator_output",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -762,7 +764,7 @@ class DocumentAnalyzerAgent(BaseAgent):
             )
 
         t_curator_start = time.monotonic()
-        async for event in narrative_curator.run_async(ctx):
+        async for event in self.sub_agents[0].run_async(ctx):
             yield event
         t_curator_elapsed = time.monotonic() - t_curator_start
 
@@ -883,5 +885,5 @@ def build_document_analyzer(
         gcs_bucket=os.environ["GCS_BUCKET_NAME"],
         firestore_project=os.environ["GCP_PROJECT_ID"],
         emitter=emitter,
-        sub_agents=[narrative_curator],
+        sub_agents=[_make_narrative_curator()],
     )

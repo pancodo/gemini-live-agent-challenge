@@ -72,14 +72,7 @@ logger = logging.getLogger(__name__)
 # via ADK's template substitution mechanism.
 # ---------------------------------------------------------------------------
 
-_INNER_SCRIPT_AGENT = Agent(
-    name="script_agent",
-    model="gemini-2.0-pro",
-    description=(
-        "Generates documentary segments grounded in scene briefs and "
-        "aggregated research. One segment per SceneBrief."
-    ),
-    instruction="""\
+_INNER_SCRIPT_AGENT_INSTRUCTION = """\
 You are the scriptwriter for an AI-generated historical documentary.
 
 Scene Briefs (the planned scenes, grounded in the source document):
@@ -116,9 +109,21 @@ no anachronisms, specific to the era and location from each scene brief.
 Each visual prompt must specify: era, location, lighting, composition,
 subjects, and mood. Start every prompt with the enriched_visual_bible prefix
 from the aggregated research.
-""",
-    output_key="script",
-)
+"""
+
+
+def _make_inner_script_agent() -> Agent:
+    """Create a fresh script Agent per pipeline run — ADK agents cannot be reused."""
+    return Agent(
+        name="script_agent",
+        model="gemini-2.0-flash",
+        description=(
+            "Generates documentary segments grounded in scene briefs and "
+            "aggregated research. One segment per SceneBrief."
+        ),
+        instruction=_INNER_SCRIPT_AGENT_INSTRUCTION,
+        output_key="script",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +320,7 @@ class ScriptAgentOrchestrator(BaseAgent):
             )
 
         t_script_start = time.monotonic()
-        async for event in _INNER_SCRIPT_AGENT.run_async(ctx):
+        async for event in _make_inner_script_agent().run_async(ctx):
             yield event
         t_script_elapsed = time.monotonic() - t_script_start
 

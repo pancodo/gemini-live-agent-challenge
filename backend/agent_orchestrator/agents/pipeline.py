@@ -123,11 +123,7 @@ Output as JSON: {{ "sources": [...], "accepted_sources": [...], "rejected_source
 # exist in session.state are left unresolved by ADK and treated as empty
 # by the model — no error is raised for absent keys.
 # ---------------------------------------------------------------------------
-aggregator_agent = Agent(
-    name="aggregator_agent",
-    model="gemini-2.0-flash",
-    description="Merges all parallel scene research outputs into a unified research context.",
-    instruction="""\
+_AGGREGATOR_INSTRUCTION = """\
 You receive research results from parallel scene research agents.
 Each result is a JSON object with sources, accepted_sources, rejected_sources,
 facts, and a visual_prompt. Some slots below may be empty if fewer than 10
@@ -171,9 +167,18 @@ Output as JSON:
   "total_sources_accepted": N,
   "total_sources_rejected": N
 }}
-""",
-    output_key="aggregated_research",
-)
+"""
+
+
+def _make_aggregator_agent() -> Agent:
+    """Create a fresh aggregator Agent — ADK agents cannot be reused across pipeline instances."""
+    return Agent(
+        name="aggregator_agent",
+        model="gemini-2.0-flash",
+        description="Merges all parallel scene research outputs into a unified research context.",
+        instruction=_AGGREGATOR_INSTRUCTION,
+        output_key="aggregated_research",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +316,7 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
         sub_agents=[
             scan_agent,
             parallel_research,
-            aggregator_agent,
+            _make_aggregator_agent(),
             script_agent,
             visual_research_agent,
             visual_director,
@@ -358,7 +363,7 @@ def build_new_pipeline(
         sub_agents=[
             document_analyzer,        # Phase I:   OCR → chunks → summaries → scene_briefs
             scene_research,           # Phase II:  per-scene google_search corroboration
-            aggregator_agent,         # Merge:     research_{n} → aggregated_research
+            _make_aggregator_agent(), # Merge:     research_{n} → aggregated_research
             script_orch,              # Phase III: script + Firestore + segment_update SSE
             visual_research_orch,     # Phase IV:  6-stage visual micro-pipeline per scene
             visual_director_orch,     # Phase V:   Imagen 3 + Veo 2 → GCS + Firestore + SSE
