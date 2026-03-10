@@ -10,8 +10,10 @@ export function useSession(sessionId: string | null) {
   const query = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => getSessionStatus(sessionId!),
-    enabled: !!sessionId && (status === 'processing' || status === 'uploading'),
-    refetchInterval: 3000,
+    // Always fetch when sessionId exists — needed for session recovery after page refresh.
+    // Poll continuously while pipeline is running; single fetch otherwise.
+    enabled: !!sessionId,
+    refetchInterval: status === 'processing' || status === 'uploading' ? 3000 : false,
   });
 
   useEffect(() => {
