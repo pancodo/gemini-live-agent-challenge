@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, type MouseEvent, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { useResearchStore } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
+import { usePlayerStore } from '../../store/playerStore';
 import { HistorianPanel } from './HistorianPanel';
 import { AgentModal } from './AgentModal';
 import { SegmentCard } from './SegmentCard';
-import type { AgentState, AgentStatus } from '../../types';
+import type { AgentState, AgentStatus, EvaluatedSource, Segment } from '../../types';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -72,16 +73,19 @@ const itemVariants = {
   },
 };
 
-// ── Stat Value ──────────────────────────────────────────────────
+// ── Stat Button (clickable with popover) ────────────────────────
 
-interface StatValueProps {
+interface StatButtonProps {
   label: string;
   value: number;
+  popover: ReactNode;
 }
 
-function StatValue({ label, value }: StatValueProps) {
+function StatButton({ label, value, popover }: StatButtonProps) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const prevRef = useRef(value);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (value !== prevRef.current && spanRef.current) {
@@ -93,13 +97,130 @@ function StatValue({ label, value }: StatValueProps) {
     }
   }, [value]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: globalThis.MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
   return (
-    <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">
-      <span ref={spanRef} className="stat-value text-[var(--gold)] font-medium mr-1">
-        {value}
-      </span>
-      {label}
-    </span>
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--muted)] hover:text-[var(--gold-d)] transition-colors cursor-pointer group"
+      >
+        <span ref={spanRef} className="stat-value text-[var(--gold)] font-medium mr-1 group-hover:text-[var(--gold-d)]">
+          {value}
+        </span>
+        {label}
+        <span className="ml-1 opacity-40 group-hover:opacity-70">↓</span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="popover"
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="absolute left-0 top-[calc(100%+8px)] z-50 w-72 max-h-72 overflow-y-auto rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] shadow-lg p-3"
+          >
+            {popover}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Popover content components ───────────────────────────────────
+
+function SourcesPopover({ agents }: { agents: Record<string, AgentState> }) {
+  const all: (EvaluatedSource & { agentQuery: string })[] = [];
+  for (const agent of Object.values(agents)) {
+    for (const src of agent.evaluatedSources ?? []) {
+      all.push({ ...src, agentQuery: agent.query });
+    }
+  }
+  if (all.length === 0) return <p className="font-sans text-[12px] text-[var(--muted)] text-center py-2">No sources yet</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      {all.map((src, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${src.accepted ? 'bg-[var(--green)]' : 'bg-red-400'}`} />
+          <div className="min-w-0">
+            <a
+              href={src.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-sans text-[12px] text-[var(--gold)] hover:underline truncate block leading-tight"
+            >
+              {src.title ?? new URL(src.url).hostname.replace(/^www\./, '')}
+            </a>
+            {src.reason && (
+              <p className="font-sans text-[11px] text-[var(--muted)] mt-0.5 leading-snug">{src.reason}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FactsPopover({ agents }: { agents: Record<string, AgentState> }) {
+  const groups: { query: string; facts: string[] }[] = [];
+  for (const agent of Object.values(agents)) {
+    if (agent.facts && agent.facts.length > 0) {
+      groups.push({ query: agent.query, facts: agent.facts });
+    }
+  }
+  if (groups.length === 0) return <p className="font-sans text-[12px] text-[var(--muted)] text-center py-2">No facts yet</p>;
+  return (
+    <div className="flex flex-col gap-3">
+      {groups.map((g, gi) => (
+        <div key={gi}>
+          <p className="font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--muted)] mb-1 truncate">{g.query}</p>
+          <ul className="flex flex-col gap-1">
+            {g.facts.map((fact, fi) => (
+              <li key={fi} className="flex items-start gap-1.5">
+                <span className="mt-1.5 w-1 h-1 rounded-full bg-[var(--gold)] shrink-0 opacity-60" />
+                <span className="font-sans text-[12px] text-[var(--text)] leading-snug">{fact}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SegmentsPopover({ segments, triggerIris }: { segments: Record<string, Segment>; triggerIris: (path: string) => void }) {
+  const ready = Object.values(segments).filter((s) => s.status === 'ready' || s.status === 'complete');
+  if (ready.length === 0) return <p className="font-sans text-[12px] text-[var(--muted)] text-center py-2">No segments ready yet</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      {ready.map((seg, i) => (
+        <div key={seg.id} className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-sans text-[12px] text-[var(--text)] truncate">{String(i + 1).padStart(2, '0')}. {seg.title}</p>
+            {seg.mood && <p className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.1em]">{seg.mood}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => triggerIris(`/player/${seg.id}`)}
+            className="shrink-0 font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--gold)] hover:text-[var(--gold-d)] transition-colors"
+          >
+            Watch →
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -275,6 +396,7 @@ export function ResearchPanel() {
   const agents = useResearchStore((s) => s.agents);
   const segments = useResearchStore((s) => s.segments);
   const stats = useResearchStore((s) => s.stats);
+  const triggerIris = usePlayerStore((s) => s.triggerIris);
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
@@ -341,11 +463,23 @@ export function ResearchPanel() {
 
         {/* Stats bar */}
         <div className="flex items-center gap-4">
-          <StatValue label="sources found" value={stats.sourcesFound} />
+          <StatButton
+            label="sources found"
+            value={stats.sourcesFound}
+            popover={<SourcesPopover agents={agents} />}
+          />
           <span className="text-[var(--bg4)]">{'\u00B7'}</span>
-          <StatValue label="facts verified" value={stats.factsVerified} />
+          <StatButton
+            label="facts verified"
+            value={stats.factsVerified}
+            popover={<FactsPopover agents={agents} />}
+          />
           <span className="text-[var(--bg4)]">{'\u00B7'}</span>
-          <StatValue label="segments ready" value={stats.segmentsReady} />
+          <StatButton
+            label="segments ready"
+            value={stats.segmentsReady}
+            popover={<SegmentsPopover segments={segments} triggerIris={triggerIris} />}
+          />
         </div>
       </div>
 
