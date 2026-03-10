@@ -108,14 +108,17 @@ async def _run_pipeline(session_id: str, gcs_path: str, queue: asyncio.Queue) ->
         await db.collection("sessions").document(session_id).update({"status": "ready"})
     except Exception:
         logger.exception("Pipeline failed for session %s", session_id)
-        await queue.put('event: error\ndata: {"type":"error","message":"Pipeline failed"}\n\n')
+        await queue.put('data: {"type":"error","message":"Pipeline failed"}\n\n')
         try:
             await db.collection("sessions").document(session_id).update({"status": "error"})
         except Exception:
             pass
     finally:
+        # Signal end-of-stream. Do NOT pop the queue here — the queue must
+        # remain alive so that clients which connect after the pipeline
+        # finishes can still drain all buffered events. The SSE endpoint
+        # removes the queue once the client reads the None sentinel.
         await queue.put(None)
-        _sse_queues.pop(session_id, None)
 
 @router.get("/session/{session_id}/stream")
 async def stream_session(session_id: str) -> StreamingResponse:
@@ -133,6 +136,8 @@ async def stream_session(session_id: str) -> StreamingResponse:
                 yield ": keep-alive\n\n"
                 continue
             if message is None:
+                # Pipeline finished — clean up queue and close stream
+                _sse_queues.pop(session_id, None)
                 break
             yield message
     return StreamingResponse(

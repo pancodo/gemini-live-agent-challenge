@@ -35,9 +35,14 @@ class QueueSSEEmitter:
     queue: Any  # asyncio.Queue[str] — using Any to avoid import-time asyncio dependency
 
     async def emit(self, event_type: str, data: dict[str, Any]) -> None:
-        """Serialize and enqueue an SSE event."""
+        """Serialize and enqueue an SSE event.
+
+        Uses unnamed events (no ``event:`` line) so that EventSource.onmessage
+        fires on the frontend. The ``type`` field inside the JSON payload is
+        used for client-side dispatch instead.
+        """
         payload = json.dumps(data, default=str)
-        message = f"event: {event_type}\ndata: {payload}\n\n"
+        message = f"data: {payload}\n\n"
         await self.queue.put(message)
 
 
