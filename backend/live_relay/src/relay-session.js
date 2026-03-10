@@ -130,7 +130,6 @@ class RelaySession {
    */
   _createGeminiSession(systemInstruction, resumptionToken) {
     const session = new GeminiSession({
-      apiKey: process.env.GEMINI_API_KEY,
       systemInstruction,
       resumptionToken,
     });

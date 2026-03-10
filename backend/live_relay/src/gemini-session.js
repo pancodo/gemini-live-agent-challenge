@@ -1,22 +1,57 @@
 /**
  * Manages a WebSocket connection to the Gemini Live API.
  *
- * Handles the full lifecycle: connection, BidiGenerateContentSetup handshake,
- * bidirectional audio streaming, interruption detection, session resumption,
- * and graceful shutdown via goAway.
+ * Supports two authentication paths:
+ *   1. **Vertex AI** (default) — uses service account bearer token via
+ *      Application Default Credentials (ADC). Endpoint:
+ *      wss://{region}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent
+ *   2. **AI Studio** (fallback) — uses GEMINI_API_KEY query param. Endpoint:
+ *      wss://generativelanguage.googleapis.com/ws/...?key=API_KEY
+ *
+ * Set GEMINI_API_KEY to use AI Studio path. Otherwise, Vertex AI with ADC.
  *
  * @module gemini-session
  */
 
 import WebSocket from 'ws';
+import { GoogleAuth } from 'google-auth-library';
 import { createLogger } from './logger.js';
 
 const log = createLogger('gemini-session');
 
-const DEFAULT_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+// Vertex AI path (default — uses service account / ADC)
+const VERTEX_MODEL = 'gemini-live-2.5-flash-native-audio';
+const VERTEX_WS_TEMPLATE =
+  'wss://{REGION}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent';
 
-const GEMINI_WS_BASE =
+// AI Studio path (fallback — uses API key)
+const AISTUDIO_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+const AISTUDIO_WS_BASE =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+
+/** Resolve which auth path to use. Vertex AI is preferred. */
+function resolveAuthConfig() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    return { mode: 'aistudio', apiKey, model: AISTUDIO_MODEL };
+  }
+  const project = process.env.GCP_PROJECT_ID;
+  const region = process.env.VERTEX_AI_LOCATION || 'us-central1';
+  return { mode: 'vertex', project, region, model: VERTEX_MODEL };
+}
+
+/**
+ * Get a fresh OAuth2 access token via Application Default Credentials.
+ * Works with GOOGLE_APPLICATION_CREDENTIALS or Cloud Run metadata server.
+ */
+async function getAccessToken() {
+  const auth = new GoogleAuth({
+    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+  });
+  const client = await auth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  return tokenResponse.token;
+}
 
 /**
  * A single session with the Gemini Live API over WebSocket.
@@ -35,20 +70,17 @@ const GEMINI_WS_BASE =
 class GeminiSession {
   /**
    * @param {Object}  options
-   * @param {string}  options.apiKey           — Gemini API key
-   * @param {string}  [options.model]          — model resource name
    * @param {string}  options.systemInstruction — persona prompt text
    * @param {string}  [options.resumptionToken] — optional handle for session resumption
    */
-  constructor({ apiKey, model, systemInstruction, resumptionToken }) {
-    if (!apiKey) throw new Error('apiKey is required');
+  constructor({ systemInstruction, resumptionToken }) {
     if (!systemInstruction) throw new Error('systemInstruction is required');
 
-    /** @type {string} */
-    this._apiKey = apiKey;
+    /** @type {{ mode: string, apiKey?: string, project?: string, region?: string, model: string }} */
+    this._auth = resolveAuthConfig();
 
     /** @type {string} */
-    this._model = model || DEFAULT_MODEL;
+    this._model = this._auth.model;
 
     /** @type {string} */
     this._systemInstruction = systemInstruction;
@@ -92,13 +124,24 @@ class GeminiSession {
    *
    * @returns {Promise<void>} Resolves when the WebSocket connection is open.
    */
-  connect() {
+  async connect() {
+    let url;
+    /** @type {Record<string, string> | undefined} */
+    let headers;
+
+    if (this._auth.mode === 'vertex') {
+      const token = await getAccessToken();
+      const endpoint = VERTEX_WS_TEMPLATE.replace('{REGION}', this._auth.region);
+      url = endpoint;
+      headers = { Authorization: `Bearer ${token}` };
+      log.info('Connecting via Vertex AI', { model: this._model, region: this._auth.region });
+    } else {
+      url = `${AISTUDIO_WS_BASE}?key=${this._auth.apiKey}`;
+      log.info('Connecting via AI Studio', { model: this._model });
+    }
+
     return new Promise((resolve, reject) => {
-      const url = `${GEMINI_WS_BASE}?key=${this._apiKey}`;
-
-      log.info('Connecting to Gemini Live API', { model: this._model });
-
-      this.ws = new WebSocket(url);
+      this.ws = new WebSocket(url, { headers });
 
       this.ws.on('open', () => {
         log.info('WebSocket open, sending setup message');
@@ -183,9 +226,16 @@ class GeminiSession {
       log.info('Resuming session with existing token');
     }
 
+    // Vertex AI: "projects/{project}/locations/{region}/publishers/google/models/{model}"
+    // AI Studio: "models/{model}"
+    const modelPath =
+      this._auth.mode === 'vertex'
+        ? `projects/${this._auth.project}/locations/${this._auth.region}/publishers/google/models/${this._model}`
+        : this._model;
+
     const setup = {
       setup: {
-        model: this._model,
+        model: modelPath,
         generationConfig: {
           responseModalities: ['AUDIO'],
           speechConfig: {

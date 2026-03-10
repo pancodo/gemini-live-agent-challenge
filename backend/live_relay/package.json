@@ -13,6 +13,7 @@
   "dependencies": {
     "@google-cloud/firestore": "^7.11.0",
     "dotenv": "^16.4.7",
+    "google-auth-library": "^10.6.1",
     "ws": "^8.18.0"
   }
 }
