@@ -10,6 +10,14 @@ import type {
   AgentState, AgentStatus, AgentLog,
   AgentLogsResponse, EvaluatedSource, UrlMeta,
 } from '../../types';
+import { HeroSourceCard } from './agent-modal/HeroSourceCard';
+import { RelevanceBar, deriveRelevanceScore } from './agent-modal/RelevanceBar';
+import { KeyFindingBanner } from './agent-modal/KeyFindingBanner';
+import { AnimatedCount } from './agent-modal/AnimatedCount';
+import { CompactHeader, useStickyDrawer } from './agent-modal/CompactHeader';
+import { FactText } from './agent-modal/EntityPill';
+import { SourceQuote, VisualPromptQuote } from './agent-modal/SourceQuote';
+import { FactsCopyButton } from './agent-modal/CopyButton';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -108,7 +116,7 @@ function StatsBar({
     <div className="flex items-center gap-3 flex-wrap">
       {chips.map((c) => (
         <span key={c.label} className={`font-sans text-[11px] ${c.color}`}>
-          <span className="font-semibold">{c.value}</span>
+          <AnimatedCount value={c.value} className="font-semibold" />
           <span className="text-[var(--muted)] ml-1">{c.label}</span>
         </span>
       ))}
@@ -151,7 +159,7 @@ function TabBar({ active, onChange, counts }: {
                 ? 'bg-[var(--text)] text-[var(--bg)]'
                 : 'bg-[var(--bg4)] text-[var(--muted)]'
             }`}>
-              {tab.count}
+              <AnimatedCount value={tab.count} />
             </span>
           )}
           {active === tab.id && (
@@ -311,12 +319,11 @@ function SourceCard({ source, index, isLive }: { source: EvaluatedSource; index:
           <p className="font-sans text-[11px] text-[var(--muted)] leading-relaxed line-clamp-2">{description}</p>
         )}
 
-        {/* Reason */}
-        {source.reason && (
-          <p className="font-sans text-[10px] text-[var(--muted)]/70 line-clamp-2 border-t border-[var(--bg4)]/40 pt-1.5 mt-0.5">
-            {source.reason}
-          </p>
-        )}
+        {/* Relevance score bar */}
+        <RelevanceBar score={deriveRelevanceScore(source)} />
+
+        {/* Reason — styled as pull-quote */}
+        <SourceQuote text={source.reason} index={index} />
 
         <a
           href={source.url}
@@ -360,6 +367,14 @@ function FactsTab({ facts, visualResearchPrompt }: { facts: string[]; visualRese
 
   return (
     <div className="space-y-3">
+      {/* Facts header row with copy button */}
+      <div className="flex items-center justify-between">
+        <span className="font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--muted)]">
+          Facts <span className="ml-1 text-[var(--text)]">{facts.length}</span>
+        </span>
+        <FactsCopyButton facts={facts} />
+      </div>
+
       {/* Timeline */}
       <div className="relative pl-6">
         {/* Vertical connector line */}
@@ -383,7 +398,7 @@ function FactsTab({ facts, visualResearchPrompt }: { facts: string[]; visualRese
               {/* Timeline dot */}
               <div className="absolute -left-6 top-[5px] w-[10px] h-[10px] rounded-full border-2 border-[var(--green)] bg-[var(--bg2)]" />
               <div className="bg-[var(--bg)]/70 border border-[var(--bg4)]/50 rounded-lg px-3 py-2.5">
-                <p className="font-sans text-[12px] text-[var(--text)] leading-relaxed">{fact}</p>
+                <FactText fact={fact} />
               </div>
             </motion.div>
           ))}
@@ -392,11 +407,8 @@ function FactsTab({ facts, visualResearchPrompt }: { facts: string[]; visualRese
 
       {/* Visual prompt blockquote */}
       {visualResearchPrompt && (
-        <div className="rounded-xl border border-[var(--gold)]/20 bg-[var(--gold)]/5 px-4 py-3 mt-2">
-          <p className="font-serif text-[9px] uppercase tracking-[0.3em] text-[var(--gold)] mb-1.5">Visual Prompt</p>
-          <p className="font-serif text-[13px] italic text-[var(--text)]/75 leading-relaxed">
-            {'\u201C'}{visualResearchPrompt}{'\u201D'}
-          </p>
+        <div className="mt-2">
+          <VisualPromptQuote prompt={visualResearchPrompt} />
         </div>
       )}
     </div>
@@ -475,6 +487,8 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
   const [activeTab, setActiveTab] = useState<Tab>('sources');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const reducedMotion = useReducedMotion();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const { isCompact, sentinelRef } = useStickyDrawer(scrollContainerRef);
 
   const { data: logsData } = useQuery<AgentLogsResponse>({
     queryKey: ['agentLogs', sessionId, agentId],
@@ -490,11 +504,6 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
 
   const acceptedSources = evaluatedSources.filter((s) => s.accepted);
   const rejectedSources = evaluatedSources.filter((s) => !s.accepted);
-
-  const visibleSources =
-    sourceFilter === 'accepted' ? acceptedSources :
-    sourceFilter === 'rejected' ? rejectedSources :
-    evaluatedSources;
 
   // Auto-switch tabs as data arrives
   useEffect(() => {
@@ -534,6 +543,20 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                   transition={{ type: 'spring', stiffness: 300, damping: 32, mass: 0.9 }}
                   className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-[520px] max-w-[95vw] bg-[var(--bg2)] border-l border-[var(--bg4)] shadow-2xl overflow-hidden"
                 >
+                  {/* ── Compact sticky header (appears on scroll) ── */}
+                  <AnimatePresence>
+                    {isCompact && (
+                      <CompactHeader
+                        query={agent?.query ?? ''}
+                        status={agent?.status ?? 'queued'}
+                        isLive={isLive}
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                        counts={{ sources: evaluatedSources.length, facts: facts.length, log: logs.length }}
+                      />
+                    )}
+                  </AnimatePresence>
+
                   {/* ── Header ── */}
                   <div className="flex flex-col gap-3 px-5 pt-5 pb-3 shrink-0">
                     <div className="flex items-start gap-3">
@@ -574,6 +597,9 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                   {/* Live scanning bar */}
                   <LiveBar isLive={isLive} />
 
+                  {/* Sentinel for sticky header IntersectionObserver */}
+                  <div ref={sentinelRef} className="h-px shrink-0" />
+
                   {/* ── Tab Bar ── */}
                   <div className="px-5 shrink-0">
                     <TabBar
@@ -584,7 +610,7 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                   </div>
 
                   {/* ── Scrollable Content ── */}
-                  <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--bg4) transparent' }}>
+                  <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--bg4) transparent' }}>
                     <div className="px-5 py-4">
                       <VisuallyHidden>
                         <Dialog.Description>
@@ -603,6 +629,16 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                             transition={{ duration: 0.15 }}
                             className="space-y-3"
                           >
+                            {/* Key finding banner — shown when research is done */}
+                            {evaluatedSources.length > 0 && agent?.status === 'done' && (
+                              <KeyFindingBanner
+                                query={agent.query}
+                                acceptedCount={acceptedSources.length}
+                                rejectedCount={rejectedSources.length}
+                                visualResearchPrompt={agent.visualResearchPrompt}
+                              />
+                            )}
+
                             {/* Filter pills */}
                             {evaluatedSources.length > 0 && (
                               <FilterPills
@@ -613,25 +649,37 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                               />
                             )}
 
-                            {/* Source grid */}
-                            {visibleSources.length > 0 ? (
-                              <div className="grid grid-cols-2 gap-3">
-                                {visibleSources.map((src, i) => (
-                                  <SourceCard key={src.url + i} source={src} index={i} isLive={isLive} />
-                                ))}
-                                {agent?.status === 'evaluating' && <ShimmerCard />}
-                              </div>
-                            ) : agent?.status === 'evaluating' ? (
-                              <div className="grid grid-cols-2 gap-3">
-                                {[0, 1, 2, 3].map((i) => <ShimmerCard key={i} />)}
-                              </div>
-                            ) : (
-                              <EmptyState label={
-                                sourceFilter !== 'all'
-                                  ? `No ${sourceFilter} sources.`
-                                  : isLive ? 'Fetching sources…' : 'No sources recorded.'
-                              } />
+                            {/* Hero source — first accepted, full-width above grid */}
+                            {acceptedSources[0] && (sourceFilter === 'all' || sourceFilter === 'accepted') && (
+                              <HeroSourceCard source={acceptedSources[0]} isLive={isLive} />
                             )}
+
+                            {/* Source grid — remaining sources */}
+                            {(() => {
+                              const gridSources =
+                                sourceFilter === 'accepted' ? acceptedSources.slice(1) :
+                                sourceFilter === 'rejected' ? rejectedSources :
+                                [...acceptedSources.slice(1), ...rejectedSources];
+
+                              return gridSources.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-3">
+                                  {gridSources.map((src, i) => (
+                                    <SourceCard key={src.url + i} source={src} index={i} isLive={isLive} />
+                                  ))}
+                                  {agent?.status === 'evaluating' && <ShimmerCard />}
+                                </div>
+                              ) : agent?.status === 'evaluating' && evaluatedSources.length === 0 ? (
+                                <div className="grid grid-cols-2 gap-3">
+                                  {[0, 1, 2, 3].map((i) => <ShimmerCard key={i} />)}
+                                </div>
+                              ) : !acceptedSources[0] && gridSources.length === 0 ? (
+                                <EmptyState label={
+                                  sourceFilter !== 'all'
+                                    ? `No ${sourceFilter} sources.`
+                                    : isLive ? 'Fetching sources…' : 'No sources recorded.'
+                                } />
+                              ) : null;
+                            })()}
                           </motion.div>
                         )}
 
