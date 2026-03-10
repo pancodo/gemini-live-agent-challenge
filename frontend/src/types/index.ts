@@ -32,6 +32,7 @@ export interface EvaluatedSource {
   imageUrl?: string;
   description?: string;
   favicon?: string;
+  relevanceScore?: number;  // 0–100; derived client-side if absent
 }
 
 export interface UrlMeta {
