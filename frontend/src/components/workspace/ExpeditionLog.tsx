@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, useReducedMotion, type Variants } from 'motion/react';
 import { useResearchStore, type PhaseEntry } from '../../store/researchStore';
+import { useSessionStore } from '../../store/sessionStore';
 import { typewriteEntry } from '../../hooks/useTypewriter';
+import { AgentModal } from './AgentModal';
+import type { AgentState, AgentStatus } from '../../types';
 
 // ── Phase number → Roman numeral ────────────────────────
 const ROMAN: Record<1 | 2 | 3 | 4, string> = {
@@ -29,7 +32,75 @@ const entryVariants: Variants = {
   },
 };
 
+const agentRowVariants: Variants = {
+  hidden: { opacity: 0, x: -6 },
+  show: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 320, damping: 24 },
+  },
+};
+
 const staticTransition = { duration: 0 };
+
+// ── Agent phase membership ───────────────────────────────
+// Returns true if agentId belongs to the given 1-indexed pipeline phase.
+function agentBelongsToPhase(phase: number, agentId: string): boolean {
+  const id = agentId.toLowerCase();
+  switch (phase) {
+    case 1: return id.startsWith('scan') || id.startsWith('document');
+    case 2: return id.startsWith('research') || id.startsWith('scene');
+    case 3: return id.startsWith('aggregat') || id.startsWith('script');
+    case 4: return id.startsWith('visual');
+    default: return false;
+  }
+}
+
+// ── Status dot ──────────────────────────────────────────
+function StatusDot({ status }: { status: AgentStatus }) {
+  const base = 'w-1.5 h-1.5 rounded-full shrink-0';
+  switch (status) {
+    case 'queued':     return <span className={`${base} border border-[var(--muted)]`} />;
+    case 'searching':  return <span className={`${base} bg-[var(--teal)]`} />;
+    case 'evaluating': return <span className={`${base} bg-[var(--gold)]`} />;
+    case 'done':       return <span className={`${base} bg-[var(--green)]`} />;
+    case 'error':      return <span className={`${base} bg-red-500`} />;
+  }
+}
+
+// ── Clickable agent row ──────────────────────────────────
+interface LogAgentRowProps {
+  agent: AgentState;
+  onClick: () => void;
+  reduced: boolean;
+}
+
+function LogAgentRow({ agent, onClick, reduced }: LogAgentRowProps) {
+  return (
+    <motion.button
+      variants={reduced ? undefined : agentRowVariants}
+      onClick={onClick}
+      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg3)] transition-colors text-left group"
+      aria-label={`View details for ${agent.query}`}
+    >
+      <StatusDot status={agent.status} />
+      <span className="flex-1 font-sans text-[12px] text-[var(--text)] truncate group-hover:text-[var(--gold)] transition-colors">
+        {agent.query ?? agent.id}
+      </span>
+      {agent.elapsed !== undefined && agent.elapsed > 0 && (
+        <span
+          className="font-sans text-[10px] text-[var(--muted)] shrink-0"
+          style={{ fontVariantNumeric: 'tabular-nums' }}
+        >
+          {agent.elapsed}s
+        </span>
+      )}
+      <span className="font-sans text-[9px] text-[var(--muted)] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        ↗
+      </span>
+    </motion.button>
+  );
+}
 
 // ── StatBadge ───────────────────────────────────────────
 function StatBadge({ label, value }: { label: string; value: number }) {
@@ -39,7 +110,6 @@ function StatBadge({ label, value }: { label: string; value: number }) {
   useEffect(() => {
     if (value !== prevRef.current && spanRef.current) {
       spanRef.current.classList.remove('updated');
-      // Force reflow so re-adding the class triggers the animation
       void spanRef.current.offsetWidth;
       spanRef.current.classList.add('updated');
       prevRef.current = value;
@@ -48,9 +118,7 @@ function StatBadge({ label, value }: { label: string; value: number }) {
 
   return (
     <div className="flex items-center gap-1.5">
-      <span
-        className="text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--muted)]"
-      >
+      <span className="text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--muted)]">
         {label}
       </span>
       <span
@@ -64,15 +132,21 @@ function StatBadge({ label, value }: { label: string; value: number }) {
 }
 
 // ── PhaseBlock ──────────────────────────────────────────
+interface PhaseBlockProps {
+  entry: PhaseEntry;
+  reduced: boolean;
+  typewrittenRef: React.RefObject<Set<string>>;
+  phaseAgents: AgentState[];
+  onAgentClick: (id: string) => void;
+}
+
 function PhaseBlock({
   entry,
   reduced,
   typewrittenRef,
-}: {
-  entry: PhaseEntry;
-  reduced: boolean;
-  typewrittenRef: React.RefObject<Set<string>>;
-}) {
+  phaseAgents,
+  onAgentClick,
+}: PhaseBlockProps) {
   const messageCallbackRef = useCallback(
     (node: HTMLSpanElement | null, key: string, text: string) => {
       if (!node) return;
@@ -99,7 +173,9 @@ function PhaseBlock({
         className="text-[11px] font-serif uppercase tracking-[0.35em] text-[var(--gold)] mb-0"
         style={{ fontWeight: 400 }}
       >
-        Phase {ROMAN[entry.phase]} — {entry.label}
+        {entry.phase in ROMAN
+          ? `Phase ${ROMAN[entry.phase as 1 | 2 | 3 | 4]} — ${entry.label}`
+          : `Phase — ${entry.label}`}
       </p>
 
       {/* Self-drawing divider */}
@@ -125,6 +201,25 @@ function PhaseBlock({
           </motion.div>
         );
       })}
+
+      {/* Agent rows — clickable for detail */}
+      {phaseAgents.length > 0 && (
+        <motion.div
+          className="mt-2 space-y-0.5"
+          variants={reduced ? undefined : listVariants}
+          initial="hidden"
+          animate="show"
+        >
+          {phaseAgents.map((agent) => (
+            <LogAgentRow
+              key={agent.id}
+              agent={agent}
+              onClick={() => onAgentClick(agent.id)}
+              reduced={reduced}
+            />
+          ))}
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -133,9 +228,12 @@ function PhaseBlock({
 export function ExpeditionLog() {
   const phases = useResearchStore((s) => s.phases);
   const stats = useResearchStore((s) => s.stats);
+  const agents = useResearchStore((s) => s.agents);
+  const sessionId = useSessionStore((s) => s.sessionId);
   const reduced = useReducedMotion() ?? false;
 
-  // Track which message keys have already been typewritten
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
   const typewrittenRef = useRef<Set<string>>(new Set());
 
   // Auto-scroll container
@@ -145,7 +243,10 @@ export function ExpeditionLog() {
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [phases]);
+  }, [phases, agents]);
+
+  const agentList = Object.values(agents);
+  const selectedAgent = selectedAgentId ? (agents[selectedAgentId] ?? null) : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -172,14 +273,21 @@ export function ExpeditionLog() {
           </p>
         )}
 
-        {phases.map((entry) => (
-          <PhaseBlock
-            key={entry.phase}
-            entry={entry}
-            reduced={reduced}
-            typewrittenRef={typewrittenRef}
-          />
-        ))}
+        {phases.map((entry) => {
+          const phaseAgents = agentList.filter((a) =>
+            agentBelongsToPhase(entry.phase, a.id),
+          );
+          return (
+            <PhaseBlock
+              key={entry.phase}
+              entry={entry}
+              reduced={reduced}
+              typewrittenRef={typewrittenRef}
+              phaseAgents={phaseAgents}
+              onAgentClick={setSelectedAgentId}
+            />
+          );
+        })}
       </div>
 
       {/* Stats bar */}
@@ -190,6 +298,16 @@ export function ExpeditionLog() {
         <span className="text-[var(--bg4)]">&middot;</span>
         <StatBadge label="SEGMENTS READY" value={stats.segmentsReady} />
       </div>
+
+      {/* Agent detail modal */}
+      {sessionId && (
+        <AgentModal
+          agentId={selectedAgentId}
+          agent={selectedAgent}
+          sessionId={sessionId}
+          onClose={() => setSelectedAgentId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -3,7 +3,6 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { useResearchStore } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
-import { useSSE } from '../../hooks/useSSE';
 import { HistorianPanel } from './HistorianPanel';
 import { AgentModal } from './AgentModal';
 import { SegmentCard } from './SegmentCard';
@@ -214,9 +213,6 @@ export function ResearchPanel() {
   const stats = useResearchStore((s) => s.stats);
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-
-  // Start SSE stream
-  useSSE(sessionId);
 
   // ── Toast notifications on agent state transitions ──────
   const prevAgentStatusRef = useRef<Record<string, AgentStatus>>({});

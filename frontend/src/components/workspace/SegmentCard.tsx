@@ -24,14 +24,15 @@ export function SegmentCard({ segment, index }: SegmentCardProps) {
   const my = useMotionValue(0);
   const springX = useSpring(mx, { stiffness: 150, damping: 15 });
   const springY = useSpring(my, { stiffness: 150, damping: 15 });
-  const [hasBeenReady, setHasBeenReady] = useState(segment.status === 'ready');
+  const isReady = segment.status === 'ready' || segment.status === 'complete';
+  const [hasBeenReady, setHasBeenReady] = useState(isReady);
 
-  // Track transition to ready for cipher reveal
+  // Track transition to ready/complete for cipher reveal
   useEffect(() => {
-    if (segment.status === 'ready' && !hasBeenReady) {
+    if (isReady && !hasBeenReady) {
       setHasBeenReady(true);
     }
-  }, [segment.status, hasBeenReady]);
+  }, [isReady, hasBeenReady]);
 
   // Cipher reveal activates only on the transition from generating -> ready
   const scrambledTitle = useTextScramble(
@@ -73,7 +74,7 @@ export function SegmentCard({ segment, index }: SegmentCardProps) {
     my.set(0);
   }, [mx, my]);
 
-  const isGenerating = segment.status === 'generating';
+  const isGenerating = segment.status === 'generating' || segment.status === 'pending';
 
   return (
     <motion.div
@@ -140,7 +141,7 @@ export function SegmentCard({ segment, index }: SegmentCardProps) {
       )}
 
       {/* Watch button */}
-      {segment.status === 'ready' && (
+      {isReady && (
         <div
           className="flex justify-end"
           onMouseMove={handleWatchArea}
