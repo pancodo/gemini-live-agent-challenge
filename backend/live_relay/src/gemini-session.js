@@ -197,6 +197,21 @@ class GeminiSession {
   }
 
   /**
+   * Sends a text message to Gemini (triggers spoken response).
+   *
+   * @param {string} text
+   */
+  sendText(text) {
+    if (!this.isReady) return;
+    this._send({
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text }] }],
+        turnComplete: true,
+      },
+    });
+  }
+
+  /**
    * Closes the WebSocket connection to Gemini.
    */
   close() {

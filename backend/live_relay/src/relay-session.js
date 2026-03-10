@@ -198,6 +198,8 @@ class RelaySession {
 
         if (msg.type === 'audio' && this._geminiSession) {
           this._geminiSession.sendAudio(msg.data);
+        } else if (msg.type === 'text' && this._geminiSession) {
+          this._geminiSession.sendText(msg.text);
         }
       } catch (err) {
         log.error('Failed to parse browser message', {
