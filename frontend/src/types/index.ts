@@ -46,7 +46,7 @@ export interface AgentState {
 }
 
 // ── Segments ─────────────────────────────────────────────────
-export type SegmentStatus = 'generating' | 'ready';
+export type SegmentStatus = 'generating' | 'ready' | 'complete' | 'pending';
 
 export interface Segment {
   id: string;
