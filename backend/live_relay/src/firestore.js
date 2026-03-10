@@ -23,8 +23,18 @@ let _db = null;
  *
  * @returns {Firestore}
  */
+/** @type {boolean} */
+let _firestoreAvailable = true;
+
 function getDb() {
+  if (!_firestoreAvailable) return null;
   if (!_db) {
+    // Skip Firestore if no credentials are configured
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.GCLOUD_PROJECT) {
+      _firestoreAvailable = false;
+      log.warn('No GCP credentials found, Firestore disabled');
+      return null;
+    }
     const projectId = process.env.GCP_PROJECT_ID;
     _db = new Firestore({ projectId });
     log.info('Firestore client initialized', { projectId: projectId ?? 'default' });
@@ -40,6 +50,7 @@ function getDb() {
  */
 export async function getSessionContext(sessionId) {
   const db = getDb();
+  if (!db) return { documentSummary: '', visualBible: '' };
   const docRef = db.doc(`sessions/${sessionId}`);
   const snapshot = await docRef.get();
 
@@ -73,6 +84,7 @@ export async function getSessionContext(sessionId) {
  */
 export async function writeResumptionToken(sessionId, token) {
   const db = getDb();
+  if (!db) return;
   const docRef = db.doc(`sessions/${sessionId}/liveSession/current`);
 
   await docRef.set(
@@ -94,6 +106,7 @@ export async function writeResumptionToken(sessionId, token) {
  */
 export async function readResumptionToken(sessionId) {
   const db = getDb();
+  if (!db) return null;
   const docRef = db.doc(`sessions/${sessionId}/liveSession/current`);
   const snapshot = await docRef.get();
 
