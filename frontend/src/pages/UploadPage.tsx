@@ -9,27 +9,21 @@ import { uploadDocument } from '../services/upload';
 const SAMPLE_DOCS = [
   {
     filename: 'sample-herodotus-egypt.pdf',
-    label: 'Herodotus — An Account of Egypt',
-    meta: 'c. 440 BC · English · 15 pages · rich visual narrative',
+    label: 'Herodotus — Histories, Book II',
+    meta: 'c. 440 BC · 84 pages · Nile, Pyramids, Pharaohs, Mummies',
     language: 'English',
   },
   {
-    filename: 'sample-ottoman-decree.pdf',
-    label: 'Ottoman Imperial Decree',
-    meta: '982 AH · Ottoman Turkish',
-    language: 'Ottoman Turkish',
-  },
-  {
-    filename: 'sample-magna-carta.pdf',
-    label: 'Magna Carta',
-    meta: '1215 AD · Medieval English',
+    filename: 'sample-marco-polo-travels.pdf',
+    label: 'Marco Polo — The Travels',
+    meta: '13th century · 75 pages · Persia, Silk Road, Kublai Khan',
     language: 'English',
   },
   {
-    filename: 'sample-columbus-letter.pdf',
-    label: 'Columbus Letter to Santangel',
-    meta: '1493 AD · Spanish',
-    language: 'Spanish',
+    filename: 'sample-ibn-battuta-travels.pdf',
+    label: 'Ibn Battuta — Travels in Asia & Africa',
+    meta: '14th century · scanned manuscript · OCR challenge',
+    language: 'Arabic',
   },
 ];
 
