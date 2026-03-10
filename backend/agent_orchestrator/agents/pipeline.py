@@ -344,8 +344,9 @@ def build_new_pipeline(
 
     Returns:
         A SequentialAgent running:
-        document_analyzer → scene_research → aggregator → script_orch
-        → visual_research_orch → visual_director_orch
+        document_analyzer → scene_research → aggregator
+        → ParallelAgent(script_orch, visual_research_orch)
+        → visual_director_orch
     """
     document_analyzer = build_document_analyzer(emitter=emitter)
     scene_research = build_scene_research_orchestrator(emitter=emitter)
@@ -353,19 +354,31 @@ def build_new_pipeline(
     visual_research_orch = build_visual_research_orchestrator(emitter=emitter)
     visual_director_orch = build_visual_director_orchestrator(emitter=emitter)
 
+    # Phase III (script generation) and Phase IV (visual research) are independent:
+    # both only need scene_briefs + visual_bible (Phase I) and aggregated_research
+    # (Aggregator). Neither depends on the other's output. Running them in parallel
+    # saves the full runtime of whichever finishes first (~30-60s saved).
+    synthesis_parallel = ParallelAgent(
+        name="synthesis_parallel",
+        sub_agents=[script_orch, visual_research_orch],
+        description=(
+            "Runs Phase III (script generation) and Phase IV (visual research) "
+            "concurrently — both feed Phase V but neither depends on the other."
+        ),
+    )
+
     return SequentialAgent(
         name="historian_pipeline",
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
-            "scene research (Phase II), script generation (Phase III), "
-            "visual research (Phase IV), and visual generation (Phase V)."
+            "scene research (Phase II), parallel script + visual research "
+            "(Phase III + IV), and visual generation (Phase V)."
         ),
         sub_agents=[
-            document_analyzer,        # Phase I:   OCR → chunks → summaries → scene_briefs
-            scene_research,           # Phase II:  per-scene google_search corroboration
-            _make_aggregator_agent(), # Merge:     research_{n} → aggregated_research
-            script_orch,              # Phase III: script + Firestore + segment_update SSE
-            visual_research_orch,     # Phase IV:  6-stage visual micro-pipeline per scene
-            visual_director_orch,     # Phase V:   Imagen 3 + Veo 2 → GCS + Firestore + SSE
+            document_analyzer,        # Phase I:    OCR → chunks → summaries → scene_briefs
+            scene_research,           # Phase II:   per-scene google_search corroboration
+            _make_aggregator_agent(), # Aggregator: research_{n} → aggregated_research
+            synthesis_parallel,       # Phase III+IV (parallel): script + visual research
+            visual_director_orch,     # Phase V:    Imagen 3 + Veo 2 → GCS + Firestore + SSE
         ],
     )

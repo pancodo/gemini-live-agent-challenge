@@ -30,9 +30,12 @@ As each scene's manifest completes, the orchestrator:
 Session state contract
 ----------------------
 **Inputs** (must be set before Phase IV runs):
-  - ``session.state["script"]``       — list[dict] of SegmentScript dicts (Phase III)
-  - ``session.state["scene_briefs"]`` — list[dict] of SceneBrief dicts (Phase I)
-  - ``session.state["visual_bible"]`` — Imagen 3 style guide (Phase I)
+  - ``session.state["scene_briefs"]`` — list[dict] of SceneBrief dicts (Phase I) **required**
+  - ``session.state["visual_bible"]`` — Imagen 3 style guide (Phase I) **required**
+  - ``session.state["script"]``       — list[dict] of SegmentScript dicts (Phase III) **optional**
+    When present, title/mood are taken from the script segment; otherwise stub values
+    from the SceneBrief are used.  This allows Phase III and Phase IV to run in
+    parallel via a ParallelAgent without a sequential dependency.
 
 **Outputs** (written by this agent):
   - ``session.state["visual_research_manifest"]`` — dict[scene_id, dict] of serialised
@@ -131,7 +134,7 @@ async def _update_segment_status_in_firestore(
         .document(segment_id)
     )
     try:
-        await ref.update({"status": "visual_ready"})
+        await ref.set({"status": "visual_ready"}, merge=True)
     except Exception as exc:
         logger.warning("Failed to update segment status for %s: %s", segment_id, exc)
 
@@ -450,42 +453,45 @@ class VisualResearchOrchestrator(BaseAgent):
             )
 
         # ------------------------------------------------------------------
-        # Load script segments and scene briefs
+        # Load scene briefs (primary — no script dependency so Phase III+IV
+        # can run in parallel).  If script is already in state (sequential
+        # fallback or re-run), enrich stub segments with title/mood from it.
         # ------------------------------------------------------------------
-        script_raw: list[dict[str, Any]] = ctx.session.state.get("script", [])
         scene_briefs_raw: list[dict[str, Any]] = ctx.session.state.get("scene_briefs", [])
 
-        if not script_raw:
+        if not scene_briefs_raw:
             logger.error(
-                "Phase IV: session.state['script'] is empty for session %s. "
-                "Ensure Phase III (ScriptAgentOrchestrator) completed successfully.",
+                "Phase IV: session.state['scene_briefs'] is empty for session %s. "
+                "Ensure Phase I (DocumentAnalyzerAgent) completed successfully.",
                 session_id,
             )
             return
 
-        # Build scene_id → SceneBrief lookup for fast access
-        briefs_by_id: dict[str, dict[str, Any]] = {
-            b["scene_id"]: b for b in scene_briefs_raw if "scene_id" in b
+        # Optional enrichment from script (available when running sequentially)
+        script_raw: list[dict[str, Any]] = ctx.session.state.get("script", [])
+        script_by_scene: dict[str, dict[str, Any]] = {
+            s["scene_id"]: s for s in script_raw if "scene_id" in s
         }
 
-        # Match each SegmentScript to its SceneBrief
+        # Build (brief, segment) pairs — use script segment when available,
+        # otherwise construct a stub from the scene brief so Phase IV can run
+        # in parallel with Phase III without waiting for it.
         pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        for seg in script_raw:
-            scene_id = seg.get("scene_id", "")
-            brief = briefs_by_id.get(scene_id)
-            if brief:
-                pairs.append((brief, seg))
-            else:
-                logger.warning(
-                    "Phase IV: no SceneBrief found for segment %s (scene_id=%s) — skipping",
-                    seg.get("id"),
-                    scene_id,
-                )
+        for brief in scene_briefs_raw:
+            scene_id = brief.get("scene_id", "")
+            if not scene_id:
+                continue
+            seg = script_by_scene.get(scene_id) or {
+                "id": scene_id,
+                "scene_id": scene_id,
+                "title": brief.get("title", ""),
+                "mood": "",
+            }
+            pairs.append((brief, seg))
 
         if not pairs:
             logger.error(
-                "Phase IV: no valid (brief, segment) pairs for session %s. "
-                "Check that scene_briefs and script have matching scene_ids.",
+                "Phase IV: no valid (brief, segment) pairs for session %s.",
                 session_id,
             )
             return
