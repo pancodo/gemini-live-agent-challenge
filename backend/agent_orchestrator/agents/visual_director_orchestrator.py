@@ -61,6 +61,12 @@ from google.cloud import firestore, storage
 from google.genai import types as genai_types
 from pydantic import ConfigDict, Field
 
+from .historical_period_profiles import (
+    detect_period_key,
+    get_mood_lighting,
+    get_period_negative_prompt_additions,
+    HISTORICAL_PERIOD_PROFILES,
+)
 from .sse_helpers import (
     SSEEmitter,
     build_agent_status_event,
@@ -85,14 +91,17 @@ _VEO2_MAX_POLLS: int = 30  # 30 × 20s = 10-minute timeout per operation
 # Combined with the enriched_prompt base, this produces four visually coherent
 # but compositionally distinct images per scene.
 _FRAME_MODIFIERS: list[str] = [
-    "Wide establishing shot. Full scene composition, 16:9 cinematic framing, "
-    "environment and spatial context dominant.",
-    "Medium shot. Focus on central figures and primary objects. "
-    "Human scale, interaction and relationship visible.",
-    "Close-up detail shot. Emphasise textures, materials, and atmospheric elements. "
-    "Macro detail that grounds the period and place.",
-    "Dramatic alternative angle. Low or elevated perspective, "
-    "cinematic depth of field, strong foreground-to-background layering.",
+    "Wide establishing shot, 24mm anamorphic lens. Full scene composition, "
+    "16:9 cinematic framing, environment and spatial context dominant, "
+    "foreground-to-background depth layering, rule of thirds.",
+    "Medium shot, 50mm lens. Focus on central figures and primary objects. "
+    "Human scale, relationships and interactions visible, rule of thirds composition.",
+    "Close-up detail shot, 85mm macro lens. Emphasise textures, materials, "
+    "and atmospheric elements. Shallow depth of field, f/2.8, "
+    "period-specific surface details sharp against blurred background.",
+    "Dramatic low-angle shot, 35mm anamorphic lens. Strong foreground-to-background "
+    "layering, architectural lines converging overhead, cinematic depth of field, "
+    "heroic scale perspective.",
 ]
 
 _BASE_NEGATIVE_PROMPT: str = (
@@ -178,6 +187,12 @@ def _build_imagen_prompt(
     """
     frame_modifier = _FRAME_MODIFIERS[frame_idx % len(_FRAME_MODIFIERS)]
 
+    # Shared: extract mood and era for lighting / negative prompt enrichment
+    mood: str = segment.get("mood", "cinematic")
+    lighting_directive: str = get_mood_lighting(mood)
+    era: str = segment.get("era", "") or (manifest or {}).get("era", "")
+    period_additions: str = get_period_negative_prompt_additions(era)
+
     # --- Priority 1: Use enriched research prompt from Phase IV ---
     if manifest and manifest.get("enriched_prompt"):
         enriched: str = manifest["enriched_prompt"]
@@ -187,7 +202,8 @@ def _build_imagen_prompt(
         prompt = (
             f"{visual_bible}\n\n"
             f"{enriched}\n\n"
-            f"Frame composition: {frame_modifier}"
+            f"Frame composition: {frame_modifier}\n\n"
+            f"Lighting: {lighting_directive}"
         )
 
         negative = _BASE_NEGATIVE_PROMPT
@@ -196,6 +212,8 @@ def _build_imagen_prompt(
             # (e.g. "no mechanical clocks visible", "oil lanterns only").
             # Appending them strengthens anachronism prevention.
             negative = f"{negative}, {', '.join(era_markers)}"
+        if period_additions:
+            negative = f"{negative}, {period_additions}"
 
         return prompt, negative
 
@@ -206,20 +224,27 @@ def _build_imagen_prompt(
         prompt = (
             f"{visual_bible}\n\n"
             f"{desc}\n\n"
-            f"Frame composition: {frame_modifier}"
+            f"Frame composition: {frame_modifier}\n\n"
+            f"Lighting: {lighting_directive}"
         )
-        return prompt, _BASE_NEGATIVE_PROMPT
+        negative = _BASE_NEGATIVE_PROMPT
+        if period_additions:
+            negative = f"{negative}, {period_additions}"
+        return prompt, negative
 
     # --- Priority 3: Generic fallback ---
     title: str = segment.get("title", "historical documentary scene")
-    mood: str = segment.get("mood", "cinematic")
     prompt = (
         f"{visual_bible}\n\n"
         f"A {mood} historical documentary scene: {title}. "
         f"Period-accurate, no anachronisms. "
-        f"Frame composition: {frame_modifier}"
+        f"Frame composition: {frame_modifier}\n\n"
+        f"Lighting: {lighting_directive}"
     )
-    return prompt, _BASE_NEGATIVE_PROMPT
+    negative = _BASE_NEGATIVE_PROMPT
+    if period_additions:
+        negative = f"{negative}, {period_additions}"
+    return prompt, negative
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +259,7 @@ async def _generate_one_frame(
     negative_prompt: str,
     bucket_name: str,
     blob_name: str,
+    enhance_prompt: bool = True,
 ) -> str | None:
     """Generate a single Imagen 3 frame, upload to GCS, return GCS URI.
 
@@ -247,6 +273,8 @@ async def _generate_one_frame(
         negative_prompt: Comma-separated elements to exclude.
         bucket_name: GCS bucket for upload.
         blob_name: Target blob path within the bucket.
+        enhance_prompt: Whether Imagen 3 should auto-enhance the prompt.
+            Disabled for long enriched prompts that are already detailed.
 
     Returns:
         GCS URI string or ``None`` on failure.
@@ -264,7 +292,7 @@ async def _generate_one_frame(
                     person_generation="allow_adult",
                     output_mime_type="image/jpeg",
                     output_compression_quality=90,
-                    enhance_prompt=True,
+                    enhance_prompt=enhance_prompt,
                 ),
             )
 
@@ -331,6 +359,9 @@ async def _generate_segment_images(
         prompt, negative = _build_imagen_prompt(
             segment, manifest, visual_bible, frame_idx
         )
+        # Disable enhancement for long enriched prompts — they're already
+        # detailed enough and enhancement can dilute period-specific vocabulary.
+        use_enhance = len(prompt.split()) < 80
         blob_name = (
             f"sessions/{session_id}/images/{segment_id}/frame_{frame_idx}.jpg"
         )
@@ -342,6 +373,7 @@ async def _generate_segment_images(
                 negative_prompt=negative,
                 bucket_name=bucket_name,
                 blob_name=blob_name,
+                enhance_prompt=use_enhance,
             )
         )
 
