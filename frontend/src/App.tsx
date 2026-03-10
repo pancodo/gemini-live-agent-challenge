@@ -1,12 +1,14 @@
-import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { UploadPage } from './pages/UploadPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { PlayerPage } from './pages/PlayerPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { useSessionStore } from './store/sessionStore';
 import { VoiceLayer } from './components/voice/VoiceLayer';
 import { IrisOverlay } from './components/player/IrisOverlay';
+import { TopNav } from './components/workspace/TopNav';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2, staleTime: 5000 } },
@@ -23,8 +25,12 @@ function PlayerGuard() {
 }
 
 function RootLayout() {
+  const location = useLocation();
+  const isPlayer = location.pathname.startsWith('/player');
+
   return (
     <>
+      {!isPlayer && <TopNav />}
       <Outlet />
       <VoiceLayer />
       <IrisOverlay />
@@ -39,6 +45,7 @@ const router = createBrowserRouter([
       { path: '/', element: <UploadPage /> },
       { path: '/workspace', element: <WorkspaceGuard /> },
       { path: '/player/:segmentId', element: <PlayerGuard /> },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
 ]);

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { TopNav } from '../components/workspace/TopNav';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ResearchPanel } from '../components/workspace/ResearchPanel';
 import { ExpeditionLog } from '../components/workspace/ExpeditionLog';
@@ -101,23 +100,30 @@ export function WorkspacePage() {
     }
   }, [status, sessionId, setSegment]);
 
-  // Auto-watch: navigate to player when status becomes ready (if enabled)
+  // Auto-watch: navigate to player when status is ready/playing (if enabled).
+  // Works on mount if status is already 'ready' — no transition needed.
+  // Resets the fired flag when the setting is toggled off so re-enabling fires again.
   useEffect(() => {
-    if (!settings.autoWatch || status !== 'ready' || autoWatchFired.current) return;
-    const readySegs = Object.values(segments).filter(
+    if (!settings.autoWatch) {
+      autoWatchFired.current = false;
+      return;
+    }
+    if (autoWatchFired.current) return;
+    if (status !== 'ready' && status !== 'playing') return;
+
+    const readySegment = Object.values(segments).find(
       (s) => s.status === 'ready' || s.status === 'complete',
     );
-    if (readySegs.length > 0 && readySegs[0]) {
-      autoWatchFired.current = true;
-      triggerIrisWs(`/player/${readySegs[0].id}`);
-    }
-  }, [status, settings.autoWatch, segments, triggerIrisWs]);
+    if (!readySegment) return;
+
+    autoWatchFired.current = true;
+    triggerIrisWs(`/player/${readySegment.id}`);
+  }, [settings.autoWatch, status, segments, triggerIrisWs]);
 
   if (!sessionId) return <Navigate to="/" replace />;
 
   return (
     <>
-      <TopNav />
       <WorkspaceLayout>
         {/* Right panel — content switches on session status */}
         <div className="flex flex-col h-full">
