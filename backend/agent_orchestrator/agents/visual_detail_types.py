@@ -178,6 +178,14 @@ class VisualDetailFragment(BaseModel):
         default_factory=list,
         description='e.g. ["oil lanterns only", "no mechanical clocks visible"]',
     )
+    subjects: list[str] = Field(
+        default_factory=list,
+        description="People in scene: count, posture, social role, occupation — described by activity and clothing, not physical appearance.",
+    )
+    compositional_notes: list[str] = Field(
+        default_factory=list,
+        description="Foreground/background spatial arrangement, depth cues, compositional plane separation.",
+    )
 
 
 class MergedVisualDetail(BaseModel):
@@ -195,6 +203,14 @@ class MergedVisualDetail(BaseModel):
     clothing: list[str] = Field(default_factory=list)
     atmosphere: list[str] = Field(default_factory=list)
     era_markers: list[str] = Field(default_factory=list)
+    subjects: list[str] = Field(
+        default_factory=list,
+        description="Merged subject descriptions across all accepted sources.",
+    )
+    compositional_notes: list[str] = Field(
+        default_factory=list,
+        description="Merged compositional arrangement notes.",
+    )
 
 
 class VisualDetailManifest(BaseModel):
@@ -223,6 +239,10 @@ class VisualDetailManifest(BaseModel):
     reference_sources: list[EvaluatedSource] = Field(
         default_factory=list,
         description="Full audit trail of every evaluated source (accepted and rejected).",
+    )
+    negative_prompt: str = Field(
+        default="",
+        description="Pre-built negative prompt string for Imagen 3, derived from era_markers and period-specific exclusions.",
     )
 
 

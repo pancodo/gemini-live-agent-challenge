@@ -163,6 +163,7 @@ async def stage_0_generate_queries(
     hook = scene_brief.get("cinematic_hook", "")
     mood = scene_brief.get("mood", "")
     excerpt = scene_brief.get("document_excerpt", "")[:400]
+    narrative_role = scene_brief.get("narrative_role", "development")
 
     prompt = f"""\
 You are building a targeted visual reference research set for an AI documentary scene.
@@ -173,11 +174,15 @@ Scene details:
 - Key entities: {", ".join(entities[:8])}
 - Cinematic hook: {hook}
 - Mood: {mood}
+- Narrative role in documentary: {narrative_role}
 - Document excerpt: {excerpt}
 
-Generate exactly 4 to 6 web search queries to find period-accurate VISUAL reference
-materials for this scene: archival photographs, period illustrations, woodcuts, maps,
-museum collection entries, engravings, or primary-source images.
+Generate EXACTLY 5-7 queries. Include ALL of the following query types:
+- At least 1 query targeting archival photographs or period illustrations (add "archival photograph" or "period illustration" or "museum collection" to the query)
+- At least 1 query targeting academic/scholarly sources (add "academic study" or "JSTOR" or "primary source" or "site:jstor.org")
+- At least 1 query for maps, manuscripts, or material culture objects (add "manuscript" or "map" or "museum artefact")
+- At least 1 highly specific entity query using exact names and dates from the document excerpt
+- At least 1 query for architectural or material details of the specific location/era
 
 Rules:
 - Every query MUST include the era/date AND the location/region
@@ -189,7 +194,7 @@ Rules:
 - BAD:  "historical market" (no era or location)
 
 Output ONLY a JSON array of query strings. No preamble, no explanation.
-["query 1", "query 2", "query 3", "query 4"]
+["query 1", "query 2", "query 3", "query 4", "query 5"]
 """
 
     async with semaphore:
@@ -209,7 +214,7 @@ Output ONLY a JSON array of query strings. No preamble, no explanation.
     queries = _parse_json_list(response.text)
     valid = [q for q in queries if isinstance(q, str) and len(q) > 10]
     logger.debug("Stage 0: generated %d queries for scene %s", len(valid), scene_brief.get("scene_id"))
-    return valid[:6]
+    return valid[:7]
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +255,15 @@ async def stage_1_discover_sources(
             try:
                 response = await client.aio.models.generate_content(
                     model="gemini-2.0-flash",
-                    contents=f"Find visual reference sources for: {query}",
+                    contents=(
+                        f"Find authoritative visual reference sources for this historical research query: {query}\n\n"
+                        "Prefer sources from:\n"
+                        "- Institutional archives (.edu, .gov, .museum, national archive domains)\n"
+                        "- Academic databases (jstor.org, archive.org, hathitrust.org, europeana.eu)\n"
+                        "- Museum collection databases and university press publications\n"
+                        "- Primary source digitization projects\n\n"
+                        "Return the most authoritative URLs found."
+                    ),
                     config=genai_types.GenerateContentConfig(
                         tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
                         max_output_tokens=128,
@@ -484,7 +497,11 @@ async def _fetch_image_description(
     """Describe an archival image from a URL using Gemini 2.0 Flash multimodal."""
     mime_type = _detect_image_mime(url)
     prompt = """\
-Analyze this historical reference image. Output a JSON object with these fields:
+Analyze this historical reference image. The image may be a photograph, painting, \
+engraving, or manuscript illumination — describe what you see in a way that reflects \
+the medium.
+
+Output a JSON object with these fields:
 - visual_description: 2-3 sentences describing the scene
 - lighting: specific lighting conditions (e.g. "side-lit by oil lamp")
 - materials: visible materials and textures (e.g. "worn stone floor")
@@ -493,6 +510,11 @@ Analyze this historical reference image. Output a JSON object with these fields:
 - clothing: garments and textiles visible (e.g. "embroidered kaftan")
 - atmosphere: overall mood conveyed by the image (e.g. "dense, crowded market")
 - era_markers: visible period cues (e.g. "oil lanterns, no electric lighting")
+- subjects: array of short phrases describing people by activity/clothing/posture \
+(not physical appearance), e.g. ["merchants in turbans arranging goods", \
+"porter bent under heavy load"]. Empty array if no people visible.
+- compositional_notes: spatial arrangement, foreground/background separation, depth \
+cues, e.g. ["arcade in foreground frames distant crowd", "low horizon with sky dominant"].
 Output ONLY valid JSON, no markdown fences.
 """
     async with semaphore:
@@ -584,16 +606,25 @@ async def _quality_evaluate(
     fetched: FetchedContent,
     client: google_genai.Client,
     semaphore: asyncio.Semaphore,
+    era: str = "",
 ) -> tuple[int, int, int, str]:
     """Call A: evaluate source quality independently of scene context.
+
+    Args:
+        fetched: Source content to evaluate.
+        client: Shared google-genai async client.
+        semaphore: Rate-limit gate.
+        era: Required era/period for the scene (used for era_accuracy scoring).
 
     Returns:
         Tuple of (authority_score, detail_density_score, era_accuracy_score, reason).
         Returns (0, 0, 0, reason) on failure.
     """
+    era_context = f"\nREQUIRED ERA FOR THIS SCENE: {era}\nera_accuracy should score how well the source's era coverage matches this required era.\n" if era else ""
+
     prompt = f"""\
 You are evaluating a historical source for visual research quality.
-
+{era_context}
 SOURCE CONTENT (first 3000 characters):
 {fetched.content[:3000]}
 
@@ -608,7 +639,7 @@ Score this source on THREE dimensions (1–10 each):
 REJECT threshold: ANY score below 5 means reject the source entirely.
 
 Output ONLY a JSON object:
-{{"authority": N, "detail_density": N, "era_accuracy": N, "reason": "one sentence", "accept": true|false}}
+{{"authority": N, "detail_density": N, "era_accuracy": N, "reason": "one sentence"}}
 """
     async with semaphore:
         try:
@@ -729,7 +760,8 @@ async def stage_4_dual_evaluate(
     rejected: list[EvaluatedSource] = []
 
     # ---------- Call A: Quality evaluation (parallel) ----------
-    quality_tasks = [_quality_evaluate(src, client, semaphore) for src in fetched_sources]
+    era = scene_brief.get("era", "")
+    quality_tasks = [_quality_evaluate(src, client, semaphore, era=era) for src in fetched_sources]
     quality_results = await asyncio.gather(*quality_tasks)
 
     quality_passed: list[tuple[FetchedContent, int, int, int, str]] = []
@@ -852,13 +884,15 @@ Do NOT invent, infer, or generalise beyond what is stated.
 
 Output ONLY a JSON object with these fields (use short, specific phrases — not sentences):
 {{
-  "lighting":      ["specific lighting detail", ...],
-  "materials":     ["specific material or texture", ...],
-  "color_palette": ["specific color name", ...],
-  "architecture":  ["specific structural detail", ...],
-  "clothing":      ["specific garment or textile", ...],
-  "atmosphere":    ["specific atmospheric quality", ...],
-  "era_markers":   ["period-specific element NOT found in modern settings", ...]
+  "lighting":            ["specific lighting detail", ...],
+  "materials":           ["specific material or texture", ...],
+  "color_palette":       ["specific color name", ...],
+  "architecture":        ["specific structural detail", ...],
+  "clothing":            ["specific garment or textile", ...],
+  "atmosphere":          ["specific atmospheric quality", ...],
+  "era_markers":         ["period-specific element NOT found in modern settings", ...],
+  "subjects":            ["person described by activity/clothing/posture, NOT physical appearance", ...],
+  "compositional_notes": ["spatial arrangement, depth cues, foreground vs background details", ...]
 }}
 Omit any field for which there is NO evidence in the passages.
 """
@@ -882,6 +916,8 @@ Omit any field for which there is NO evidence in the passages.
                     clothing=list(data.get("clothing", [])),
                     atmosphere=list(data.get("atmosphere", [])),
                     era_markers=list(data.get("era_markers", [])),
+                    subjects=list(data.get("subjects", [])),
+                    compositional_notes=list(data.get("compositional_notes", [])),
                 )
             except Exception as exc:
                 logger.warning("Stage 5 extraction failed for %s: %s", src.url, exc)
@@ -917,6 +953,7 @@ def _merge_detail_fields(fragments: list[VisualDetailFragment]) -> MergedVisualD
     merged: dict[str, list[str]] = {
         "lighting": [], "materials": [], "color_palette": [],
         "architecture": [], "clothing": [], "atmosphere": [], "era_markers": [],
+        "subjects": [], "compositional_notes": [],
     }
     seen: dict[str, set[str]] = {k: set() for k in merged}
 
@@ -938,6 +975,7 @@ async def stage_6_synthesize_manifest(
     scene_brief: dict[str, Any],
     segment_id: str,
     client: google_genai.Client,
+    visual_bible: str = "",
 ) -> VisualDetailManifest:
     """Synthesise all extracted fragments into a final VisualDetailManifest.
 
@@ -976,6 +1014,7 @@ async def stage_6_synthesize_manifest(
             sources_accepted=0,
             sources_rejected=len(rejected_sources),
             reference_sources=all_sources,
+            negative_prompt="",
         )
 
     # Serialize merged details for the prompt
@@ -986,11 +1025,16 @@ async def stage_6_synthesize_manifest(
         if values
     )
 
+    visual_bible_section = (
+        f"GLOBAL VISUAL BIBLE (Imagen 3 style guide for this entire documentary):\n{visual_bible}\n\n"
+        if visual_bible else ""
+    )
+    visual_bible_style_prefix = visual_bible.split(".")[0].strip() if visual_bible else "a cinematic historical documentary"
+
     prompt = f"""\
 You are the visual director for an AI-generated historical documentary.
-Write a single Imagen 3 image generation prompt for the following scene.
 
-SCENE BRIEF:
+{visual_bible_section}SCENE BRIEF:
 Title: {scene_brief.get('title', '')}
 Era: {scene_brief.get('era', '')}
 Location: {scene_brief.get('location', '')}
@@ -1003,12 +1047,20 @@ Document excerpt: {scene_brief.get('document_excerpt', '')[:300]}
 PERIOD-ACCURATE VISUAL DETAILS (sourced from archival research):
 {details_text}
 
-Write a 200–400 word Imagen 3 prompt as a single flowing descriptive paragraph.
-Requirements:
-- Begin with a cinematic framing statement (camera angle, composition, 16:9)
-- Incorporate ALL of the period-accurate details above (lighting, materials, palette,
-  architecture, clothing, atmosphere, era_markers)
-- End with era exclusion clauses: "Exclude: [list each era_marker negated]"
+Write a MASTER VISUAL PROMPT of 200-300 words that serves as the shared foundation \
+for 4 cinematic frames of this scene.
+
+This master prompt will be used for all four frames (wide establishing shot, medium \
+shot, close-up detail, dramatic angle). It must be:
+- Evocative but compositionally flexible (describes the scene's essence, not one fixed framing)
+- Rich with period-accurate visual vocabulary from the sourced details above
+- Strong on: lighting conditions, material textures, color palette, atmospheric quality
+- Free of anachronisms — use the era_markers list as visual exclusion anchors
+
+Open with: "In the style of {visual_bible_style_prefix}."
+Include: the scene's specific location and era + all extracted lighting/materials/palette/architecture \
+details + subject descriptions (people by occupation/posture/clothing only) + atmospheric qualities
+End with era exclusion line: "Exclude from all frames: [comma-separated era_markers]."
 - No bullet points, no headers — flowing prose only
 - No modern elements whatsoever; no anachronisms
 - Tone must match the scene mood: {scene_brief.get('mood', 'cinematic')}
@@ -1022,13 +1074,17 @@ Output ONLY the prompt text, no preamble.
             contents=prompt,
             config=genai_types.GenerateContentConfig(
                 max_output_tokens=1024,
-                temperature=0.4,
+                temperature=0.2,
             ),
         )
         enriched_prompt = response.text.strip()
     except Exception as exc:
         logger.warning("Stage 6 synthesis failed for scene %s: %s", scene_brief.get("scene_id"), exc)
         enriched_prompt = ""
+
+    # Build negative prompt from era_markers
+    era_markers_list = merged.era_markers if merged else []
+    negative_prompt = ", ".join(era_markers_list) if era_markers_list else ""
 
     return VisualDetailManifest(
         scene_id=scene_brief.get("scene_id", ""),
@@ -1038,4 +1094,5 @@ Output ONLY the prompt text, no preamble.
         sources_accepted=len(accepted_sources),
         sources_rejected=len(rejected_sources),
         reference_sources=all_sources,
+        negative_prompt=negative_prompt,
     )

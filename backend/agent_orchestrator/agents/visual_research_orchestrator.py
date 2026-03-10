@@ -318,6 +318,7 @@ async def _run_scene_pipeline(
         logger.warning("Stage 4: no accepted sources for %s — manifest will be empty", scene_id)
 
     # ---- Stage 6: Manifest Synthesis ----
+    visual_bible = ctx.session.state.get("visual_bible", "")
     manifest = await stage_6_synthesize_manifest(
         fragments,
         accepted_sources,
@@ -325,6 +326,7 @@ async def _run_scene_pipeline(
         scene_brief,
         segment_id,
         client,
+        visual_bible=visual_bible,
     )
 
     t_elapsed = round(time.monotonic() - t_start, 1)
