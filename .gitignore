@@ -44,3 +44,6 @@ pnpm-debug.log*
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
+service-account-key.json
+*-service-account*.json
+*-key.json
