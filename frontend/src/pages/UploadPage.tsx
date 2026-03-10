@@ -1,9 +1,91 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DropZone } from '../components/upload';
 import { useSessionStore } from '../store/sessionStore';
 import { useResearchStore } from '../store/researchStore';
 import { usePlayerStore } from '../store/playerStore';
+import { uploadDocument } from '../services/upload';
+
+const SAMPLE_DOCS = [
+  {
+    filename: 'sample-herodotus-egypt.pdf',
+    label: 'Herodotus — An Account of Egypt',
+    meta: 'c. 440 BC · English · 15 pages · rich visual narrative',
+    language: 'English',
+  },
+  {
+    filename: 'sample-ottoman-decree.pdf',
+    label: 'Ottoman Imperial Decree',
+    meta: '982 AH · Ottoman Turkish',
+    language: 'Ottoman Turkish',
+  },
+  {
+    filename: 'sample-magna-carta.pdf',
+    label: 'Magna Carta',
+    meta: '1215 AD · Medieval English',
+    language: 'English',
+  },
+  {
+    filename: 'sample-columbus-letter.pdf',
+    label: 'Columbus Letter to Santangel',
+    meta: '1493 AD · Spanish',
+    language: 'Spanish',
+  },
+];
+
+function SampleDocuments() {
+  const navigate = useNavigate();
+  const setSession = useSessionStore((s) => s.setSession);
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const handleSample = useCallback(
+    async (doc: (typeof SAMPLE_DOCS)[number]) => {
+      setLoading(doc.filename);
+      try {
+        const res = await fetch(`/${doc.filename}`);
+        if (!res.ok) throw new Error('fetch failed');
+        const blob = await res.blob();
+        const file = new File([blob], doc.filename, { type: 'application/pdf' });
+        const { sessionId, gcsPath } = await uploadDocument(file, doc.language);
+        setSession({ sessionId, gcsPath, status: 'processing' });
+        navigate('/workspace');
+      } catch {
+        setLoading(null);
+      }
+    },
+    [navigate, setSession]
+  );
+
+  return (
+    <div className="w-full max-w-xl mt-4">
+      <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--muted)] font-sans mb-2 text-center">
+        or try a sample
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {SAMPLE_DOCS.map((doc) => (
+          <button
+            key={doc.filename}
+            onClick={() => handleSample(doc)}
+            disabled={loading !== null}
+            className="flex items-center justify-between px-4 py-2.5 rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] hover:border-[var(--gold)]/40 hover:bg-[var(--bg3)] transition-colors text-left disabled:opacity-50"
+          >
+            <div>
+              <p className="text-[13px] text-[var(--text)] font-sans">{doc.label}</p>
+              <p className="text-[11px] text-[var(--muted)] font-sans mt-0.5">{doc.meta}</p>
+            </div>
+            {loading === doc.filename ? (
+              <span className="inline-block w-3.5 h-3.5 border border-[var(--muted)]/40 border-t-[var(--gold)] rounded-full animate-spin flex-shrink-0" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[var(--muted)] flex-shrink-0">
+                <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function DevSeedBar() {
   const navigate = useNavigate();
@@ -67,7 +149,6 @@ function DevSeedBar() {
 export function UploadPage() {
   return (
     <main className="min-h-screen bg-[var(--bg)] flex flex-col">
-      {/* Top logo/header */}
       <header className="pt-16 pb-6 text-center">
         <p
           className="text-[10px] uppercase tracking-[0.55em] text-[var(--gold-d)] mb-4"
@@ -86,12 +167,11 @@ export function UploadPage() {
         </p>
       </header>
 
-      {/* Centered drop zone */}
-      <section className="flex-1 flex items-center justify-center px-8 pb-16">
+      <section className="flex-1 flex flex-col items-center justify-center px-8 pb-16">
         <DropZone />
+        <SampleDocuments />
       </section>
 
-      {/* Bottom tagline */}
       <footer className="pb-6 text-center">
         <p className="text-[11px] text-[var(--muted)]/60 font-sans tracking-[0.1em]">
           Powered by Google Gemini &middot; Imagen 3 &middot; Cloud Document AI
