@@ -143,6 +143,10 @@ class RelaySession {
       this._sendToBrowser({ type: 'audio', data });
     };
 
+    session.onText = (text) => {
+      this._sendToBrowser({ type: 'transcript', text });
+    };
+
     session.onInterrupted = () => {
       log.info('Gemini interrupted playback', { sessionId: this._sessionId });
       this._sendToBrowser({ type: 'interrupted' });

@@ -108,6 +108,9 @@ class GeminiSession {
     /** @type {((token: string) => void) | null} */
     this.onResumptionToken = null;
 
+    /** @type {((text: string) => void) | null} */
+    this.onText = null;
+
     /** @type {(() => void) | null} */
     this.onGoAway = null;
 
@@ -320,6 +323,9 @@ class GeminiSession {
         for (const part of sc.modelTurn.parts) {
           if (part.inlineData?.data) {
             this.onAudio?.(part.inlineData.data);
+          }
+          if (part.text) {
+            this.onText?.(part.text);
           }
         }
       }
