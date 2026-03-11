@@ -31,6 +31,7 @@ from ..models import (
     ClipStartResponse,
     ClipStatusResponse,
     CreateSessionResponse,
+    GroundingSourceItem,
     GroundingSourcesResponse,
     SegmentResponse,
     SegmentsResponse,
@@ -225,6 +226,83 @@ async def get_session_segments(session_id: str) -> SegmentsResponse:
 
     segments.sort(key=lambda s: s.id)
     return SegmentsResponse(segments=segments)
+
+
+@router.get(
+    "/session/{session_id}/segments/{segment_id}/sources",
+    response_model=GroundingSourcesResponse,
+)
+async def get_segment_sources(
+    session_id: str, segment_id: str
+) -> GroundingSourcesResponse:
+    """Return grounding evidence sources for a segment from the visual research manifest."""
+    db = get_db()
+
+    # 1. Find the segment to get its sceneId
+    try:
+        seg_doc = (
+            await db.collection("sessions")
+            .document(session_id)
+            .collection("segments")
+            .document(segment_id)
+            .get()
+        )
+    except Exception as exc:
+        logger.exception(
+            "Firestore read failed for segment %s/%s", session_id, segment_id
+        )
+        return GroundingSourcesResponse(sources=[])
+
+    if not seg_doc.exists:
+        return GroundingSourcesResponse(sources=[])
+
+    seg_data = seg_doc.to_dict() or {}
+    scene_id = seg_data.get("sceneId", "")
+    if not scene_id:
+        return GroundingSourcesResponse(sources=[])
+
+    # 2. Fetch the visual manifest for this scene
+    try:
+        manifest_doc = (
+            await db.collection("sessions")
+            .document(session_id)
+            .collection("visualManifests")
+            .document(scene_id)
+            .get()
+        )
+    except Exception as exc:
+        logger.exception(
+            "Firestore read failed for manifest %s/%s", session_id, scene_id
+        )
+        return GroundingSourcesResponse(sources=[])
+
+    if not manifest_doc.exists:
+        return GroundingSourcesResponse(sources=[])
+
+    manifest_data = manifest_doc.to_dict() or {}
+    reference_sources: list[dict] = manifest_data.get("reference_sources", [])
+
+    # 3. Map accepted sources to GroundingSourceItem
+    items: list[GroundingSourceItem] = []
+    for src in reference_sources:
+        if not src.get("accepted", False):
+            continue
+        # relevance_score is 1–10 in Firestore; normalise to 0–1
+        raw_relevance = src.get("relevance_score", 0)
+        normalised = round(raw_relevance / 10, 2) if raw_relevance else 0.0
+        items.append(
+            GroundingSourceItem(
+                url=src.get("url", ""),
+                title=src.get("title", ""),
+                relevanceScore=normalised,
+                acceptedBy=[src.get("source_type", "visual_research")],
+            )
+        )
+
+    # 4. Sort by relevanceScore descending
+    items.sort(key=lambda s: s.relevanceScore, reverse=True)
+
+    return GroundingSourcesResponse(sources=items)
 
 
 # ---------------------------------------------------------------------------
