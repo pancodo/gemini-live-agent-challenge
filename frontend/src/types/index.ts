@@ -56,6 +56,7 @@ export interface AgentState {
   evaluatedSources?: EvaluatedSource[];
   currentActivity?: string;
   visualResearchPrompt?: string;
+  errorMessage?: string;
 }
 
 // ── Segments ─────────────────────────────────────────────────
@@ -97,6 +98,7 @@ export interface AgentStatusEvent {
   query?: string;
   facts?: string[];
   elapsed?: number;
+  errorMessage?: string;
 }
 
 export interface SegmentUpdateEvent {

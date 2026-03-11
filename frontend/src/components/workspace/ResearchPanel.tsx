@@ -287,7 +287,9 @@ function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
 
   const statusClass = agent.status === 'searching' || agent.status === 'evaluating'
     ? agent.status
-    : '';
+    : agent.status === 'error'
+      ? 'error'
+      : '';
 
   const isActive = agent.status === 'searching' || agent.status === 'evaluating';
 
@@ -315,10 +317,16 @@ function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
               ? { scale: [1, 1.3, 1], opacity: [1, 0.6, 1] }
               : agent.status === 'evaluating' && !reducedMotion
                 ? { scale: [1, 1.15, 1] }
-                : {}
+                : agent.status === 'error' && !reducedMotion
+                  ? { x: [0, -2, 2, -1, 1, 0] }
+                  : {}
           }
           transition={
-            isActive ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : {}
+            isActive
+              ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' }
+              : agent.status === 'error'
+                ? { duration: 0.4, ease: 'easeOut' }
+                : {}
           }
         />
 
@@ -343,6 +351,20 @@ function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
               {agent.query}
             </span>
           </p>
+          <AnimatePresence>
+            {agent.status === 'error' && agent.errorMessage && (
+              <motion.p
+                key="error-msg"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="font-sans text-[11px] text-red-400 mt-1 leading-snug line-clamp-2"
+              >
+                {agent.errorMessage}
+              </motion.p>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Elapsed timer */}
@@ -455,7 +477,7 @@ export function ResearchPanel() {
 
       if (agent.status === 'error' && prevStatus !== undefined) {
         toast.error('Research agent failed', {
-          description: agent.query,
+          description: agent.errorMessage ?? agent.query,
           duration: 5000,
         });
       }

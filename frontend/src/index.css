@@ -229,6 +229,11 @@ body {
   to   { background-position: -200% 0; }
 }
 
+.agent-card.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.04);
+}
+
 .agent-card {
   --mouse-x: 50%;
   --mouse-y: 50%;
