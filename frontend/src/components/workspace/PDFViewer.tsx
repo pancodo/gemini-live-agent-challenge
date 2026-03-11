@@ -3,8 +3,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { useSessionStore } from '../../store/sessionStore';
 import { useResearchStore } from '../../store/researchStore';
+import { usePDFHighlights } from '../../hooks/usePDFHighlights';
 import { Button, Spinner } from '../ui';
 import type { PDFViewerHandle } from './PDFViewerContext';
+import type { EntityHighlight } from '../../types';
 
 // Serve worker from the local pdfjs-dist package (CDN may not have this version yet)
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -112,6 +114,102 @@ function applyEntityHighlightsFallback(container: HTMLDivElement, entities: stri
   });
 }
 
+// ── Narration-Synchronized Highlighting ─────────────────────────
+
+/**
+ * Highlight entities from the active narration segment on their respective
+ * PDF pages. Uses the CSS Custom Highlight API with a distinct highlight
+ * name ('narration-entity') so narration highlights coexist with scan
+ * entity highlights. Falls back to DOM <mark> elements with a pulsing
+ * gold animation for browsers without CSS.highlights.
+ */
+function highlightNarrationEntities(
+  textLayerRefs: Map<number, HTMLDivElement>,
+  highlights: EntityHighlight[],
+): void {
+  // CSS Custom Highlight API path
+  if (typeof CSS !== 'undefined' && CSS.highlights) {
+    CSS.highlights.delete('narration-entity');
+    if (highlights.length === 0) return;
+
+    const ranges: Range[] = [];
+
+    for (const hl of highlights) {
+      const textLayerDiv = textLayerRefs.get(hl.pageNumber + 1); // pages are 1-indexed in refs
+      if (!textLayerDiv) continue;
+
+      const textLower = hl.text.toLowerCase();
+      const walker = document.createTreeWalker(textLayerDiv, NodeFilter.SHOW_TEXT);
+
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text;
+        const content = node.textContent ?? '';
+        const idx = content.toLowerCase().indexOf(textLower);
+        if (idx < 0) continue;
+
+        const r = new Range();
+        r.setStart(node, idx);
+        r.setEnd(node, idx + hl.text.length);
+        ranges.push(r);
+        break; // one match per entity per page
+      }
+    }
+
+    if (ranges.length > 0) {
+      CSS.highlights.set('narration-entity', new Highlight(...ranges));
+    }
+    return;
+  }
+
+  // Fallback: DOM mutation with <mark> elements
+  // First, remove previous narration marks
+  textLayerRefs.forEach((div) => {
+    const marks = div.querySelectorAll('mark.narration-highlight');
+    marks.forEach((mark) => {
+      const parent = mark.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(mark.textContent ?? ''), mark);
+        parent.normalize();
+      }
+    });
+  });
+
+  if (highlights.length === 0) return;
+
+  for (const hl of highlights) {
+    const textLayerDiv = textLayerRefs.get(hl.pageNumber + 1);
+    if (!textLayerDiv) continue;
+
+    const textLower = hl.text.toLowerCase();
+    const spans = textLayerDiv.querySelectorAll('span');
+
+    for (const span of spans) {
+      const textNode = span.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) continue;
+
+      const content = textNode.textContent ?? '';
+      const idx = content.toLowerCase().indexOf(textLower);
+      if (idx < 0) continue;
+
+      const before = content.slice(0, idx);
+      const match = content.slice(idx, idx + hl.text.length);
+      const after = content.slice(idx + hl.text.length);
+
+      const fragment = document.createDocumentFragment();
+      if (before) fragment.appendChild(document.createTextNode(before));
+
+      const mark = document.createElement('mark');
+      mark.className = 'narration-highlight';
+      mark.textContent = match;
+      fragment.appendChild(mark);
+
+      if (after) fragment.appendChild(document.createTextNode(after));
+      span.replaceChildren(fragment);
+      break; // one match per entity
+    }
+  }
+}
+
 // ── Component ────────────────────────────────────────────────────
 
 interface PDFViewerProps {
@@ -121,6 +219,7 @@ interface PDFViewerProps {
 export function PDFViewer({ onHandleReady }: PDFViewerProps) {
   const documentUrl = useSessionStore((s) => s.documentUrl);
   const scanEntities = useResearchStore((s) => s.scanEntities);
+  const narrationHighlights = usePDFHighlights();
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
@@ -315,6 +414,11 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
       }
     });
   }, [scanEntities]);
+
+  // Apply narration-synchronized entity highlights when active segment changes
+  useEffect(() => {
+    highlightNarrationEntities(textLayerRefs.current, narrationHighlights);
+  }, [narrationHighlights]);
 
   // Track current page and reading progress via scroll
   const handleScroll = useCallback(() => {

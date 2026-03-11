@@ -620,6 +620,30 @@ class ScriptAgentOrchestrator(BaseAgent):
                 exc,
             )
 
+        # Extract entity highlights for PDF narration sync (non-critical)
+        ocr_pages: list[str] = ctx.session.state.get("ocr_pages", [])
+        for segment in segments:
+            if ocr_pages and segment.narration_script:
+                try:
+                    from .entity_extractor import extract_entities
+
+                    segment_firestore_id = segment.id
+                    highlights = await extract_entities(
+                        narration_script=segment.narration_script,
+                        page_texts=ocr_pages,
+                        segment_id=segment_firestore_id,
+                    )
+                    if highlights:
+                        await (
+                            db.collection("sessions")
+                            .document(session_id)
+                            .collection("segments")
+                            .document(segment_firestore_id)
+                            .update({"entityHighlights": highlights})
+                        )
+                except Exception:
+                    pass  # Non-critical -- don't break the pipeline
+
         for segment in segments:
             if self.emitter is not None:
                 await self.emitter.emit(

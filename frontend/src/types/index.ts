@@ -146,6 +146,14 @@ export type SSEEvent =
   | StatsUpdateEvent
   | ErrorEvent;
 
+// ── Entity Highlighting ──────────────────────────────────────
+export interface EntityHighlight {
+  text: string;
+  segmentId: string;
+  pageNumber: number;
+  charOffset: number;
+}
+
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {
   sessionId: string;

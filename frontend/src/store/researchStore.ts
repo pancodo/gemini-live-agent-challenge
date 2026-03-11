@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { AgentState, EvaluatedSource, Segment } from '../types';
+import type { AgentState, EntityHighlight, EvaluatedSource, Segment } from '../types';
 
 const MAX_EVALUATED_SOURCES = 50;
 
@@ -16,14 +16,17 @@ interface ResearchStore {
   segments: Record<string, Segment>;
   stats: { sourcesFound: number; factsVerified: number; segmentsReady: number };
   phases: PhaseEntry[];
-  /** Entity terms extracted by the scan_agent — used for PDF text layer highlighting */
+  /** Entity terms extracted by the scan_agent -- used for PDF text layer highlighting */
   scanEntities: string[];
+  /** Per-segment entity highlights mapping narration entities to PDF page locations */
+  entityHighlights: Record<string, EntityHighlight[]>;
   setAgent: (agentId: string, state: Partial<AgentState>) => void;
   setSegment: (segmentId: string, state: Partial<Segment>) => void;
   updateStats: (stats: Partial<ResearchStore['stats']>) => void;
   addPhaseMessage: (phase: 1 | 2 | 3 | 4 | 5, label: string, message: string) => void;
   addEvaluatedSource: (agentId: string, source: EvaluatedSource) => void;
   setScanEntities: (entities: string[]) => void;
+  setEntityHighlights: (segmentId: string, highlights: EntityHighlight[]) => void;
   reset: () => void;
 }
 
@@ -33,6 +36,7 @@ export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((s
   stats: { sourcesFound: 0, factsVerified: 0, segmentsReady: 0 },
   phases: [],
   scanEntities: [],
+  entityHighlights: {},
   setAgent: (agentId, partial) =>
     set((s) => ({
       agents: {
@@ -87,6 +91,13 @@ export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((s
       };
     }),
   setScanEntities: (entities) => set({ scanEntities: entities }),
+  setEntityHighlights: (segmentId, highlights) =>
+    set((s) => ({
+      entityHighlights: {
+        ...s.entityHighlights,
+        [segmentId]: highlights,
+      },
+    })),
   reset: () =>
     set({
       agents: {},
@@ -94,5 +105,6 @@ export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((s
       stats: { sourcesFound: 0, factsVerified: 0, segmentsReady: 0 },
       phases: [],
       scanEntities: [],
+      entityHighlights: {},
     }),
 })));
