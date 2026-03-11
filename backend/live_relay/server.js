@@ -276,6 +276,14 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
           }
         }
       }
+
+      // Input transcript (user speech -> text) -- used for branch trigger detection
+      if (msg.serverContent?.inputTranscript?.text) {
+        clientWs.send(JSON.stringify({
+          type: 'transcript',
+          text: msg.serverContent.inputTranscript.text,
+        }));
+      }
     }
   });
 

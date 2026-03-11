@@ -222,3 +222,43 @@ def build_segment_update_event(
     if video_url is not None:
         event["videoUrl"] = video_url
     return event
+
+
+def build_branch_triggered_event(
+    *,
+    session_id: str,
+    parent_segment_id: str,
+    question: str,
+) -> dict[str, Any]:
+    """Build a branch_triggered SSE event payload.
+
+    Emitted when a branch pipeline starts running in response to a user
+    question during documentary playback.
+    """
+    return {
+        "type": "branch_triggered",
+        "sessionId": session_id,
+        "parentSegmentId": parent_segment_id,
+        "question": question,
+    }
+
+
+def build_branch_segment_ready_event(
+    *,
+    segment_id: str,
+    parent_segment_id: str,
+    question: str,
+    title: str,
+) -> dict[str, Any]:
+    """Build a branch_segment_ready SSE event payload.
+
+    Emitted when a branch pipeline completes and the new segment is ready
+    for playback in the documentary player.
+    """
+    return {
+        "type": "branch_segment_ready",
+        "segmentId": segment_id,
+        "parentSegmentId": parent_segment_id,
+        "question": question,
+        "title": title,
+    }
