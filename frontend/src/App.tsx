@@ -1,27 +1,62 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { UploadPage } from './pages/UploadPage';
-import { WorkspacePage } from './pages/WorkspacePage';
-import { PlayerPage } from './pages/PlayerPage';
-import { NotFoundPage } from './pages/NotFoundPage';
 import { useSessionStore } from './store/sessionStore';
 import { VoiceLayer } from './components/voice/VoiceLayer';
 import { IrisOverlay } from './components/player/IrisOverlay';
 import { TopNav } from './components/workspace/TopNav';
 
+const UploadPage = lazy(() =>
+  import('./pages/UploadPage').then((m) => ({ default: m.UploadPage })),
+);
+const WorkspacePage = lazy(() =>
+  import('./pages/WorkspacePage').then((m) => ({ default: m.WorkspacePage })),
+);
+const PlayerPage = lazy(() =>
+  import('./pages/PlayerPage').then((m) => ({ default: m.PlayerPage })),
+);
+const NotFoundPage = lazy(() =>
+  import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
+);
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2, staleTime: 5000 } },
 });
 
+function PageFallback() {
+  return (
+    <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <span className="block w-2 h-2 rounded-full bg-[var(--gold)] opacity-60 animate-pulse" />
+        <p className="text-[11px] text-[var(--muted)] font-sans uppercase tracking-[0.2em]">
+          Loading&hellip;
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceGuard() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  return sessionId ? <WorkspacePage /> : <Navigate to="/" replace />;
+  return sessionId ? (
+    <Suspense fallback={<PageFallback />}>
+      <WorkspacePage />
+    </Suspense>
+  ) : (
+    <Navigate to="/" replace />
+  );
 }
 
 function PlayerGuard() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  return sessionId ? <PlayerPage /> : <Navigate to="/workspace" replace />;
+  return sessionId ? (
+    <Suspense fallback={<PageFallback />}>
+      <PlayerPage />
+    </Suspense>
+  ) : (
+    <Navigate to="/workspace" replace />
+  );
 }
 
 function RootLayout() {
@@ -42,10 +77,24 @@ const router = createBrowserRouter([
   {
     element: <RootLayout />,
     children: [
-      { path: '/', element: <UploadPage /> },
+      {
+        path: '/',
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <UploadPage />
+          </Suspense>
+        ),
+      },
       { path: '/workspace', element: <WorkspaceGuard /> },
       { path: '/player/:segmentId', element: <PlayerGuard /> },
-      { path: '*', element: <NotFoundPage /> },
+      {
+        path: '*',
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <NotFoundPage />
+          </Suspense>
+        ),
+      },
     ],
   },
 ]);

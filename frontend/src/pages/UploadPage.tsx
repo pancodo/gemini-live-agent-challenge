@@ -9,6 +9,9 @@ import { usePlayerStore } from '../store/playerStore';
 import { uploadDocument } from '../services/upload';
 import type { SessionStatus } from '../types';
 
+/** Prefetch the WorkspacePage chunk so it is cached before navigation */
+const prefetchWorkspace = () => import('./WorkspacePage');
+
 const SAMPLE_DOCS = [
   {
     filename: 'sample-pompeii.pdf',
@@ -51,6 +54,7 @@ function SampleDocuments() {
   const handleSample = useCallback(
     async (doc: (typeof SAMPLE_DOCS)[number]) => {
       setLoading(doc.filename);
+      prefetchWorkspace();
       try {
         const res = await fetch(`/${doc.filename}`);
         if (!res.ok) throw new Error('fetch failed');

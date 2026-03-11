@@ -55,6 +55,9 @@ export function DropZone() {
       setProgress(0);
       setErrorMsg('');
 
+      // Prefetch workspace chunk while upload is in progress
+      import('../../pages/WorkspacePage').catch(() => {});
+
       try {
         const { sessionId, gcsPath } = await uploadDocument(
           file,
