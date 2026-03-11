@@ -76,7 +76,7 @@ class GlobalRateLimiter:
         caller_label = f"[{self._label}] {caller}" if caller else f"[{self._label}]"
 
         # Check if we need to wait
-        if self._sem._value == 0:  # noqa: SLF001 -- accessing for diagnostics only
+        if self._sem.locked():
             logger.info(
                 "%s queued (%d/%d in flight)",
                 caller_label,
@@ -114,6 +114,55 @@ _BACKOFF_SCHEDULE: list[float] = [1.0, 2.5, 4.5]
 
 # HTTP status codes that trigger a retry
 _RETRYABLE_STATUS_CODES: set[int] = {429, 500, 503}
+
+
+def _extract_retry_after(exc: Exception) -> float | None:
+    """Try to extract a Retry-After hint (in seconds) from an API exception.
+
+    Checks for:
+    - ``exc.retry_delay`` (``datetime.timedelta``, used by ``google.api_core``
+      ``ResourceExhausted`` exceptions).
+    - ``exc.retry_after`` (numeric seconds).
+    - ``exc.headers["Retry-After"]`` (HTTP header string, numeric seconds).
+
+    Returns:
+        The delay in seconds if found and > 0, otherwise ``None``.
+    """
+    # google.api_core.exceptions.ResourceExhausted → retry_delay (timedelta)
+    retry_delay = getattr(exc, "retry_delay", None)
+    if retry_delay is not None:
+        try:
+            seconds = retry_delay.total_seconds()
+            if seconds > 0:
+                return float(seconds)
+        except (AttributeError, TypeError):
+            pass
+
+    # Some exception types expose retry_after directly as a number
+    retry_after = getattr(exc, "retry_after", None)
+    if retry_after is not None:
+        try:
+            val = float(retry_after)
+            if val > 0:
+                return val
+        except (TypeError, ValueError):
+            pass
+
+    # HTTP response headers
+    headers = getattr(exc, "headers", None)
+    if headers is not None:
+        raw = None
+        if hasattr(headers, "get"):
+            raw = headers.get("Retry-After") or headers.get("retry-after")
+        if raw is not None:
+            try:
+                val = float(raw)
+                if val > 0:
+                    return val
+            except (TypeError, ValueError):
+                pass
+
+    return None
 
 
 def _is_retryable_error(exc: Exception) -> bool:
@@ -207,6 +256,19 @@ async def rate_limited_generate(
                 if attempt < len(_BACKOFF_SCHEDULE)
                 else _BACKOFF_SCHEDULE[-1]
             )
+
+            # Honor Retry-After from the API if it exceeds our schedule
+            retry_after = _extract_retry_after(exc)
+            if retry_after is not None and retry_after > backoff:
+                logger.info(
+                    "[%s] %s server requested Retry-After=%.1fs "
+                    "(exceeds backoff=%.1fs)",
+                    rate_limiter._label,  # noqa: SLF001
+                    caller,
+                    retry_after,
+                    backoff,
+                )
+                backoff = retry_after
 
             logger.warning(
                 "[%s] %s retryable error on attempt %d/%d: %s. "
