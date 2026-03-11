@@ -18,6 +18,10 @@ export interface WaveformProps {
 export function Waveform({ analyser, height = 48 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
+  // Track last-rendered pixel dimensions to avoid resetting the canvas
+  // backing store on every frame (a canvas width/height assignment flushes
+  // the bitmap and resets the entire 2D context state).
+  const canvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -32,12 +36,21 @@ export function Waveform({ analyser, height = 48 }: WaveformProps) {
     function draw() {
       if (!canvas || !ctx) return;
 
-      // Size canvas to container (handle DPR for crisp lines)
+      // Resize canvas backing store only when the CSS layout dimensions
+      // actually change. Assigning canvas.width or canvas.height — even to
+      // the same value — flushes the bitmap and resets all 2D context state
+      // (transform, strokeStyle, shadowBlur, etc.), forcing a full re-setup
+      // on every frame. Guard with a ref comparison to avoid that cost.
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const newW = rect.width * dpr;
+      const newH = rect.height * dpr;
+      if (newW !== canvasSizeRef.current.w || newH !== canvasSizeRef.current.h) {
+        canvas.width = newW;
+        canvas.height = newH;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        canvasSizeRef.current = { w: newW, h: newH };
+      }
 
       const width = rect.width;
       const h = rect.height;
@@ -83,6 +96,8 @@ export function Waveform({ analyser, height = 48 }: WaveformProps) {
 
     return () => {
       cancelAnimationFrame(rafRef.current);
+      // Reset tracked size so the next effect run always performs the first resize.
+      canvasSizeRef.current = { w: 0, h: 0 };
     };
   }, [analyser, prefersReducedMotion]);
 
