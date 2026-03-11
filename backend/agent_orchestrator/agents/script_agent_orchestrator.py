@@ -386,47 +386,61 @@ def _parse_script_output(raw: str) -> list[SegmentScript]:
 # ---------------------------------------------------------------------------
 
 
-async def _write_segment_to_firestore(
+def _segment_to_firestore_doc(segment: SegmentScript) -> dict[str, Any]:
+    """Convert a ``SegmentScript`` to the Firestore document dict.
+
+    Factored out so the same data shape is used whether writing via batch or
+    individually.
+
+    Args:
+        segment: Parsed and validated segment.
+
+    Returns:
+        Firestore document fields.
+    """
+    return {
+        "sceneId": segment.scene_id,
+        "title": segment.title,
+        "script": segment.narration_script,
+        "visualDescriptions": segment.visual_descriptions,
+        "veo2Scene": segment.veo2_scene,
+        "mood": segment.mood,
+        "narrativeRole": segment.narrative_role,
+        "sources": segment.sources,
+        "imageUrls": [],       # Populated by Phase V
+        "videoUrl": None,      # Populated by Phase V
+        "graphEdges": [],      # Reserved for future branching
+        "status": "pending",   # Updated to "ready" by Phase V
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    }
+
+
+async def _write_segments_to_firestore(
     db: firestore.AsyncClient,
     session_id: str,
-    segment: SegmentScript,
+    segments: list[SegmentScript],
 ) -> None:
-    """Write a single SegmentScript to Firestore.
+    """Batch-write all SegmentScript objects to Firestore in a single commit.
 
-    Creates or overwrites the document at
-    ``/sessions/{sessionId}/segments/{segmentId}``.
-
-    The document includes stub arrays for ``imageUrls`` and ``videoUrl`` that
-    Phase V (Visual Director) will populate.
+    Creates or overwrites documents at
+    ``/sessions/{sessionId}/segments/{segmentId}`` for every segment. Uses a
+    ``WriteBatch`` to collapse N sequential round-trips into one atomic commit.
 
     Args:
         db: Async Firestore client.
         session_id: Parent session.
-        segment: Parsed and validated segment to persist.
+        segments: Parsed and validated segments to persist.
     """
-    ref = (
-        db.collection("sessions")
-        .document(session_id)
-        .collection("segments")
-        .document(segment.id)
-    )
-    await ref.set(
-        {
-            "sceneId": segment.scene_id,
-            "title": segment.title,
-            "script": segment.narration_script,
-            "visualDescriptions": segment.visual_descriptions,
-            "veo2Scene": segment.veo2_scene,
-            "mood": segment.mood,
-            "narrativeRole": segment.narrative_role,
-            "sources": segment.sources,
-            "imageUrls": [],       # Populated by Phase V
-            "videoUrl": None,      # Populated by Phase V
-            "graphEdges": [],      # Reserved for future branching
-            "status": "pending",   # Updated to "ready" by Phase V
-            "createdAt": firestore.SERVER_TIMESTAMP,
-        }
-    )
+    batch = db.batch()
+    for segment in segments:
+        ref = (
+            db.collection("sessions")
+            .document(session_id)
+            .collection("segments")
+            .document(segment.id)
+        )
+        batch.set(ref, _segment_to_firestore_doc(segment))
+    await batch.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -592,21 +606,21 @@ class ScriptAgentOrchestrator(BaseAgent):
         # ------------------------------------------------------------------
         db = firestore.AsyncClient(project=self.firestore_project)
 
-        for segment in segments:
-            try:
-                await _write_segment_to_firestore(db, session_id, segment)
-                logger.debug(
-                    "Wrote segment %s to Firestore for session %s",
-                    segment.id,
-                    session_id,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to write segment %s to Firestore: %s",
-                    segment.id,
-                    exc,
-                )
+        try:
+            await _write_segments_to_firestore(db, session_id, segments)
+            logger.debug(
+                "Batch-wrote %d segments to Firestore for session %s",
+                len(segments),
+                session_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to batch-write %d segments to Firestore: %s",
+                len(segments),
+                exc,
+            )
 
+        for segment in segments:
             if self.emitter is not None:
                 await self.emitter.emit(
                     "segment_update",
