@@ -1,6 +1,6 @@
 """ADK Pipeline — SequentialAgent orchestrating the full documentary generation flow.
 
-Current pipeline order (Phases I–V fully integrated):
+Current pipeline order (Phases I–V fully integrated, with III.5 fact validation):
     1. document_analyzer            — OCR, semantic chunking, parallel summarisation,
                                       narrative curation → scene_briefs + visual_bible
     2. scene_research_orch          — Parallel scene research (one google_search agent
@@ -8,6 +8,8 @@ Current pipeline order (Phases I–V fully integrated):
     3. aggregator_agent             — Merges all research_N outputs into unified context
     4. script_orch                  — Script Agent (gemini-2.0-pro) → SegmentScript list,
                                       Firestore write, segment_update SSE (Phase III)
+   4b. fact_validator               — Hallucination firewall: cross-references narration
+                                      claims against research evidence (Phase III.5)
     5. narrative_visual_planner     — Single Gemini Pro call producing VisualStoryboard
                                       with per-scene primary subjects, avoid lists,
                                       targeted searches, and 4 frame concepts (Phase 4.0)
@@ -17,6 +19,11 @@ Current pipeline order (Phases I–V fully integrated):
     7. visual_director_orch         — Reads manifests → Imagen 3 (4 frames/scene) + Veo 2
                                       → GCS upload, Firestore imageUrls/videoUrl,
                                       segment_update(complete) SSE (Phase V)
+
+The ``ResumablePipelineAgent`` wraps the sequential execution with checkpoint
+persistence: after each phase completes, the session state is checkpointed to
+Firestore. On restart, completed phases are skipped and state is restored from
+the last checkpoint.
 
 Legacy agents (scan_agent, build_research_agents) remain in this file and are
 used by the legacy ``build_pipeline`` path. They will be removed once all
@@ -31,19 +38,34 @@ ADK constraints:
 
 from __future__ import annotations
 
+import logging
+import os
+import time
+from collections.abc import AsyncGenerator
+from typing import Any
+
 from google.adk.agents import Agent
+from google.adk.agents.base_agent import BaseAgent
+from google.adk.agents.invocation_context import InvocationContext
 from google.adk.agents.parallel_agent import ParallelAgent
 from google.adk.agents.sequential_agent import SequentialAgent
 from google.adk.tools import google_search
+from google.cloud import firestore
+from pydantic import ConfigDict, Field
 
+from .checkpoint_helpers import load_checkpoint, save_checkpoint
 from .document_analyzer import build_document_analyzer
+from .fact_validator_agent import build_fact_validator_agent
 from .narrative_visual_planner import build_narrative_visual_planner
+from .rate_limiter import GlobalRateLimiter
 from .scene_research_agent import build_scene_research_orchestrator
 from .script_agent_orchestrator import build_script_agent_orchestrator
 from .sse_helpers import SSEEmitter
 from .visual_director_orchestrator import build_visual_director_orchestrator
 from .visual_research_agent import visual_research_agent
 from .visual_research_orchestrator import build_visual_research_orchestrator
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # 1. Scan Agent
@@ -329,64 +351,217 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
     )
 
 
+# ---------------------------------------------------------------------------
+# ResumablePipelineAgent — checkpoint-aware pipeline executor
+# ---------------------------------------------------------------------------
+
+# Phase mapping: (phase_number, [agent_indices_in_sub_agents_list])
+# Agent order in sub_agents:
+#   0: document_analyzer        (Phase I)
+#   1: scene_research           (Phase II)
+#   2: aggregator               (Phase II — grouped with scene_research)
+#   3: script_orch              (Phase III)
+#   4: fact_validator           (Phase III.5)
+#   5: narrative_visual_planner (Phase 4.0)
+#   6: visual_research_orch     (Phase IV / 5)
+#   7: visual_director_orch     (Phase V / 6)
+
+_PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
+    (1, [0]),       # Phase I:     document_analyzer
+    (2, [1, 2]),    # Phase II:    scene_research + aggregator
+    (3, [3]),       # Phase III:   script_orch
+    (3.5, [4]),     # Phase III.5: fact_validator
+    (4, [5]),       # Phase 4.0:   narrative_visual_planner
+    (5, [6]),       # Phase IV:    visual_research_orch
+    (6, [7]),       # Phase V:     visual_director_orch
+]
+
+
+class ResumablePipelineAgent(BaseAgent):
+    """Checkpoint-aware pipeline executor.
+
+    Wraps the sequential agent list with load/save checkpoint logic.
+    On startup, loads any previously completed phases from Firestore and
+    restores the session state snapshot. Phases already completed are skipped.
+    After each phase completes, the new session state is checkpointed.
+
+    This allows the pipeline to resume from where it left off after a crash,
+    timeout, or user-triggered retry on error.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    firestore_project: str = Field(
+        ...,
+        description="GCP project ID for Firestore checkpoint operations.",
+    )
+    emitter: Any = Field(
+        default=None,
+        description="Optional SSE emitter for frontend progress events.",
+    )
+    sub_agents: list[BaseAgent] = Field(
+        default_factory=list,
+        description="Ordered list of pipeline phase agents.",
+    )
+
+    async def _run_async_impl(
+        self,
+        ctx: InvocationContext,
+    ) -> AsyncGenerator[Any, None]:
+        """Execute pipeline phases with checkpoint persistence.
+
+        For each phase in ``_PHASE_AGENT_MAP``:
+        1. Skip if the phase is already in completed_phases.
+        2. Run each agent index in the phase, yielding all ADK events.
+        3. Save a checkpoint after the phase completes.
+        """
+        session_id: str = ctx.session.id
+        t_pipeline_start = time.monotonic()
+
+        # ------------------------------------------------------------------
+        # Load checkpoint — restore completed phases and state snapshot
+        # ------------------------------------------------------------------
+        db = firestore.AsyncClient(project=self.firestore_project)
+
+        completed_phases, state_snapshot = await load_checkpoint(db, session_id)
+
+        # Restore state from checkpoint
+        if state_snapshot:
+            for key, value in state_snapshot.items():
+                ctx.session.state[key] = value
+            logger.info(
+                "Restored %d state keys from checkpoint for session %s",
+                len(state_snapshot),
+                session_id,
+            )
+
+        # ------------------------------------------------------------------
+        # Execute phases sequentially, skipping completed ones
+        # ------------------------------------------------------------------
+        for phase_num, agent_indices in _PHASE_AGENT_MAP:
+            if phase_num in completed_phases:
+                logger.info(
+                    "Skipping phase %s for session %s (already completed)",
+                    phase_num,
+                    session_id,
+                )
+                continue
+
+            t_phase_start = time.monotonic()
+            logger.info(
+                "Starting phase %s for session %s",
+                phase_num,
+                session_id,
+            )
+
+            # Run each agent in this phase sequentially
+            for agent_idx in agent_indices:
+                if agent_idx >= len(self.sub_agents):
+                    logger.warning(
+                        "Agent index %d out of range for phase %s (have %d agents)",
+                        agent_idx,
+                        phase_num,
+                        len(self.sub_agents),
+                    )
+                    continue
+
+                agent = self.sub_agents[agent_idx]
+                async for event in agent.run_async(ctx):
+                    yield event
+
+            t_phase_elapsed = time.monotonic() - t_phase_start
+            logger.info(
+                "Phase %s completed in %.1fs for session %s",
+                phase_num,
+                t_phase_elapsed,
+                session_id,
+            )
+
+            # Save checkpoint after phase completion
+            await save_checkpoint(db, session_id, phase_num, ctx.session.state)
+
+        t_total = time.monotonic() - t_pipeline_start
+        logger.info(
+            "Resumable pipeline complete for session %s in %.1fs",
+            session_id,
+            t_total,
+        )
+
+
 def build_new_pipeline(
     emitter: SSEEmitter | None = None,
-) -> SequentialAgent:
+) -> ResumablePipelineAgent:
     """Assemble the complete Phase I–V documentary generation pipeline.
 
     This is the production pipeline. All phases are fully integrated:
-    - Phase I   (DocumentAnalyzerAgent):     OCR → chunks → summaries → scene_briefs
-    - Phase II  (SceneResearchOrchestrator): per-scene google_search corroboration
-    - Phase III (ScriptAgentOrchestrator):   script generation + Firestore + SSE
-    - Phase 4.0 (NarrativeVisualPlanner):    single Gemini Pro call producing a
+    - Phase I    (DocumentAnalyzerAgent):     OCR -> chunks -> summaries -> scene_briefs
+    - Phase II   (SceneResearchOrchestrator): per-scene google_search corroboration
+    - Phase III  (ScriptAgentOrchestrator):   script generation + Firestore + SSE
+    - Phase III.5 (FactValidatorAgent):       hallucination firewall -- cross-references
+      narration claims against research evidence before visual production.
+    - Phase 4.0  (NarrativeVisualPlanner):    single Gemini Pro call producing a
       VisualStoryboard with per-scene primary subjects, avoid lists, targeted
-      searches, and 4 frame concepts.  Must run AFTER Phase III (reads ``script``
-      from session.state) and BEFORE Phase IV (writes ``visual_storyboard``).
-    - Phase IV  (VisualResearchOrchestrator): 6-stage per-scene visual research
-      micro-pipeline → VisualDetailManifest per scene → Firestore + SSE.
-      Now reads ``visual_storyboard`` when available for targeted searches.
-    - Phase V   (VisualDirectorOrchestrator): Imagen 3 (4 frames/scene) + Veo 2
-      generation → GCS upload → Firestore imageUrls/videoUrl → SSE complete.
-      Now applies narrative-role styling and uses frame_prompts from storyboard.
+      searches, and 4 frame concepts.
+    - Phase IV   (VisualResearchOrchestrator): 6-stage per-scene visual research
+      micro-pipeline -> VisualDetailManifest per scene -> Firestore + SSE.
+    - Phase V    (VisualDirectorOrchestrator): Imagen 3 (4 frames/scene) + Veo 2
+      generation -> GCS upload -> Firestore imageUrls/videoUrl -> SSE complete.
+
+    Two shared ``GlobalRateLimiter`` instances (one for Gemini, one for
+    Imagen 3) are created here and passed to all agent factories whose API
+    calls should be globally gated. This prevents 429 quota exhaustion when
+    multiple pipeline phases generate concurrent API traffic.
 
     Args:
         emitter: Optional SSE emitter forwarded to all phase orchestrators
             for frontend Expedition Log progress events.
 
     Returns:
-        A SequentialAgent running:
-        document_analyzer → scene_research → aggregator
-        → script_orch → narrative_visual_planner → visual_research_orch
-        → visual_director_orch
+        A ResumablePipelineAgent running:
+        document_analyzer -> scene_research -> aggregator
+        -> script_orch -> fact_validator -> narrative_visual_planner
+        -> visual_research_orch -> visual_director_orch
     """
-    document_analyzer = build_document_analyzer(emitter=emitter)
+    # Shared rate limiters — gating all Gemini and Imagen 3 API calls
+    # across the entire pipeline to prevent 429 quota exhaustion.
+    gemini_limiter = GlobalRateLimiter(limit=12, label="gemini")
+    imagen_limiter = GlobalRateLimiter(limit=8, label="imagen")
+
+    document_analyzer = build_document_analyzer(
+        emitter=emitter, rate_limiter=gemini_limiter,
+    )
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     script_orch = build_script_agent_orchestrator(emitter=emitter)
+    fact_validator = build_fact_validator_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
-    visual_research_orch = build_visual_research_orchestrator(emitter=emitter)
-    visual_director_orch = build_visual_director_orchestrator(emitter=emitter)
+    visual_research_orch = build_visual_research_orchestrator(
+        emitter=emitter, rate_limiter=gemini_limiter,
+        imagen_rate_limiter=imagen_limiter,
+    )
+    visual_director_orch = build_visual_director_orchestrator(
+        emitter=emitter, gemini_rate_limiter=gemini_limiter,
+        imagen_rate_limiter=imagen_limiter,
+    )
 
-    # NOTE: Phase III, Phase 4.0, and Phase IV must run sequentially:
-    #   - Phase 4.0 reads session.state["script"] (produced by Phase III)
-    #   - Phase IV  reads session.state["visual_storyboard"] (produced by Phase 4.0)
-    # The previous parallel execution of Phase III + IV is no longer possible
-    # because the NarrativeVisualPlanner sits between them in the data flow.
-
-    return SequentialAgent(
+    return ResumablePipelineAgent(
         name="historian_pipeline",
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
             "scene research (Phase II), script generation (Phase III), "
-            "visual storyboard planning (Phase 4.0), visual research (Phase IV), "
-            "and visual generation (Phase V)."
+            "fact validation (Phase III.5), visual storyboard planning (Phase 4.0), "
+            "visual research (Phase IV), and visual generation (Phase V). "
+            "Supports checkpoint-based resumption on failure."
         ),
+        firestore_project=os.environ.get("GCP_PROJECT_ID", ""),
+        emitter=emitter,
         sub_agents=[
-            document_analyzer,               # Phase I:    OCR → chunks → summaries → scene_briefs
-            scene_research,                  # Phase II:   per-scene google_search corroboration
-            _make_aggregator_agent(),        # Aggregator: research_{n} → aggregated_research
-            script_orch,                     # Phase III:  script generation → session.state["script"]
-            narrative_visual_planner_orch,   # Phase 4.0:  visual storyboard → session.state["visual_storyboard"]
-            visual_research_orch,            # Phase IV:   per-scene visual research (reads storyboard)
-            visual_director_orch,            # Phase V:    Imagen 3 + Veo 2 → GCS + Firestore + SSE
+            document_analyzer,               # [0] Phase I
+            scene_research,                  # [1] Phase II
+            _make_aggregator_agent(),        # [2] Phase II (aggregator)
+            script_orch,                     # [3] Phase III
+            fact_validator,                  # [4] Phase III.5
+            narrative_visual_planner_orch,   # [5] Phase 4.0
+            visual_research_orch,            # [6] Phase IV
+            visual_director_orch,            # [7] Phase V
         ],
     )
