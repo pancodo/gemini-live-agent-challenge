@@ -151,6 +151,14 @@ class SceneBrief(BaseModel):
         ...,
         description="Emotional register of the scene (e.g. 'solemn', 'triumphant').",
     )
+    source_language: str | None = Field(
+        default=None,
+        description=(
+            "ISO 639 language code or descriptive name of the document's original "
+            "language/script (e.g. 'ar', 'el', 'Latin', 'Ottoman Turkish'). "
+            "None when the document is in English or language is indeterminate."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

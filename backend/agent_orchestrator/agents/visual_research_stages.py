@@ -193,6 +193,16 @@ Rules:
 - BAD:  "Ottoman Empire 18th century" (too generic)
 - BAD:  "historical market" (no era or location)
 
+Native-language queries:
+- Detect the source language/script from the document excerpt.
+- If NOT English, include at least 1 query in the document's native script
+  (Arabic: المتاحف الإسلامية, Chinese: 故宫博物院收藏, Japanese: 東京国立博物館).
+- For dead languages (Latin, Classical Arabic, Ancient Greek, Sanskrit):
+  use modern scholarly language of the region instead (Italian for Latin,
+  Modern Arabic for Classical Arabic, Modern Greek for Ancient Greek, Hindi for Sanskrit).
+- Include 1 romanized transliteration query to catch Western museum holdings.
+- English remains majority: at least 3 of 5-7 queries must be in English.
+
 Output ONLY a JSON array of query strings. No preamble, no explanation.
 ["query 1", "query 2", "query 3", "query 4", "query 5"]
 """
