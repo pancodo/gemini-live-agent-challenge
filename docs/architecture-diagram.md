@@ -100,9 +100,10 @@ flowchart TD
 
     subgraph frontend["Frontend Layer"]
         PDF["PDF Viewer"]
-        Research["Research Panel"]
+        Research["Research Panel<br/>React.memo + useShallow"]
         Player["Documentary Player"]
         Voice["Voice Button + Waveform"]
+        SSE["useSSE<br/>adaptive drip 1/3/8 events per tick"]
     end
 
     User --> frontend
@@ -111,18 +112,20 @@ flowchart TD
 
         subgraph cloudrun["Cloud Run Services"]
             API["historian-api<br/>FastAPI / Python 3.12"]
-            ORCH["agent-orchestrator<br/>ADK Pipeline / Python 3.12"]
+            ORCH["agent-orchestrator<br/>ResumablePipelineAgent + ADK<br/>Python 3.12"]
             RELAY["live-relay<br/>Node.js 20 WebSocket Proxy"]
         end
 
-        subgraph adk["ADK Pipeline - SequentialAgent"]
+        subgraph adk["ADK Pipeline - 7 Phases with Checkpoint Resume"]
             direction LR
             P1["Phase I<br/>Document Analyzer"]
-            P2["Phase II<br/>Scene Research<br/>ParallelAgent"]
-            P3["Phase III<br/>Script Generator"]
+            P2["Phase II<br/>Scene Research<br/>ParallelAgent + Aggregator"]
+            P3["Phase III<br/>Script Orchestrator<br/>WriteBatch"]
+            P35["Phase III.5<br/>Fact Validator"]
+            P40["Phase 4.0<br/>Narrative Visual Planner"]
             P4["Phase IV<br/>Visual Research"]
-            P5["Phase V<br/>Visual Director"]
-            P1 --> P2 --> P3 --> P4 --> P5
+            P5["Phase V<br/>Visual Director<br/>GCS singleton"]
+            P1 --> P2 --> P3 --> P35 --> P40 --> P4 --> P5
         end
 
         subgraph vertex["Vertex AI"]
@@ -133,21 +136,22 @@ flowchart TD
         end
 
         subgraph storage["Data Layer"]
-            FIRESTORE[("Firestore")]
+            FIRESTORE[("Firestore<br/>sessions + checkpoints")]
             GCS[("Cloud Storage")]
         end
 
         DOCAI["Document AI<br/>OCR Processor"]
         PUBSUB["Pub/Sub"]
         SECRET["Secret Manager"]
+        LIMITER["GlobalRateLimiter<br/>Gemini limit=12<br/>Imagen limit=8"]
 
     end
 
     LIVE_API["Gemini Live API<br/>2.5 Flash Native Audio"]
 
     %% Frontend to Cloud Run
-    frontend -- "REST + SSE" --> API
-    Voice -. "WebSocket<br/>PCM Audio" .-> RELAY
+    frontend -- "REST + SSE adaptive drip" --> API
+    Voice -. "WebSocket<br/>PCM Audio 16kHz" .-> RELAY
 
     %% API to Orchestrator
     API -- "Trigger pipeline" --> ORCH
@@ -157,14 +161,17 @@ flowchart TD
     %% Orchestrator internals
     ORCH --- adk
     ORCH -. "SSE events" .-> API
+    ORCH -- "checkpoint per phase" --> FIRESTORE
 
-    %% ADK to AI models
+    %% ADK to AI models via rate limiter
     P1 -- "OCR" --> DOCAI
-    P1 -- "Summarize" --> GEMINI_FLASH
+    P1 -- "Summarize" --> LIMITER --> GEMINI_FLASH
     P2 -- "Google Search<br/>Grounding" --> GEMINI_FLASH
     P3 -- "Script" --> GEMINI_PRO
+    P35 -- "Validate" --> GEMINI_FLASH
+    P40 -- "Storyboard" --> GEMINI_PRO
     P4 -- "Research" --> GEMINI_FLASH
-    P5 -- "Images" --> IMAGEN
+    P5 -- "Images" --> LIMITER --> IMAGEN
     P5 -. "Async video" .-> VEO
 
     %% Live relay
@@ -172,8 +179,10 @@ flowchart TD
 
     %% Data flows
     ORCH -- "Session state<br/>Agent logs" --> FIRESTORE
-    ORCH -- "Segments<br/>Manifests" --> FIRESTORE
-    P5 -- "Images + Videos" --> GCS
+    P3 -- "WriteBatch<br/>all segments" --> FIRESTORE
+    P4 -- "VisualManifests" --> FIRESTORE
+    P5 -- "Images + Videos<br/>GCS singleton" --> GCS
+    P5 -- "imageUrls + videoUrl<br/>batch update" --> FIRESTORE
     DOCAI -- "OCR text" --> GCS
     PUBSUB -. "Agent events" .-> ORCH
 ```
