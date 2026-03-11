@@ -525,10 +525,12 @@ def _upload_image_bytes_sync(
 ) -> str:
     """Upload raw JPEG bytes to GCS and return the gs:// URI.
 
-    Creates a new GCS storage client per call (safe for executor threads).
+    Reuses the module-level ``_get_storage_client()`` singleton so that all
+    uploads share a single HTTP connection pool instead of creating a new
+    ``storage.Client`` (and its underlying ``requests.Session``) per call.
     """
-    client = storage.Client()
-    blob = client.bucket(bucket_name).blob(blob_name)
+    client = _get_storage_client()
+    blob = _get_bucket(client, bucket_name).blob(blob_name)
     blob.upload_from_string(data=image_bytes, content_type="image/jpeg")
     return f"gs://{bucket_name}/{blob_name}"
 
@@ -570,10 +572,31 @@ def _get_storage_client() -> storage.Client:
     return _storage_client
 
 
+# Cache bucket references so ``client.bucket()`` is called at most once per
+# bucket name across the entire process lifetime.
+_bucket_cache: dict[str, storage.Bucket] = {}
+
+
+def _get_bucket(
+    client: storage.Client,
+    bucket_name: str,
+) -> storage.Bucket:
+    """Return a cached ``Bucket`` reference for *bucket_name*.
+
+    ``client.bucket()`` is cheap (no RPC), but caching avoids redundant object
+    allocation when thousands of uploads target the same bucket.
+    """
+    bucket = _bucket_cache.get(bucket_name)
+    if bucket is None:
+        bucket = client.bucket(bucket_name)
+        _bucket_cache[bucket_name] = bucket
+    return bucket
+
+
 def _check_blob_exists_sync(bucket_name: str, blob_name: str) -> bool:
     """Check if a GCS blob exists (synchronous, runs in executor)."""
     client = _get_storage_client()
-    return client.bucket(bucket_name).blob(blob_name).exists()
+    return _get_bucket(client, bucket_name).blob(blob_name).exists()
 
 
 async def _check_blob_exists_async(
