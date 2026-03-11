@@ -66,7 +66,8 @@ from .sse_helpers import (
     build_pipeline_phase_event,
     build_segment_update_event,
 )
-from .visual_detail_types import EvaluatedSource, VisualDetailManifest
+from .storyboard_types import SceneVisualPlan, VisualStoryboard
+from .visual_detail_types import EvaluatedSource, FetchedContent, VisualDetailManifest
 from .visual_director_orchestrator import _run_segment_generation
 from .visual_research_stages import (
     stage_0_generate_queries,
@@ -85,8 +86,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _FAST_PATH_MAX_SOURCES: int = 3
-_DEEP_PATH_MAX_SOURCES: int = 5  # Was 10 — restore to 10 before final submission
-_SEMAPHORE_LIMIT: int = 8  # Max concurrent Gemini calls across all scenes
+_DEEP_PATH_MAX_SOURCES: int = 5
+_SEMAPHORE_LIMIT: int = 6  # Max concurrent Gemini calls across all scenes
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +142,184 @@ async def _update_segment_status_in_firestore(
 
 
 # ---------------------------------------------------------------------------
+# Batch source evaluation (single-call replacement for dual Stage 4)
+# ---------------------------------------------------------------------------
+
+
+async def _batch_evaluate_sources(
+    fetched_content: list[FetchedContent],
+    scene_brief: dict[str, Any],
+    storyboard_plan: dict[str, Any] | None,
+    client: google_genai.Client,
+    semaphore: asyncio.Semaphore,
+) -> tuple[list[EvaluatedSource], list[EvaluatedSource]]:
+    """Evaluate all fetched sources in a single Gemini 2.0 Flash call.
+
+    When a storyboard plan is available, its ``primary_subject`` provides
+    sharper relevance criteria than the generic scene title.  This function
+    replaces the two-call (quality + relevance) ``stage_4_dual_evaluate``
+    with one merged evaluation call, halving the Gemini call count for
+    Stage 4.
+
+    Args:
+        fetched_content: Sources with extracted text from Stage 3.
+        scene_brief: Serialised SceneBrief dict.
+        storyboard_plan: Matching ``SceneVisualPlan`` dict, or ``None``.
+        client: Shared google-genai async client.
+        semaphore: Rate-limit gate.
+
+    Returns:
+        Tuple of (accepted, rejected) ``EvaluatedSource`` lists.
+    """
+    from google.genai import types as genai_types
+
+    visual_focus = (
+        storyboard_plan.get("primary_subject", scene_brief.get("title", ""))
+        if storyboard_plan
+        else scene_brief.get("title", "")
+    )
+
+    sources_for_prompt = [
+        {
+            "url": s.url,
+            "title": s.title,
+            "content_preview": s.content[:600],
+        }
+        for s in fetched_content
+    ]
+
+    prompt = f"""You are evaluating web sources for a documentary scene about:
+Scene title: {scene_brief.get('title', '')}
+Era: {scene_brief.get('era', '')}
+Visual focus: {visual_focus}
+
+Evaluate each source and return a JSON array. Accept sources with visual_detail_density >= 6 AND relevance >= 7.
+
+Sources to evaluate:
+{json.dumps(sources_for_prompt, indent=2)}
+
+Return JSON array only, no markdown:
+[
+  {{
+    "url": "...",
+    "accepted": true,
+    "authority_score": 1,
+    "detail_density_score": 1,
+    "era_accuracy_score": 1,
+    "relevance_score": 1,
+    "reason": "one sentence",
+    "relevant_passages": ["quote1", "quote2"]
+  }}
+]
+"""
+
+    # Build a URL→FetchedContent lookup for source_type resolution
+    content_by_url: dict[str, FetchedContent] = {s.url: s for s in fetched_content}
+
+    for attempt in range(3):
+        try:
+            async with semaphore:
+                response = await client.aio.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        max_output_tokens=2048,
+                        temperature=0.1,
+                    ),
+                )
+
+            raw_text = response.text.strip()
+            # Strip markdown fences if present
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[-1]
+            if raw_text.endswith("```"):
+                raw_text = raw_text.rsplit("```", 1)[0]
+
+            evaluations = json.loads(raw_text.strip())
+            if not isinstance(evaluations, list):
+                raise ValueError(f"Expected JSON array, got {type(evaluations).__name__}")
+
+            accepted: list[EvaluatedSource] = []
+            rejected: list[EvaluatedSource] = []
+
+            for ev in evaluations:
+                url = ev.get("url", "")
+                source = content_by_url.get(url)
+                source_type = source.source_type if source else "unknown"
+
+                evaluated = EvaluatedSource(
+                    url=url,
+                    title=ev.get("title", source.title if source else ""),
+                    source_type=source_type,
+                    accepted=bool(ev.get("accepted", False)),
+                    authority_score=int(ev.get("authority_score", 0)),
+                    detail_density_score=int(ev.get("detail_density_score", 0)),
+                    era_accuracy_score=int(ev.get("era_accuracy_score", 0)),
+                    relevance_score=int(ev.get("relevance_score", 0)),
+                    reason=ev.get("reason", ""),
+                    relevant_passages=ev.get("relevant_passages", []),
+                )
+
+                if evaluated.accepted:
+                    accepted.append(evaluated)
+                else:
+                    rejected.append(evaluated)
+
+            logger.info(
+                "Batch evaluate: %d accepted, %d rejected for scene %s",
+                len(accepted),
+                len(rejected),
+                scene_brief.get("scene_id", "?"),
+            )
+            return accepted, rejected
+
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
+            logger.warning(
+                "Batch evaluate attempt %d failed for scene %s: %s",
+                attempt + 1,
+                scene_brief.get("scene_id", "?"),
+                exc,
+            )
+            if attempt == 2:
+                # Final attempt failed — return all sources as rejected
+                logger.error(
+                    "Batch evaluate exhausted retries for scene %s — rejecting all",
+                    scene_brief.get("scene_id", "?"),
+                )
+                return [], [
+                    EvaluatedSource(
+                        url=s.url,
+                        title=s.title,
+                        source_type=s.source_type,
+                        accepted=False,
+                        reason="Batch evaluation failed after 3 attempts",
+                    )
+                    for s in fetched_content
+                ]
+        except Exception as exc:
+            logger.warning(
+                "Batch evaluate attempt %d unexpected error for scene %s: %s",
+                attempt + 1,
+                scene_brief.get("scene_id", "?"),
+                exc,
+            )
+            if attempt == 2:
+                return [], [
+                    EvaluatedSource(
+                        url=s.url,
+                        title=s.title,
+                        source_type=s.source_type,
+                        accepted=False,
+                        reason="Batch evaluation failed after 3 attempts",
+                    )
+                    for s in fetched_content
+                ]
+
+    # Unreachable, but satisfies the type checker
+    return [], []
+
+
+# ---------------------------------------------------------------------------
 # Per-scene micro-pipeline runner
 # ---------------------------------------------------------------------------
 
@@ -148,6 +327,7 @@ async def _update_segment_status_in_firestore(
 async def _run_scene_pipeline(
     scene_brief: dict[str, Any],
     segment: dict[str, Any],
+    storyboard_plan: dict[str, Any] | None,
     client: google_genai.Client,
     semaphore: asyncio.Semaphore,
     db: firestore.AsyncClient,
@@ -155,6 +335,7 @@ async def _run_scene_pipeline(
     processor_name: str | None,
     emitter: SSEEmitter | None,
     fast_path: bool,
+    visual_bible: str = "",
 ) -> VisualDetailManifest | None:
     """Run Stages 0–6 for a single scene and return the completed manifest.
 
@@ -164,6 +345,10 @@ async def _run_scene_pipeline(
     Args:
         scene_brief: Serialised SceneBrief dict.
         segment: Serialised SegmentScript dict.
+        storyboard_plan: Matching ``SceneVisualPlan`` dict from the storyboard,
+            or ``None`` if no storyboard exists for this scene.  When provided,
+            Stage 0 is skipped (pre-planned queries) and Stage 4 uses single-call
+            batch evaluation.
         client: Shared google-genai async client.
         semaphore: Shared rate-limit gate (across all concurrent scenes).
         db: Async Firestore client.
@@ -171,6 +356,7 @@ async def _run_scene_pipeline(
         processor_name: Document AI processor resource name (optional).
         emitter: SSE emitter for frontend progress events (optional).
         fast_path: Whether to use the fast-path caps and early exit.
+        visual_bible: Imagen 3 style guide for the documentary.
 
     Returns:
         The completed ``VisualDetailManifest``, or ``None`` if all stages fail.
@@ -195,19 +381,30 @@ async def _run_scene_pipeline(
         )
 
     # ---- Stage 0: Query Generation ----
-    queries = await stage_0_generate_queries(scene_brief, client, semaphore)
-    if not queries:
-        logger.warning("Stage 0 produced no queries for %s — aborting", scene_id)
-        if emitter:
-            await emitter.emit(
-                "agent_status",
-                build_agent_status_event(
-                    agent_id=f"visual_research_{scene_id}",
-                    status="error",
-                    elapsed=round(time.monotonic() - t_start, 1),
-                ),
-            )
-        return None
+    # If a storyboard plan exists for this scene, use its pre-planned queries
+    # instead of running Stage 0 (query generation). This saves 1 Gemini call
+    # per scene and ensures queries are differentiated across scenes.
+    if storyboard_plan and storyboard_plan.get("targeted_searches"):
+        queries = storyboard_plan["targeted_searches"][:3]  # max 3
+        logger.info(
+            "Phase IV [%s]: using storyboard queries for %s (skip Stage 0)",
+            track, scene_id,
+        )
+    else:
+        # Fallback: run Stage 0 query generation as before
+        queries = await stage_0_generate_queries(scene_brief, client, semaphore)
+        if not queries:
+            logger.warning("Stage 0 produced no queries for %s — aborting", scene_id)
+            if emitter:
+                await emitter.emit(
+                    "agent_status",
+                    build_agent_status_event(
+                        agent_id=f"visual_research_{scene_id}",
+                        status="error",
+                        elapsed=round(time.monotonic() - t_start, 1),
+                    ),
+                )
+            return None
 
     # ---- Stage 1: Source Discovery ----
     if emitter:
@@ -260,7 +457,7 @@ async def _run_scene_pipeline(
             )
         return None
 
-    # ---- Stage 4: Dual Evaluation ----
+    # ---- Stage 4: Source Evaluation ----
     if emitter:
         await emitter.emit(
             "agent_status",
@@ -271,14 +468,21 @@ async def _run_scene_pipeline(
             ),
         )
 
-    accepted_sources, rejected_sources = await stage_4_dual_evaluate(
-        fetched_content,
-        scene_brief,
-        client,
-        semaphore,
-        fast_path=fast_path,
-        early_exit_count=2,
-    )
+    if storyboard_plan:
+        # Single-call batch evaluation when storyboard is available
+        accepted_sources, rejected_sources = await _batch_evaluate_sources(
+            fetched_content, scene_brief, storyboard_plan, client, semaphore
+        )
+    else:
+        # Fallback to original dual evaluate
+        accepted_sources, rejected_sources = await stage_4_dual_evaluate(
+            fetched_content,
+            scene_brief,
+            client,
+            semaphore,
+            fast_path=fast_path,
+            early_exit_count=2,
+        )
 
     # Emit per-source evaluation events for the frontend AgentModal
     if emitter:
@@ -322,7 +526,8 @@ async def _run_scene_pipeline(
         logger.warning("Stage 4: no accepted sources for %s — manifest will be empty", scene_id)
 
     # ---- Stage 6: Manifest Synthesis ----
-    visual_bible = ctx.session.state.get("visual_bible", "")
+    frame_concepts = storyboard_plan.get("frame_concepts", []) if storyboard_plan else []
+
     manifest = await stage_6_synthesize_manifest(
         fragments,
         accepted_sources,
@@ -332,6 +537,7 @@ async def _run_scene_pipeline(
         client,
         visual_bible=visual_bible,
         narrative_role=scene_brief.get("narrative_role", ""),
+        frame_concepts=frame_concepts,
     )
 
     t_elapsed = round(time.monotonic() - t_start, 1)
@@ -479,6 +685,12 @@ class VisualResearchOrchestrator(BaseAgent):
             s["scene_id"]: s for s in script_raw if "scene_id" in s
         }
 
+        # Load visual storyboard (produced by Phase III-B storyboard agent)
+        storyboard_raw: dict = ctx.session.state.get("visual_storyboard", {})
+        storyboard_scenes: dict[str, dict] = (
+            storyboard_raw.get("scenes", {}) if storyboard_raw else {}
+        )
+
         # Build (brief, segment) pairs — use script segment when available,
         # otherwise construct a stub from the scene brief so Phase IV can run
         # in parallel with Phase III without waiting for it.
@@ -528,6 +740,9 @@ class VisualResearchOrchestrator(BaseAgent):
         # ------------------------------------------------------------------
         # Build concurrent pipeline tasks — fast path for scene 0, deep for rest
         # ------------------------------------------------------------------
+        # Resolve visual_bible once for all scenes
+        _visual_bible: str = ctx.session.state.get("visual_bible", "")
+
         async def _run_and_store(
             brief: dict[str, Any],
             seg: dict[str, Any],
@@ -539,9 +754,14 @@ class VisualResearchOrchestrator(BaseAgent):
             the manifest is ready — giving the frontend progressive delivery without
             waiting for all scenes to finish Phase IV.
             """
+            # Look up storyboard plan for this scene (may be None)
+            scene_id = brief.get("scene_id", "")
+            sb_plan = storyboard_scenes.get(scene_id)
+
             manifest = await _run_scene_pipeline(
                 scene_brief=brief,
                 segment=seg,
+                storyboard_plan=sb_plan,
                 client=client,
                 semaphore=semaphore,
                 db=db,
@@ -549,6 +769,7 @@ class VisualResearchOrchestrator(BaseAgent):
                 processor_name=self.processor_name,
                 emitter=self.emitter,
                 fast_path=fast_path,
+                visual_bible=_visual_bible,
             )
             if manifest:
                 ctx.session.state["visual_research_manifest"][manifest.scene_id] = (

@@ -977,6 +977,7 @@ async def stage_6_synthesize_manifest(
     client: google_genai.Client,
     visual_bible: str = "",
     narrative_role: str = "",
+    frame_concepts: list[str] | None = None,
 ) -> VisualDetailManifest:
     """Synthesise all extracted fragments into a final VisualDetailManifest.
 
@@ -995,6 +996,11 @@ async def stage_6_synthesize_manifest(
         scene_brief: Serialised SceneBrief dict.
         segment_id: Matching SegmentScript id.
         client: Shared google-genai async client.
+        visual_bible: Imagen 3 style guide for the documentary.
+        narrative_role: Scene role in narrative arc (opening, climax, etc.).
+        frame_concepts: Four director-specified frame concepts from the
+            storyboard.  When provided, frame prompts implement these
+            concepts instead of using the default camera-angle variants.
 
     Returns:
         A ``VisualDetailManifest`` ready to write to Firestore.
@@ -1071,16 +1077,23 @@ Output ONLY the prompt text, no preamble.
 
     # --- Generate subject-differentiated frame prompts (only needed frames) ---
 
-    # Determine which frame indices this scene actually needs.
-    # Opening and coda scenes get 1 frame; climax gets 3; others get 2.
-    _STAGE6_FRAME_PLAN: dict[str, list[int]] = {
-        "opening":       [0],
-        "rising_action": [0, 1],
-        "climax":        [0, 1, 3],
-        "resolution":    [1, 3],
-        "coda":          [3],
-    }
-    needed_frames: list[int] = _STAGE6_FRAME_PLAN.get(narrative_role, [0, 1])
+    # When storyboard frame_concepts are provided, use all 4 frames with the
+    # director's concepts.  Otherwise, determine frames from narrative role.
+    use_storyboard_concepts = bool(frame_concepts and len(frame_concepts) >= 4)
+
+    if use_storyboard_concepts:
+        needed_frames = [0, 1, 2, 3]
+    else:
+        # Determine which frame indices this scene actually needs.
+        # Opening and coda scenes get 1 frame; climax gets 3; others get 2.
+        _STAGE6_FRAME_PLAN: dict[str, list[int]] = {
+            "opening":       [0],
+            "rising_action": [0, 1],
+            "climax":        [0, 1, 3],
+            "resolution":    [1, 3],
+            "coda":          [3],
+        }
+        needed_frames = _STAGE6_FRAME_PLAN.get(narrative_role, [0, 1])
 
     _FRAME_DESCRIPTIONS: dict[int, str] = {
         0: "FRAME 0 — ENVIRONMENT: Architectural environment ONLY. No human figures. The space, its scale, textures, atmosphere. Include the specific era and location (e.g. \"circa {era}\").",
@@ -1089,10 +1102,28 @@ Output ONLY the prompt text, no preamble.
         3: "FRAME 3 — ATMOSPHERE: Dramatic light/shadow relationship. Interior/exterior threshold, light beam, shadow contrast, environmental scale. Atmosphere as subject.",
     }
     era = scene_brief.get("era", "historical period")
-    frame_descriptions_text = "\n\n".join(
-        _FRAME_DESCRIPTIONS[i].replace("{era}", era) for i in needed_frames
-    )
+
+    if use_storyboard_concepts:
+        # Use storyboard frame_concepts instead of generic frame descriptions
+        frame_descriptions_text = "\n\n".join(
+            f"Frame {i}: {frame_concepts[i]}"
+            for i in range(4)
+        )
+        frame_concept_preamble = (
+            "The documentary director has specified these 4 distinct frame concepts for this scene.\n"
+            "Generate frame_prompts that implement each concept, enriched with the archival visual\n"
+            "details you just compiled. Each frame_prompt should be 80-120 words and describe a\n"
+            "different subject/moment from the scene:\n\n"
+        )
+    else:
+        frame_descriptions_text = "\n\n".join(
+            _FRAME_DESCRIPTIONS[i].replace("{era}", era) for i in needed_frames
+        )
+        frame_concept_preamble = ""
+
     frame_count = len(needed_frames)
+
+    frame_word_range = "80–120" if use_storyboard_concepts else "60–90"
 
     frame_prompts_prompt = f"""\
 You are the visual director for an AI-generated historical documentary.
@@ -1110,11 +1141,11 @@ PERIOD-ACCURATE VISUAL DETAILS (sourced from archival research):
 
 Write {frame_count} Imagen 3 prompt(s) for this scene. Each must describe a DIFFERENT SUBJECT.
 
-{frame_descriptions_text}
+{frame_concept_preamble}{frame_descriptions_text}
 
 Each prompt must:
 - Start with "Cinematic still photograph."
-- Be 60–90 words
+- Be {frame_word_range} words
 - Contain the explicit era/century (e.g. "{scene_brief.get('era', 'historical era')}")
 - Use period-specific vocabulary from the extracted details above
 
