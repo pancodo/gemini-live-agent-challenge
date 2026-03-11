@@ -2,13 +2,21 @@ import { useEffect, useRef } from 'react';
 
 /**
  * Reads AnalyserNode frequency data each rAF frame and drives
- * CSS custom properties on :root for audio-reactive visuals.
+ * audio-reactive visuals on the documentary player.
  *
- * Driven properties:
- *   --ken-speed:    28s (silence) -> 20s (peak)
+ * Driven properties (scoped to #player-container, not :root):
  *   --glow-opacity: 0.5 -> 1.0
  *   --vig-spread:   110% -> 140%
  *   --cap-shadow:   28px -> 48px
+ *
+ * Ken Burns speed is controlled via Web Animations API playbackRate
+ * instead of CSS custom properties. Mutating animation-duration via
+ * setProperty causes visible jumps because the browser re-snapshots
+ * the duration and restarts timing. playbackRate smoothly scales
+ * the running animation without any restart.
+ *
+ * All setProperty calls target #player-container instead of :root
+ * to avoid invalidating style calculations document-wide.
  *
  * The analyser can be null (no-op) or swapped dynamically
  * (e.g. switching between capture and playback analysers).
@@ -20,7 +28,6 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
     if (!analyser) return;
 
     const data = new Uint8Array(analyser.frequencyBinCount);
-    const root = document.documentElement;
 
     function tick() {
       analyser!.getByteFrequencyData(data);
@@ -32,11 +39,22 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
       }
       const energy = sum / data.length / 255;
 
-      // Map energy to CSS custom properties
-      root.style.setProperty('--ken-speed', `${28 - energy * 8}s`);
-      root.style.setProperty('--glow-opacity', `${0.5 + energy * 0.5}`);
-      root.style.setProperty('--vig-spread', `${110 + energy * 30}%`);
-      root.style.setProperty('--cap-shadow', `${28 + energy * 20}px`);
+      // Control Ken Burns animation speed via playbackRate (no CSS jump)
+      // Maps: 0.7x at silence -> 1.3x at narration peak
+      const kenEl = document.querySelector('.ken-burns-stage');
+      const kenAnim = kenEl?.getAnimations()[0];
+      if (kenAnim) {
+        kenAnim.playbackRate = 0.7 + energy * 0.6;
+      }
+
+      // Scope all CSS custom property writes to the player container
+      // to avoid invalidating the entire document style tree
+      const container = document.getElementById('player-container');
+      if (container) {
+        container.style.setProperty('--glow-opacity', `${0.5 + energy * 0.5}`);
+        container.style.setProperty('--vig-spread', `${110 + energy * 30}%`);
+        container.style.setProperty('--cap-shadow', `${28 + energy * 20}px`);
+      }
 
       rafRef.current = requestAnimationFrame(tick);
     }
@@ -45,11 +63,21 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
 
     return () => {
       cancelAnimationFrame(rafRef.current);
-      // Reset to defaults on cleanup
-      root.style.setProperty('--ken-speed', '28s');
-      root.style.setProperty('--glow-opacity', '0.5');
-      root.style.setProperty('--vig-spread', '110%');
-      root.style.setProperty('--cap-shadow', '28px');
+
+      // Reset Ken Burns playback rate
+      const kenEl = document.querySelector('.ken-burns-stage');
+      const kenAnim = kenEl?.getAnimations()[0];
+      if (kenAnim) {
+        kenAnim.playbackRate = 1.0;
+      }
+
+      // Reset CSS custom properties on the scoped container
+      const container = document.getElementById('player-container');
+      if (container) {
+        container.style.setProperty('--glow-opacity', '0.5');
+        container.style.setProperty('--vig-spread', '110%');
+        container.style.setProperty('--cap-shadow', '28px');
+      }
     };
   }, [analyser]);
 }
