@@ -138,6 +138,42 @@ def build_pipeline_phase_event(
     }
 
 
+def build_branch_triggered_event(
+    *,
+    question: str,
+    session_id: str,
+) -> dict[str, Any]:
+    """Build a branch_triggered SSE event payload.
+
+    Emitted by the live-relay when it detects that the user's question
+    should spawn a new branch mini-pipeline.
+    """
+    return {
+        "type": "branch_triggered",
+        "question": question,
+        "sessionId": session_id,
+    }
+
+
+def build_branch_segment_ready_event(
+    *,
+    segment_id: str,
+    parent_segment_id: str,
+    trigger_question: str,
+) -> dict[str, Any]:
+    """Build a branch_segment_ready SSE event payload.
+
+    Emitted by the branch pipeline once the new branched segment has been
+    written to Firestore and is ready to play.
+    """
+    return {
+        "type": "branch_segment_ready",
+        "segmentId": segment_id,
+        "parentSegmentId": parent_segment_id,
+        "triggerQuestion": trigger_question,
+    }
+
+
 def build_segment_update_event(
     *,
     segment_id: str,

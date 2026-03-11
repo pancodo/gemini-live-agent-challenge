@@ -20,12 +20,18 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from google.cloud import firestore, storage
 
 from ..models import (
     AgentLogsResponse,
+    BranchRequest,
+    BranchResponse,
+    ClipRequest,
+    ClipStartResponse,
+    ClipStatusResponse,
     CreateSessionResponse,
+    GroundingSourcesResponse,
     SegmentResponse,
     SegmentsResponse,
     SessionStatusResponse,
@@ -57,7 +63,11 @@ def get_gcs() -> storage.Client:
 
 
 @router.get("/session/create", response_model=CreateSessionResponse)
-async def create_session(filename: str = "document.pdf", language: str | None = None) -> CreateSessionResponse:
+async def create_session(
+    filename: str = "document.pdf",
+    language: str | None = None,
+    persona: str = "professor",
+) -> CreateSessionResponse:
     """Create a new session: write Firestore doc + generate signed GCS upload URL."""
     session_id = str(uuid.uuid4())
     gcs_path = f"gs://{GCS_BUCKET}/{session_id}/document.pdf"
@@ -87,6 +97,7 @@ async def create_session(filename: str = "document.pdf", language: str | None = 
             "status": "uploading",
             "gcsPath": gcs_path,
             "language": language,
+            "persona": persona,
             "visualBible": None,
             "createdAt": firestore.SERVER_TIMESTAMP,
         })
@@ -356,3 +367,47 @@ async def get_url_meta(url: str = Query(..., description="URL to fetch metadata 
     meta = _extract_meta(url, html)
     _cache_set(url, meta)
     return UrlMetaResponse(**meta)
+
+
+# ---------------------------------------------------------------------------
+# Documentary Branching
+# ---------------------------------------------------------------------------
+
+@router.post("/session/{session_id}/branch", response_model=BranchResponse)
+async def branch_session(
+    session_id: str,
+    body: BranchRequest,
+    background_tasks: BackgroundTasks,
+) -> BranchResponse:
+    """Trigger a branch pipeline for a user question. Implemented by Team 1."""
+    raise HTTPException(status_code=501, detail="Branch pipeline not yet implemented")
+
+
+# ---------------------------------------------------------------------------
+# Shareable Clips
+# ---------------------------------------------------------------------------
+
+@router.post("/session/{session_id}/clips", response_model=ClipStartResponse)
+async def create_clip(
+    session_id: str,
+    body: ClipRequest,
+    background_tasks: BackgroundTasks,
+) -> ClipStartResponse:
+    """Enqueue a shareable MP4 clip for a segment. Implemented by Team 5."""
+    raise HTTPException(status_code=501, detail="Clip generator not yet implemented")
+
+
+@router.get("/session/{session_id}/clips/{clip_id}", response_model=ClipStatusResponse)
+async def get_clip_status(session_id: str, clip_id: str) -> ClipStatusResponse:
+    """Poll clip generation status. Implemented by Team 5."""
+    raise HTTPException(status_code=501, detail="Clip generator not yet implemented")
+
+
+# ---------------------------------------------------------------------------
+# Grounding Sources
+# ---------------------------------------------------------------------------
+
+@router.get("/session/{session_id}/segments/{segment_id}/sources", response_model=GroundingSourcesResponse)
+async def get_segment_sources(session_id: str, segment_id: str) -> GroundingSourcesResponse:
+    """Return verified grounding sources for a segment from visual manifests. Implemented by Team 3."""
+    raise HTTPException(status_code=501, detail="Sources endpoint not yet implemented")

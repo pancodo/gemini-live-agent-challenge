@@ -146,6 +146,42 @@ export type SSEEvent =
   | StatsUpdateEvent
   | ErrorEvent;
 
+// ── Persona ───────────────────────────────────────────────────
+export type PersonaType = 'professor' | 'storyteller' | 'explorer';
+
+// ── Documentary Branching ─────────────────────────────────────
+export interface BranchNode {
+  segmentId: string;
+  parentSegmentId: string | null;
+  triggerQuestion: string;
+  depth: number;
+  createdAt: string;
+}
+
+// ── PDF Entity Highlights ─────────────────────────────────────
+export interface EntityHighlight {
+  text: string;
+  segmentId: string;
+  pageNumber: number;
+  charOffset: number;
+}
+
+// ── Grounding Evidence ────────────────────────────────────────
+export interface GroundingSource {
+  url: string;
+  title: string;
+  relevanceScore: number; // 0–1
+  acceptedBy: string[];   // agentIds that accepted this source
+}
+
+// ── Shareable Clips ───────────────────────────────────────────
+export interface ClipStatus {
+  clipId: string;
+  status: 'queued' | 'generating' | 'ready' | 'error';
+  downloadUrl?: string;
+  segmentId: string;
+}
+
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {
   sessionId: string;

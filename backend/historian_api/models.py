@@ -53,3 +53,43 @@ class UrlMetaResponse(BaseModel):
     image: str | None = None
     favicon: str | None = None
     hostname: str
+
+
+# ── Branch ────────────────────────────────────────────────────
+
+class BranchRequest(BaseModel):
+    question: str
+
+
+class BranchResponse(BaseModel):
+    segmentId: str
+
+
+# ── Clips ─────────────────────────────────────────────────────
+
+class ClipRequest(BaseModel):
+    segmentId: str
+
+
+class ClipStartResponse(BaseModel):
+    clipId: str
+
+
+class ClipStatusResponse(BaseModel):
+    clipId: str
+    status: str  # "queued" | "generating" | "ready" | "error"
+    segmentId: str
+    downloadUrl: str | None = None
+
+
+# ── Grounding Sources ─────────────────────────────────────────
+
+class GroundingSourceItem(BaseModel):
+    url: str
+    title: str
+    relevanceScore: float
+    acceptedBy: list[str] = []
+
+
+class GroundingSourcesResponse(BaseModel):
+    sources: list[GroundingSourceItem]
