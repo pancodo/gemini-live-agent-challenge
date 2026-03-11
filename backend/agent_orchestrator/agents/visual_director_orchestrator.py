@@ -97,6 +97,33 @@ _NARRATIVE_FRAME_PLAN: dict[str, list[int]] = {
     "coda":          [3],          # 1 frame — one resonant atmospheric close
 }
 _DEFAULT_FRAME_PLAN: list[int] = [0, 1]  # fallback for unknown narrative roles
+
+# Narrative-role driven visual styling: prefix/suffix applied to every frame prompt
+# so that the Imagen 3 output reflects the segment's position in the documentary arc.
+_NARRATIVE_ROLE_STYLES: dict[str, dict[str, str]] = {
+    "opening": {
+        "prefix": "Golden hour, warm Renaissance palette, hopeful atmosphere,",
+        "suffix": "wide depth of field, inviting composition",
+    },
+    "rising_action": {
+        "prefix": "Dynamic composition, directional side lighting, sense of motion,",
+        "suffix": "energetic, mid-depth of field",
+    },
+    "climax": {
+        "prefix": "High contrast chiaroscuro, dramatic tension, peak dramatic moment,",
+        "suffix": "shallow depth of field on subject, intense atmosphere",
+    },
+    "resolution": {
+        "prefix": "Soft diffused light, balanced symmetry, calm composition,",
+        "suffix": "sense of conclusion, wide establishing framing",
+    },
+    "coda": {
+        "prefix": "Long shadows, contemplative framing, historical distance,",
+        "suffix": "melancholic atmosphere, empty spaces, fading light",
+    },
+}
+_DEFAULT_STYLE: dict[str, str] = {"prefix": "Cinematic,", "suffix": "documentary style"}
+
 _IMAGEN_MODEL: str = "imagen-3.0-fast-generate-001"
 _VEO2_MODEL: str = "veo-2.0-generate-001"
 _VEO2_POLL_INTERVAL_SECONDS: int = 20
@@ -209,25 +236,31 @@ def _build_imagen_prompt(
     manifest: dict[str, Any] | None,
     visual_bible: str,
     frame_idx: int,
+    narrative_role: str = "",
 ) -> tuple[str, str]:
     """Build an Imagen 3 (prompt, negative_prompt) pair for a single frame.
 
     Priority rule:
       0. If ``manifest.frame_prompts`` has an entry for ``frame_idx`` → use that
          subject-differentiated prompt directly (no frame modifier appended).
-      1. If ``manifest.enriched_prompt`` exists → combine visual_bible prefix +
-         enriched_prompt + frame-specific composition modifier.  The era_markers
-         from ``manifest.detail_fields`` are appended to the negative prompt.
-      2. No manifest (or empty enriched_prompt) → combine visual_bible + the
-         script's ``visual_descriptions[frame_idx]``.
+      1. If ``manifest.enriched_prompt`` exists → combine enriched_prompt +
+         frame-specific composition modifier.
+      2. No manifest (or empty enriched_prompt) → combine the script's
+         ``visual_descriptions[frame_idx]``.
       3. No visual_descriptions → generic cinematic fallback built from segment
          title and mood.
+
+    All prompt paths are wrapped with:
+      - A style anchor (first 200 chars of ``visual_bible``) as an era prefix.
+      - Narrative-role prefix/suffix from ``_NARRATIVE_ROLE_STYLES``.
 
     Args:
         segment: SegmentScript dict from session.state["script"].
         manifest: VisualDetailManifest dict for this scene, or None.
         visual_bible: Imagen 3 style guide string from Phase I.
         frame_idx: 0–3 index selecting the frame composition modifier.
+        narrative_role: Dramatic arc position (opening, rising_action, climax,
+            resolution, coda). Controls visual styling prefix/suffix.
 
     Returns:
         Tuple of (prompt, negative_prompt).
@@ -248,6 +281,22 @@ def _build_imagen_prompt(
             f"modern infrastructure, "
         )
 
+    # --- Style anchor: first 200 chars of visual_bible as era consistency prefix ---
+    style_anchor = (visual_bible[:200].strip() + "," if visual_bible else "")
+
+    # --- Narrative-role styling (same for all frames in the segment) ---
+    role_style = _NARRATIVE_ROLE_STYLES.get(narrative_role, _DEFAULT_STYLE)
+    narrative_prefix: str = role_style["prefix"]
+    narrative_suffix: str = role_style["suffix"]
+
+    def _assemble_prompt(core_prompt: str) -> str:
+        """Wrap a core prompt with style_anchor, narrative prefix/suffix, and lighting."""
+        return (
+            f"{style_anchor} {narrative_prefix} {core_prompt} "
+            f"{narrative_suffix}\n\n"
+            f"Lighting: {lighting_directive}"
+        )
+
     # --- Priority 0: Use per-frame subject-differentiated prompts from Phase IV ---
     if manifest and manifest.get("frame_prompts"):
         frame_prompts: list[str] = manifest["frame_prompts"]
@@ -256,11 +305,7 @@ def _build_imagen_prompt(
             # Ensure the era is explicit in the first 50 chars of the prompt
             if era and era.lower() not in frame_prompt[:50].lower():
                 frame_prompt = f"[{era}] {frame_prompt}"
-            prompt = (
-                f"{visual_bible}\n\n"
-                f"{frame_prompt}\n\n"
-                f"Lighting: {lighting_directive}"
-            )
+            prompt = _assemble_prompt(frame_prompt)
             negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
             if period_additions:
                 negative = f"{negative}, {period_additions}"
@@ -276,12 +321,8 @@ def _build_imagen_prompt(
         if era and era.lower() not in enriched[:50].lower():
             enriched = f"[{era}] {enriched}"
 
-        prompt = (
-            f"{visual_bible}\n\n"
-            f"{enriched}\n\n"
-            f"Frame composition: {frame_modifier}\n\n"
-            f"Lighting: {lighting_directive}"
-        )
+        core = f"{enriched}\n\nFrame composition: {frame_modifier}"
+        prompt = _assemble_prompt(core)
 
         negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
         if era_markers:
@@ -298,12 +339,8 @@ def _build_imagen_prompt(
     visual_descriptions: list[str] = segment.get("visual_descriptions", [])
     if visual_descriptions:
         desc = visual_descriptions[frame_idx % len(visual_descriptions)]
-        prompt = (
-            f"{visual_bible}\n\n"
-            f"{desc}\n\n"
-            f"Frame composition: {frame_modifier}\n\n"
-            f"Lighting: {lighting_directive}"
-        )
+        core = f"{desc}\n\nFrame composition: {frame_modifier}"
+        prompt = _assemble_prompt(core)
         negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
         if period_additions:
             negative = f"{negative}, {period_additions}"
@@ -312,13 +349,12 @@ def _build_imagen_prompt(
     # --- Priority 3: Generic fallback ---
     title: str = segment.get("title", "historical documentary scene")
     era_qualifier = f", {era}" if era else ""
-    prompt = (
-        f"{visual_bible}\n\n"
+    core = (
         f"A {mood} historical documentary scene: {title}{era_qualifier}. "
         f"Period-accurate, no anachronisms. "
-        f"Frame composition: {frame_modifier}\n\n"
-        f"Lighting: {lighting_directive}"
+        f"Frame composition: {frame_modifier}"
     )
+    prompt = _assemble_prompt(core)
     negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
     if period_additions:
         negative = f"{negative}, {period_additions}"
@@ -436,7 +472,8 @@ async def _generate_segment_images(
 
     for frame_idx in _frames_for_segment(segment, narrative_role):
         prompt, negative = _build_imagen_prompt(
-            segment, manifest, visual_bible, frame_idx
+            segment, manifest, visual_bible, frame_idx,
+            narrative_role=narrative_role,
         )
         # Never let Imagen 3 enhance historical prompts — it modernizes them
         use_enhance = False
@@ -756,13 +793,29 @@ async def _run_segment_generation(
             ),
         )
 
-    # --- Trigger Veo 2 (disabled — too expensive for dev/testing) ---
-    # Uncomment to re-enable before final submission:
-    # veo2_scene: str | None = segment.get("veo2_scene")
-    # if veo2_scene:
-    #     operation = await _trigger_veo2_generation(...)
-    #     if operation:
-    #         return (segment_id, scene_id, operation)
+    # --- Trigger Veo 2 (climax scenes only) ---
+    veo2_scene: str | None = segment.get("veo2_scene")
+    should_generate_video = (
+        narrative_role == "climax"
+        and bool(veo2_scene)
+    )
+    if veo2_scene and not should_generate_video:
+        logger.info(
+            "Skipping Veo 2 for segment %s (narrative_role=%s, climax only)",
+            segment_id,
+            narrative_role,
+        )
+    if should_generate_video:
+        assert veo2_scene is not None  # narrowing for type checker
+        operation = await _trigger_veo2_generation(
+            client=client,
+            veo2_prompt=veo2_scene,
+            session_id=session_id,
+            scene_id=scene_id,
+            bucket_name=bucket_name,
+        )
+        if operation:
+            return (segment_id, scene_id, operation)
 
     return None
 
@@ -936,9 +989,15 @@ class VisualDirectorOrchestrator(BaseAgent):
             seg_id = seg.get("id", "")
             scene_id_v = seg.get("scene_id", "")
             role_v = narrative_role_map.get(scene_id_v, "")
-            # Only trigger Veo 2 for climax moments — not every segment with a veo2_scene
-            veo2_worthy = role_v == "climax" and seg.get("mood", "") in ("dramatic", "cinematic")
-            if seg_id in already_generated and seg.get("veo2_scene") and veo2_worthy:
+            # Only trigger Veo 2 for climax moments with a veo2_scene description
+            veo2_worthy = role_v == "climax" and bool(seg.get("veo2_scene"))
+            if seg_id in already_generated and seg.get("veo2_scene") and not veo2_worthy:
+                logger.info(
+                    "Skipping Veo 2 for segment %s (narrative_role=%s, climax only)",
+                    seg_id,
+                    role_v,
+                )
+            if seg_id in already_generated and veo2_worthy:
                 scene_id = seg.get("scene_id", "unknown")
                 operation = await _trigger_veo2_generation(
                     client=client,
