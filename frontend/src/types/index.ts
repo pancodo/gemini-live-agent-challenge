@@ -149,9 +149,6 @@ export type SSEEvent =
   | StatsUpdateEvent
   | ErrorEvent;
 
-// ── Persona ───────────────────────────────────────────────────
-export type PersonaType = 'professor' | 'storyteller' | 'explorer';
-
 // ── Documentary Branching ─────────────────────────────────────
 export interface BranchNode {
   segmentId: string;
