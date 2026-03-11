@@ -53,3 +53,14 @@ class UrlMetaResponse(BaseModel):
     image: str | None = None
     favicon: str | None = None
     hostname: str
+
+
+class GroundingSourceItem(BaseModel):
+    url: str
+    title: str
+    relevanceScore: float
+    acceptedBy: list[str] = []
+
+
+class GroundingSourcesResponse(BaseModel):
+    sources: list[GroundingSourceItem]

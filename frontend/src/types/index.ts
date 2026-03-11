@@ -146,6 +146,20 @@ export type SSEEvent =
   | StatsUpdateEvent
   | ErrorEvent;
 
+// ── Grounding Sources ────────────────────────────────────────
+export interface GroundingSource {
+  url: string;
+  title: string;
+  relevanceScore: number; // 0–1
+  acceptedBy: string[];
+}
+
+// ── Branch Graph ─────────────────────────────────────────────
+export interface BranchNode {
+  segmentId: string;
+  triggerQuestion: string;
+}
+
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {
   sessionId: string;

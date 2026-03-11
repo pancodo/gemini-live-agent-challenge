@@ -85,13 +85,20 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
       onMouseMove={handleMouseMove}
       className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-4 cursor-pointer`}
     >
-      {/* Header row: mood badge + index */}
+      {/* Header row: mood badge + source count + index */}
       <div className="flex items-center justify-between mb-3">
-        {segment.mood ? (
-          <Badge variant="gold">{segment.mood}</Badge>
-        ) : (
-          <span />
-        )}
+        <div className="flex items-center gap-1.5">
+          {segment.mood ? (
+            <Badge variant="gold">{segment.mood}</Badge>
+          ) : (
+            <span />
+          )}
+          {segment.sources.length > 0 && (
+            <Badge variant="muted">
+              {segment.sources.length} src
+            </Badge>
+          )}
+        </div>
         <span
           className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em]"
           style={{ fontVariantNumeric: 'tabular-nums' }}

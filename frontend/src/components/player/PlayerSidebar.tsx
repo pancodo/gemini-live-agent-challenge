@@ -1,8 +1,16 @@
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Segment } from '../../types';
+import type { BranchNode, Segment } from '../../types';
 import { useResearchStore } from '../../store/researchStore';
 import { usePlayerStore } from '../../store/playerStore';
+import { useGroundingSources } from '../../hooks/useGroundingSources';
+import { SourcePanel } from './SourcePanel';
+
+/** Extended player store shape — branchGraph will be added by Team 1. */
+interface PlayerStoreWithBranch {
+  branchGraph?: BranchNode[];
+  [key: string]: unknown;
+}
 
 interface PlayerSidebarProps {
   isOpen: boolean;
@@ -13,6 +21,8 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
   const segmentsRecord = useResearchStore((s) => s.segments);
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const openSegment = usePlayerStore((s) => s.open);
+  const branchGraph = usePlayerStore((s) => (s as unknown as PlayerStoreWithBranch).branchGraph ?? []);
+  const sources = useGroundingSources();
 
   const segments: Segment[] = useMemo(
     () => Object.values(segmentsRecord),
@@ -145,6 +155,35 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
               );
             })}
           </nav>
+
+          {/* Source panel divider */}
+          <div style={{ borderTop: '1px solid rgba(196,149,106,0.08)', margin: '8px 0' }} />
+
+          {/* Grounding evidence panel */}
+          <SourcePanel sources={sources} />
+
+          {/* Branch tree divider */}
+          <div style={{ borderTop: '1px solid rgba(196,149,106,0.08)', margin: '8px 0' }} />
+
+          {/* BranchTree — populated by branch pipeline via playerStore.branchGraph */}
+          {branchGraph.length > 0 && (
+            <div className="px-3 pb-3">
+              {/* BranchTree component will be imported when available */}
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 10, letterSpacing: '0.4em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
+                Documentary Branches
+              </p>
+              {branchGraph.map((node) => (
+                <button
+                  key={node.segmentId}
+                  onClick={() => openSegment(node.segmentId)}
+                  className="w-full text-left px-2 py-2 rounded mb-1"
+                  style={{ fontSize: 11, color: 'rgba(232,221,208,0.6)', fontFamily: 'var(--font-sans)', background: 'transparent', borderLeft: '2px solid rgba(196,149,106,0.3)' }}
+                >
+                  {'\u21B3'} {node.triggerQuestion}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Close button */}
           <div className="px-5 py-4 border-t" style={{ borderColor: 'rgba(196,149,106,0.1)' }}>
