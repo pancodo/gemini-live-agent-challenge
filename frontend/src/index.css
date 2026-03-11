@@ -386,6 +386,31 @@ body {
   pointer-events: none;
 }
 
+/* ── CSS Custom Highlight API (narration entity matches) ── */
+::highlight(narration-entity) {
+  background-color: rgba(46, 110, 68, 0.28);
+  color: var(--color-text);
+}
+
+/* ── Narration highlight fallback (DOM mutation) ────────── */
+.narration-highlight {
+  color: transparent;
+  background: rgba(46, 110, 68, 0.28);
+  border-radius: 2px;
+  mix-blend-mode: darken;
+  transition: background 0.3s ease, opacity 0.3s ease;
+  animation: narration-fade-in 0.4s ease-out;
+}
+
+.pdf-text-layer:hover .narration-highlight {
+  background: rgba(46, 110, 68, 0.38);
+}
+
+@keyframes narration-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* ── Ink Ripple ────────────────────────────────────────── */
 @keyframes ink-spread {
   from { transform: scale(0); opacity: 0.3; }
