@@ -1,7 +1,26 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useVoiceStore } from '../../store/voiceStore';
+
+/**
+ * Sample the dominant color from an image by down-scaling to 4x4
+ * and averaging the top row. Returns an rgba string for use as
+ * the ambient glow color (YouTube ambient mode style).
+ */
+function sampleImageColor(img: HTMLImageElement): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 4;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return 'transparent';
+  ctx.drawImage(img, 0, 0, 4, 4);
+  const d = ctx.getImageData(0, 0, 4, 4).data;
+  const r = Math.round((d[0] + d[4] + d[8] + d[12]) / 4);
+  const g = Math.round((d[1] + d[5] + d[9] + d[13]) / 4);
+  const b = Math.round((d[2] + d[6] + d[10] + d[14]) / 4);
+  return `rgba(${r},${g},${b},0.3)`;
+}
 
 interface KenBurnsStageProps {
   segment: Segment | null;
@@ -54,6 +73,41 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
 
   const playState = shouldPause ? 'paused' : 'running';
 
+  // Ambient color sampling — writes --ambient-color to .player-root ancestor
+  const handleImageLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>, index: number) => {
+      // Only sample from the currently active image
+      if (index !== currentIndex) return;
+      const imgEl = e.currentTarget;
+      try {
+        const color = sampleImageColor(imgEl);
+        document
+          .querySelector<HTMLElement>('.player-root')
+          ?.style.setProperty('--ambient-color', color);
+      } catch {
+        // Canvas taint from CORS — silently ignore
+      }
+    },
+    [currentIndex],
+  );
+
+  // Re-sample when currentIndex changes (image may already be loaded)
+  useEffect(() => {
+    const activeImg = document.querySelector<HTMLImageElement>(
+      `.player-stage img[data-index="${currentIndex}"]`,
+    );
+    if (activeImg?.complete && activeImg.naturalWidth > 0) {
+      try {
+        const color = sampleImageColor(activeImg);
+        document
+          .querySelector<HTMLElement>('.player-root')
+          ?.style.setProperty('--ambient-color', color);
+      } catch {
+        // Canvas taint — ignore
+      }
+    }
+  }, [currentIndex]);
+
   if (!segment) {
     return (
       <div
@@ -87,7 +141,7 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
   }
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden player-stage">
       <style>{`
         @keyframes ken-burns-0 {
           0%   { transform: scale(1.0) translate(${driftAssignments[0]?.xStart ?? '0%'}, ${driftAssignments[0]?.yStart ?? '0%'}); }
@@ -115,6 +169,9 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
             src={url}
             alt=""
             role="presentation"
+            crossOrigin="anonymous"
+            data-index={i}
+            onLoad={(e) => handleImageLoad(e, i)}
             className="absolute inset-0 w-full h-full object-cover"
             style={{
               opacity: isActive ? 1 : 0,

@@ -5,6 +5,7 @@ import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useResearchStore } from '../../store/researchStore';
 import { useVoiceStore } from '../../store/voiceStore';
+import { useMediaSession } from '../../hooks/useMediaSession';
 import { KenBurnsStage } from './KenBurnsStage';
 import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
@@ -104,6 +105,15 @@ export function DocumentaryPlayer() {
     },
     [currentIndexInReady, readySegments, open],
   );
+
+  // ── Media Session API (OS-level transport controls) ──────────
+  const goNext = useCallback(() => navigateSegment('next'), [navigateSegment]);
+  const goPrev = useCallback(() => navigateSegment('prev'), [navigateSegment]);
+
+  useMediaSession(currentSegment, {
+    onNextTrack: hasNext ? goNext : undefined,
+    onPreviousTrack: hasPrev ? goPrev : undefined,
+  });
 
   // ── Keyboard navigation ──────────────────────────────────────
   useEffect(() => {
