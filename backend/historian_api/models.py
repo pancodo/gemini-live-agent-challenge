@@ -53,3 +53,18 @@ class UrlMetaResponse(BaseModel):
     image: str | None = None
     favicon: str | None = None
     hostname: str
+
+
+class ClipRequest(BaseModel):
+    segmentId: str
+
+
+class ClipStartResponse(BaseModel):
+    clipId: str
+
+
+class ClipStatusResponse(BaseModel):
+    clipId: str
+    status: str
+    segmentId: str
+    downloadUrl: str | None = None

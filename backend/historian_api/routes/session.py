@@ -20,11 +20,14 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from google.cloud import firestore, storage
 
 from ..models import (
     AgentLogsResponse,
+    ClipRequest,
+    ClipStartResponse,
+    ClipStatusResponse,
     CreateSessionResponse,
     SegmentResponse,
     SegmentsResponse,
@@ -356,3 +359,58 @@ async def get_url_meta(url: str = Query(..., description="URL to fetch metadata 
     meta = _extract_meta(url, html)
     _cache_set(url, meta)
     return UrlMetaResponse(**meta)
+
+
+# ---------------------------------------------------------------------------
+# Clip generation
+# ---------------------------------------------------------------------------
+
+
+@router.post("/session/{session_id}/clips", response_model=ClipStartResponse)
+async def create_clip(
+    session_id: str, body: ClipRequest, background_tasks: BackgroundTasks
+) -> ClipStartResponse:
+    """Start asynchronous clip generation for a segment."""
+    from ..clip_generator import generate_clip
+
+    clip_id = str(uuid.uuid4())
+
+    db = get_db()
+    await (
+        db.collection("sessions")
+        .document(session_id)
+        .collection("clips")
+        .document(clip_id)
+        .set(
+            {
+                "status": "queued",
+                "segmentId": body.segmentId,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            }
+        )
+    )
+
+    background_tasks.add_task(generate_clip, session_id, body.segmentId, clip_id)
+    return ClipStartResponse(clipId=clip_id)
+
+
+@router.get("/session/{session_id}/clips/{clip_id}", response_model=ClipStatusResponse)
+async def get_clip_status(session_id: str, clip_id: str) -> ClipStatusResponse:
+    """Poll clip generation status."""
+    db = get_db()
+    doc = await (
+        db.collection("sessions")
+        .document(session_id)
+        .collection("clips")
+        .document(clip_id)
+        .get()
+    )
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    data = doc.to_dict() or {}
+    return ClipStatusResponse(
+        clipId=clip_id,
+        status=data.get("status", "queued"),
+        segmentId=data.get("segmentId", ""),
+        downloadUrl=data.get("downloadUrl"),
+    )

@@ -9,6 +9,8 @@ import { useMediaSession } from '../../hooks/useMediaSession';
 import { KenBurnsStage } from './KenBurnsStage';
 import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
+import { ShareButton } from './ShareButton';
+import { useSessionStore } from '../../store/sessionStore';
 
 /**
  * DocumentaryPlayer — Full-screen cinematic player.
@@ -26,6 +28,7 @@ export function DocumentaryPlayer() {
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
+  const sessionId = useSessionStore((s) => s.sessionId);
   const voiceState = useVoiceStore((s) => s.state);
   const setVoiceState = useVoiceStore((s) => s.setState);
 
@@ -494,6 +497,8 @@ export function DocumentaryPlayer() {
               </svg>
               Segments
             </button>
+
+            <ShareButton sessionId={sessionId} segmentId={currentSegmentId} />
           </div>
         </div>
       </div>

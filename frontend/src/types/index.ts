@@ -146,6 +146,14 @@ export type SSEEvent =
   | StatsUpdateEvent
   | ErrorEvent;
 
+// ── Clips ────────────────────────────────────────────────────
+export interface ClipStatus {
+  clipId: string;
+  status: 'queued' | 'generating' | 'ready' | 'error';
+  downloadUrl?: string;
+  segmentId: string;
+}
+
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {
   sessionId: string;
