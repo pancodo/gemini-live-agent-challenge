@@ -146,6 +146,15 @@ export type SSEEvent =
   | StatsUpdateEvent
   | ErrorEvent;
 
+// ── Branch Graph ─────────────────────────────────────────────
+export interface BranchNode {
+  segmentId: string;
+  parentSegmentId: string | null;
+  triggerQuestion: string;
+  depth: number;
+  createdAt: string;
+}
+
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {
   sessionId: string;

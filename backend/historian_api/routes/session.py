@@ -20,11 +20,13 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from google.cloud import firestore, storage
 
 from ..models import (
     AgentLogsResponse,
+    BranchRequest,
+    BranchResponse,
     CreateSessionResponse,
     SegmentResponse,
     SegmentsResponse,
@@ -214,6 +216,60 @@ async def get_session_segments(session_id: str) -> SegmentsResponse:
 
     segments.sort(key=lambda s: s.id)
     return SegmentsResponse(segments=segments)
+
+
+# ---------------------------------------------------------------------------
+# Branch pipeline trigger
+# ---------------------------------------------------------------------------
+
+
+@router.post("/session/{session_id}/branch", response_model=BranchResponse)
+async def branch_session(
+    session_id: str,
+    body: BranchRequest,
+    background_tasks: BackgroundTasks,
+) -> BranchResponse:
+    """Trigger a branch pipeline for a user question during documentary playback.
+
+    Finds the most recent segment to use as parent, then kicks off the branch
+    pipeline as a background task and returns immediately with a placeholder
+    segment ID.
+    """
+    from agent_orchestrator.agents.branch_pipeline import run_branch_pipeline
+
+    # Find the most recent segment to use as parent_segment_id
+    db = get_db()
+    parent_segment_id = "root"
+    try:
+        segments_ref = (
+            db.collection("sessions")
+            .document(session_id)
+            .collection("segments")
+            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .limit(1)
+        )
+        docs = await segments_ref.get()
+        for doc in docs:
+            parent_segment_id = doc.id
+    except Exception:
+        logger.warning(
+            "Could not fetch latest segment for session %s, using 'root'",
+            session_id,
+        )
+
+    # Generate a placeholder segment ID returned to the caller immediately
+    placeholder_segment_id = f"branch_{uuid.uuid4().hex[:12]}"
+
+    # Run the branch pipeline in the background
+    background_tasks.add_task(
+        run_branch_pipeline,
+        emitter=None,  # No SSE emitter for background tasks (events go via polling)
+        question=body.question,
+        session_id=session_id,
+        parent_segment_id=parent_segment_id,
+    )
+
+    return BranchResponse(segmentId=placeholder_segment_id)
 
 
 # ---------------------------------------------------------------------------

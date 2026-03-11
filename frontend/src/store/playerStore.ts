@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import type { BranchNode } from '../types';
+
 interface PlayerStore {
   isOpen: boolean;
   currentSegmentId: string | null;
@@ -16,6 +18,10 @@ interface PlayerStore {
   irisTargetPath: string | null;
   triggerIris: (path: string) => void;
   clearIris: () => void;
+  branchGraph: BranchNode[];
+  activeBranchId: string | null;
+  addBranchNode: (node: BranchNode) => void;
+  setActiveBranch: (segmentId: string | null) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -34,4 +40,9 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   irisTargetPath: null,
   triggerIris: (irisTargetPath) => set({ irisTargetPath }),
   clearIris: () => set({ irisTargetPath: null }),
+  branchGraph: [],
+  activeBranchId: null,
+  addBranchNode: (node) =>
+    set((state) => ({ branchGraph: [...state.branchGraph, node] })),
+  setActiveBranch: (segmentId) => set({ activeBranchId: segmentId }),
 }));

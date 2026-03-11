@@ -53,3 +53,11 @@ class UrlMetaResponse(BaseModel):
     image: str | None = None
     favicon: str | None = None
     hostname: str
+
+
+class BranchRequest(BaseModel):
+    question: str
+
+
+class BranchResponse(BaseModel):
+    segmentId: str

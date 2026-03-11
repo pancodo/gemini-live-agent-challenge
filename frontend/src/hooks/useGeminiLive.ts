@@ -7,6 +7,7 @@ type RelayMessage =
   | { type: 'interrupted' }
   | { type: 'resumption_token'; token: string }
   | { type: 'go_away' }
+  | { type: 'transcript'; text: string }
   | { type: 'error'; message: string };
 
 // ── Public interface ───────────────────────────────────────────
@@ -23,6 +24,7 @@ export interface GeminiLiveReturn {
   connect: () => void;
   disconnect: () => void;
   isConnected: boolean;
+  lastUserTranscript: string | null;
 }
 
 // ── Base64 helpers ─────────────────────────────────────────────
@@ -56,6 +58,7 @@ const RECONNECT_DELAY_MS = 500;
 // ── Hook ───────────────────────────────────────────────────────
 export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
   const [isConnected, setIsConnected] = useState(false);
+  const [lastUserTranscript, setLastUserTranscript] = useState<string | null>(null);
 
   // Stable refs for mutable state
   const wsRef = useRef<WebSocket | null>(null);
@@ -142,6 +145,10 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
           reconnect();
           break;
 
+        case 'transcript':
+          setLastUserTranscript(msg.text);
+          break;
+
         case 'error':
           console.error('[useGeminiLive] Relay error:', msg.message);
           break;
@@ -204,5 +211,5 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     };
   }, [disconnect]);
 
-  return { sendPCM, connect, disconnect, isConnected };
+  return { sendPCM, connect, disconnect, isConnected, lastUserTranscript };
 }
