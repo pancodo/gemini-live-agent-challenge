@@ -333,6 +333,415 @@ HISTORICAL_PERIOD_PROFILES: dict[str, dict] = {
             "silhouetted sailors on ship rigging against a sunset harbor sky",
         ],
     },
+
+    # ------------------------------------------------------------------
+    # Expanded period profiles (Task #7)
+    # ------------------------------------------------------------------
+
+    "islamic_golden_age": {
+        "period_label": "Islamic Golden Age, 750-1258",
+        "date_range": (750, 1258),
+        "architecture": [
+            "horseshoe arches with alternating red and white voussoirs",
+            "muqarnas honeycomb vaulting in dome transitions and niches",
+            "geometric tilework in zellige mosaic patterns",
+            "mashrabiya lattice screens on upper-floor windows",
+            "hypostyle prayer halls with rows of columns and double arches",
+            "courtyard gardens with geometric water channels and fountains",
+        ],
+        "clothing": [
+            "flowing robes (thawb) in white linen or cotton",
+            "layered turbans in white or colored silk wound around a cap",
+            "embroidered caftans with wide sleeves and sash belts",
+            "leather pointed-toe slippers (babouche)",
+        ],
+        "materials_textures": [
+            "luster ceramics with iridescent gold and copper glazes",
+            "carved stucco arabesques with deep relief",
+            "hammered brass astrolabes and scientific instruments",
+            "hand-knotted wool and silk carpets with medallion designs",
+            "calligraphic inscriptions in Kufic and Naskh scripts on stone",
+        ],
+        "lighting": [
+            "shafts of light through pierced stone screens onto tile floors",
+            "oil lamps in brass holders casting warm amber glow",
+            "dappled courtyard light filtered through citrus tree canopy",
+            "deep shadow in covered souks with occasional clerestory light",
+        ],
+        "color_palette": [
+            "cobalt blue", "turquoise green", "ivory cream", "gold leaf",
+            "indigo", "lapis lazuli blue", "terracotta", "saffron yellow",
+        ],
+        "art_style_references": [
+            "Persian miniature painting — flat perspective, jewel-toned pigments, gold leaf borders",
+            "meticulous geometric precision of Islamic decorative arts",
+            "archaeological reconstruction — vibrant original painted surfaces, pristine tilework",
+        ],
+        "era_markers_negative": [
+            "Ottoman pencil minarets", "printed Latin text", "concrete",
+            "plate glass windows", "electric lights", "paved asphalt roads",
+            "automobiles", "steel beams",
+        ],
+        "crowd_description": [
+            "scholars in turbans and flowing robes debating around manuscripts in a library",
+            "craftsmen seated cross-legged at low workbenches hammering brass",
+            "merchants arranging spices and textiles on wooden stalls in a covered souk",
+        ],
+    },
+
+    "east_asian_imperial": {
+        "period_label": "East Asian Imperial, 618-1912",
+        "date_range": (618, 1912),
+        "architecture": [
+            "dougong interlocking bracket sets supporting wide eaves",
+            "curved glazed ceramic roofs with ridge ornaments and dragon finials",
+            "lacquered vermillion timber columns on raised stone platforms",
+            "courtyard compounds with symmetrical hall arrangements along central axes",
+            "moon gates and garden rockeries with winding paths",
+            "pagodas with tiered eaves diminishing upward",
+        ],
+        "clothing": [
+            "hanfu robes with wide sleeves, crossed-collar wrap, and sash belt",
+            "silk brocade court robes with embroidered dragon or phoenix roundels",
+            "scholar's cap (futou or wushamao) in black gauze",
+            "embroidered silk slippers with upturned toes",
+        ],
+        "materials_textures": [
+            "blue-and-white porcelain with cobalt underglaze decoration",
+            "carved jade — translucent green nephrite with polished surfaces",
+            "lacquerware — deep glossy red and black with gold inlay",
+            "silk brocade with woven metallic gold threads",
+            "rice paper with ink-wash calligraphy and seal stamps",
+        ],
+        "lighting": [
+            "soft diffused light through rice paper window screens",
+            "lantern light from silk-covered bamboo frames — warm orange glow",
+            "morning mist on garden ponds reflecting pavilion silhouettes",
+            "dramatic side light through courtyard openings onto polished stone floors",
+        ],
+        "color_palette": [
+            "vermillion red", "imperial yellow", "jade green", "cobalt blue",
+            "lacquer black", "gold leaf", "celadon green", "ink wash grey",
+        ],
+        "art_style_references": [
+            "Song dynasty ink-wash landscape painting — atmospheric perspective, misty mountains",
+            "Ming dynasty court painting — precise detail, rich color, formal composition",
+            "ukiyo-e woodblock print influence — bold outlines, flat color, dynamic composition",
+        ],
+        "era_markers_negative": [
+            "Western-style architecture", "glass windows (before late Qing)",
+            "printed Western text", "concrete", "electric lights",
+            "automobiles", "Western clothing",
+        ],
+        "crowd_description": [
+            "officials in embroidered silk robes filing through a palace gateway",
+            "scholars in dark robes and caps seated at low tables with ink and brush",
+            "market vendors behind wooden stalls displaying porcelain and silk",
+        ],
+    },
+
+    "indian_subcontinent": {
+        "period_label": "Indian Subcontinent, 320-1857",
+        "date_range": (320, 1857),
+        "architecture": [
+            "pietra dura marble inlay with semi-precious stone floral patterns",
+            "red sandstone jali pierced screens with geometric patterns",
+            "onion domes and bulbous cupolas with lotus finials",
+            "shikhara temple towers with curvilinear profiles and carved niches",
+            "stepped wells (stepwells/vav) with geometric descending galleries",
+            "chhatri domed pavilions on pillared bases",
+        ],
+        "clothing": [
+            "draped cotton or silk dhoti and angavastram (shoulder cloth) for men",
+            "richly embroidered Mughal court jama — long tunic with tied fastenings",
+            "silk sari with zari gold-thread borders and pallav end piece",
+            "jeweled turbans with aigrette plume holders and gemstone centrepieces",
+        ],
+        "materials_textures": [
+            "white Makrana marble — polished, translucent in thin sections",
+            "red Agra sandstone — carved with deep-relief floral and geometric motifs",
+            "lapis lazuli, carnelian, jade, and malachite inlay in marble",
+            "hand-knotted silk carpets with floral medallion patterns",
+            "hammered silver and gold with kundan gemstone settings",
+        ],
+        "lighting": [
+            "blazing South Asian sunlight creating sharp shadows on white marble",
+            "oil lamps (diyas) in brass holders casting warm pools of amber light",
+            "filtered light through jali screens creating geometric shadow patterns",
+            "golden hour light reflecting off marble domes and water channels",
+        ],
+        "color_palette": [
+            "white marble", "red sandstone", "lapis lazuli blue", "carnelian red",
+            "jade green", "gold leaf", "turmeric yellow", "indigo",
+        ],
+        "art_style_references": [
+            "Mughal miniature painting — precise naturalistic detail, jewel tones, gold borders",
+            "Rajput court painting — vivid color, emotional expression, architectural backdrops",
+            "archaeological reconstruction — pristine surfaces, original painted decoration visible",
+        ],
+        "era_markers_negative": [
+            "British colonial architecture", "railways", "telegraph poles",
+            "printed English text", "concrete", "electric lights",
+            "Western clothing", "plate glass windows",
+        ],
+        "crowd_description": [
+            "court figures in embroidered jamas and jeweled turbans seated on cushions",
+            "devotees in white dhoti and sari approaching a temple gateway",
+            "craftsmen carving stone in a workshop under a pillared pavilion",
+        ],
+    },
+
+    "mesoamerican": {
+        "period_label": "Mesoamerican Civilizations, 2000 BC - 1533 AD",
+        "date_range": (-2000, 1533),
+        "architecture": [
+            "stepped pyramids with steep stairways and flat-topped temple platforms",
+            "corbeled arches in narrow stone passageways",
+            "ball courts with sloping stone walls and carved stone rings",
+            "palaces with interior courtyards and carved stone lintels",
+            "raised causeways connecting island cities across lake water",
+        ],
+        "clothing": [
+            "cotton loincloths (maxtlatl) and tilma cloaks for men",
+            "quetzal feather headdresses with jade and gold ornaments",
+            "jade earplugs, lip plugs, and pectoral ornaments",
+            "woven huipil tunics with geometric embroidered patterns",
+        ],
+        "materials_textures": [
+            "carved limestone with deep-relief glyphs and figures",
+            "obsidian — polished black volcanic glass for blades and mirrors",
+            "jade — polished deep green stone for masks and jewelry",
+            "painted stucco on temple facades in vivid mineral pigments",
+            "hand-woven cotton and agave fiber textiles",
+        ],
+        "lighting": [
+            "tropical sunlight creating harsh shadows on white limestone pyramids",
+            "torch and pine-resin firelight in dark temple interiors",
+            "jungle-filtered light with dappled green shadows",
+            "dawn light on pyramid summits above morning mist",
+        ],
+        "color_palette": [
+            "Maya blue (indigo + palygorskite)", "jade green", "obsidian black",
+            "cinnabar red", "limestone cream", "gold", "quetzal green",
+        ],
+        "art_style_references": [
+            "Maya polychrome ceramic painting — narrative scenes, fine linework, vivid pigments",
+            "archaeological reconstruction — intact painted facades, pristine carved stone",
+            "Aztec codex illustration style — bold outlines, flat color, symbolic composition",
+        ],
+        "era_markers_negative": [
+            "horses", "cattle", "iron tools or weapons", "wheeled vehicles",
+            "true arches", "steel", "glass windows", "printed text",
+            "European clothing", "brick construction",
+        ],
+        "crowd_description": [
+            "priests in feathered headdresses ascending pyramid steps with offerings",
+            "merchants carrying bundles on tumplines through a market plaza",
+            "artisans seated on mats carving jade with stone tools",
+        ],
+    },
+
+    "sub_saharan_african": {
+        "period_label": "Sub-Saharan African Civilizations, 300-1900",
+        "date_range": (300, 1900),
+        "architecture": [
+            "dry-stone chevron-patterned walls of Great Zimbabwe",
+            "mud-brick mosques with toron wooden spikes protruding from walls",
+            "circular thatched-roof rondavels with plastered walls",
+            "Swahili coast coral-stone houses with carved wooden doors",
+            "Ethiopian rock-hewn churches carved from living volcanic tuff",
+        ],
+        "clothing": [
+            "wrapped cotton or bark-cloth garments draped at the shoulder",
+            "kente cloth — hand-woven silk and cotton strips in geometric patterns",
+            "beaded jewelry and brass neck rings",
+            "embroidered boubou robes with wide sleeves and matching trousers",
+        ],
+        "materials_textures": [
+            "dry-stacked granite blocks fitted without mortar",
+            "sun-dried mud brick (banco) with annual plaster renewal",
+            "Benin bronze plaques — lost-wax cast, detailed relief figures",
+            "hand-woven raffia and cotton textiles with resist-dyed patterns",
+            "hammered gold jewelry — Ashanti goldweights and ornaments",
+        ],
+        "lighting": [
+            "intense equatorial sunlight casting deep shadows on laterite earth",
+            "firelight from central hearths in enclosed compounds",
+            "golden savanna light at dawn and dusk — long horizontal shadows",
+            "filtered light through thatched roofs creating spotted patterns",
+        ],
+        "color_palette": [
+            "ochre brown", "laterite red", "indigo blue", "kente gold",
+            "mud plaster cream", "charcoal black", "baobab grey", "savanna green",
+        ],
+        "art_style_references": [
+            "archaeological reconstruction — intact painted surfaces, original decoration",
+            "Benin bronze aesthetic — precise relief carving, formal composition",
+            "National Geographic archaeological illustration — accurate detail, warm light",
+        ],
+        "era_markers_negative": [
+            "European colonial architecture", "printed text in European languages",
+            "concrete", "electric lights", "automobiles",
+            "Western clothing", "plate glass windows",
+        ],
+        "crowd_description": [
+            "figures in wrapped garments and beaded jewelry approaching stone enclosure walls",
+            "craftsmen casting bronze in clay molds near a furnace",
+            "traders in embroidered robes with bundles of goods at a market crossroads",
+        ],
+    },
+
+    "byzantine": {
+        "period_label": "Byzantine Empire, 330-1453",
+        "date_range": (330, 1453),
+        "architecture": [
+            "pendentive domes on massive square bases with clerestory windows",
+            "gold mosaic tesserae covering interior domes, apse, and walls",
+            "marble revetment panels in opus sectile geometric patterns",
+            "narthex entrance halls with bronze doors and carved marble capitals",
+            "fortified circuit walls with towers and crenellated battlements",
+        ],
+        "clothing": [
+            "imperial purple silk dalmatic robes with gold embroidered bands (clavi)",
+            "jeweled diadems and pearl pendilia hanging beside the face",
+            "draped chlamys cloaks fastened with jeweled fibulae at the shoulder",
+            "monks in undyed dark wool habits with rope belts",
+        ],
+        "materials_textures": [
+            "gold glass mosaic tesserae set at slight angles for shimmer",
+            "porphyry — imperial dark purple-red stone, polished to mirror finish",
+            "cloisonne enamel — gold wire cells filled with vitreous color",
+            "silk roundels with woven imperial eagle or lion motifs",
+            "carved ivory diptychs and reliquary panels",
+        ],
+        "lighting": [
+            "golden light from hundreds of oil lamps reflected off mosaic tesserae",
+            "shafts of light through clerestory windows catching incense smoke",
+            "candlelight on polished marble and gold surfaces — warm shimmer",
+            "filtered light through thin alabaster window panels",
+        ],
+        "color_palette": [
+            "gold dominant", "Tyrian purple", "lapis lazuli blue", "crimson silk red",
+            "porphyry purple-red", "marble white", "deep green malachite", "ivory cream",
+        ],
+        "art_style_references": [
+            "Byzantine mosaic style — gold ground, frontal figures, hierarchical scale, jeweled colors",
+            "icon painting tradition — formal composition, symbolic color, gold leaf background",
+            "archaeological reconstruction — intact mosaic and painted surfaces, full imperial splendor",
+        ],
+        "era_markers_negative": [
+            "Gothic pointed arches (Western, not Byzantine)", "printed books",
+            "plate glass windows", "concrete", "Western medieval armor styles",
+            "Renaissance perspective painting", "minarets (Ottoman addition)",
+        ],
+        "crowd_description": [
+            "robed figures in jeweled dalmatics processing through a mosaic-lined narthex",
+            "monks in dark habits filing through a cloister carrying censers",
+            "courtiers in silk robes and pearl diadems flanking an imperial throne",
+        ],
+    },
+
+    "viking_norse": {
+        "period_label": "Viking and Norse, 793-1066",
+        "date_range": (793, 1066),
+        "architecture": [
+            "tarred timber longhouses with turf roofs and curved walls",
+            "stave churches with dragon-head finials and interlocking timber frames",
+            "runestones — tall carved granite markers with serpentine Urnes-style ornament",
+            "timber-palisaded trading posts with earthen ramparts",
+            "ship sheds and beaching ramps along fjord shorelines",
+        ],
+        "clothing": [
+            "wool tunics over linen undershirts belted at the waist",
+            "fur-trimmed cloaks fastened with penannular brooches",
+            "leather shoes and boots with wrapped leg bindings (winningas)",
+            "conical helmets with nasal guards — NO horns (Victorian myth)",
+        ],
+        "materials_textures": [
+            "tarred oak timber with visible adze marks and iron nail heads",
+            "pattern-welded iron blades with flowing wave patterns",
+            "carved bone and antler combs, pins, and gaming pieces",
+            "amber — translucent golden-orange beads and pendants",
+            "hand-woven wool with tablet-woven decorative borders",
+        ],
+        "lighting": [
+            "longhouse hearth fire — central flame casting upward shadows on rafters",
+            "cold northern light — low-angle sun, long blue shadows on snow",
+            "oil lamps in soapstone bowls with flickering wicks",
+            "dramatic aurora borealis — green curtains over dark landscape",
+        ],
+        "color_palette": [
+            "tar black", "iron grey", "amber gold", "raw timber brown",
+            "turf green", "bone white", "hearth fire orange", "fjord blue-grey",
+        ],
+        "art_style_references": [
+            "Bayeux Tapestry narrative style — flat figures, bold outlines, sequential scenes",
+            "archaeological reconstruction — weathered timber, authentic materials, Northern light",
+            "Romantic Nordic landscape painting — dramatic skies, fjords, stark beauty",
+        ],
+        "era_markers_negative": [
+            "horned helmets (Victorian myth)", "plate armor (much later)",
+            "Gothic architecture", "printed books", "concrete",
+            "electric lights", "glass windows (rare, only very wealthy)",
+        ],
+        "crowd_description": [
+            "warriors in wool tunics and fur cloaks gathered around a beached longship",
+            "women in brooched apron dresses weaving at upright looms in a longhouse",
+            "figures in hooded cloaks examining carved runestones along a path",
+        ],
+    },
+
+    "renaissance_europe": {
+        "period_label": "Renaissance Europe, 1350-1650",
+        "date_range": (1350, 1650),
+        "architecture": [
+            "rusticated stone palazzi with arched ground-floor arcades and corniced rooflines",
+            "classical orders — Doric, Ionic, Corinthian columns on facades and loggias",
+            "Brunelleschi-style domes with octagonal double-shell construction",
+            "loggia galleries with round arches overlooking piazzas",
+            "timber-framed Tudor manor houses with tall brick chimneys and mullioned windows",
+        ],
+        "clothing": [
+            "silk velvet doublets with slashed sleeves revealing contrasting lining",
+            "ruff collars — starched white linen in elaborate figure-eight pleats",
+            "men's hose and codpiece (15th-16th century) in contrasting colors",
+            "women's structured bodices with wide skirts over farthingale frames",
+            "berets and flat caps with feather plumes and jeweled brooches",
+        ],
+        "materials_textures": [
+            "Carrara marble — white with fine grey veining, polished to satin finish",
+            "oil paint on wooden panel and canvas — visible brushwork, glazing layers",
+            "gilt bronze — fire-gilded cast metal with warm golden surface",
+            "hand-blown Murano glass — clear cristallo and colored millefiori",
+            "tooled leather book bindings with gold-stamped decoration",
+        ],
+        "lighting": [
+            "north window studio light — even diffused illumination, soft shadows",
+            "candlelight from silver candelabra on polished wooden surfaces",
+            "golden hour Mediterranean light streaming through arched windows",
+            "chiaroscuro — dramatic single-source illumination against deep shadow",
+        ],
+        "color_palette": [
+            "Venetian red", "ultramarine blue", "gold leaf", "verdaccio green",
+            "raw sienna", "lead white", "lamp black", "Tyrian purple (rare, expensive)",
+        ],
+        "art_style_references": [
+            "Italian Renaissance painting — linear perspective, sfumato, anatomical precision",
+            "Northern Renaissance detail — Van Eyck luminous oil technique, meticulous textiles",
+            "Vermeer interior light — soft diffusion, domestic intimacy, optical precision",
+        ],
+        "era_markers_negative": [
+            "Baroque excess and heavy gilding (later period)",
+            "Neoclassical symmetry (18th century)", "gas lamps, electric lights",
+            "concrete, steel, plate glass", "printed photographs",
+            "industrial machinery", "automobiles",
+        ],
+        "crowd_description": [
+            "merchants in velvet doublets and flat caps examining ledgers at a counting table",
+            "courtiers in slashed sleeves and ruff collars gathered in a loggia",
+            "artists in paint-stained smocks working at easels in a north-lit studio",
+        ],
+    },
 }
 
 
@@ -407,8 +816,29 @@ def detect_period_key(era: str) -> str | None:
         A key into HISTORICAL_PERIOD_PROFILES, or None if no match found.
     """
     era_lower = era.lower()
+
+    # --- Priority-ordered matching (more specific before more general) ---
+
+    # Byzantine BEFORE Roman (to avoid "eastern roman" matching "roman")
+    if any(k in era_lower for k in ("byzantine", "byzantium", "eastern roman", "justinian", "theodora")):
+        return "byzantine"
+    # Renaissance BEFORE medieval (to avoid "14th century" overlap)
+    if any(k in era_lower for k in ("renaissance", "medici", "tudor", "elizabethan", "gutenberg", "florence")):
+        return "renaissance_europe"
     if any(k in era_lower for k in ("ottoman", "turkish", "sultanate")):
         return "ottoman_empire"
+    if any(k in era_lower for k in ("islamic golden age", "abbasid", "umayyad", "house of wisdom", "al-andalus", "cordoba", "caliphate")):
+        return "islamic_golden_age"
+    if any(k in era_lower for k in ("tang", "song", "ming", "qing", "forbidden city", "hanfu", "imperial china", "imperial japan", "shogun")):
+        return "east_asian_imperial"
+    if any(k in era_lower for k in ("mughal", "gupta", "taj mahal", "rajput", "akbar", "shah jahan", "chola", "vijayanagara")):
+        return "indian_subcontinent"
+    if any(k in era_lower for k in ("aztec", "maya", "inca", "tenochtitlan", "machu picchu", "quetzalcoatl", "mesoameric", "olmec", "toltec")):
+        return "mesoamerican"
+    if any(k in era_lower for k in ("mali empire", "great zimbabwe", "timbuktu", "mansa musa", "axum", "benin", "songhai", "swahili")):
+        return "sub_saharan_african"
+    if any(k in era_lower for k in ("viking", "norse", "varangian", "rune", "longship")):
+        return "viking_norse"
     if any(k in era_lower for k in ("medieval", "middle ages", "gothic", "romanesque", "crusade")):
         return "medieval_europe"
     if any(k in era_lower for k in ("victorian", "industrial revolution", "19th century england", "british empire")):
@@ -419,6 +849,56 @@ def detect_period_key(era: str) -> str | None:
         return "ancient_egypt"
     if any(k in era_lower for k in ("colonial", "puritan", "pilgrim", "new world", "settler", "plantation", "1600", "1700")):
         return "colonial_americas"
+    return None
+
+
+def detect_period(text: str) -> str | None:
+    """Detect historical period from document text using keyword matching.
+
+    Checks against all profile detect keywords with priority ordering to
+    avoid false positives (e.g. "byzantine" before "roman", "renaissance"
+    before "medieval").
+
+    Args:
+        text: Free-form text (visual_bible + scene text, document OCR, etc.)
+
+    Returns:
+        A key into HISTORICAL_PERIOD_PROFILES, or ``None`` if no match found.
+    """
+    text_lower = text.lower()
+
+    # Priority order: more specific periods before broader ones to prevent
+    # false positives (e.g. "eastern roman" should match byzantine, not roman).
+    _DETECT_KEYWORDS: dict[str, list[str]] = {
+        "byzantine": ["byzantine", "byzantium", "eastern roman", "justinian", "theodora"],
+        "renaissance_europe": ["renaissance", "medici", "tudor", "elizabethan", "gutenberg", "florence"],
+        "islamic_golden_age": ["abbasid", "umayyad", "house of wisdom", "al-andalus", "cordoba"],
+        "east_asian_imperial": ["tang", "song", "ming", "qing", "forbidden city", "hanfu"],
+        "indian_subcontinent": ["mughal", "gupta", "taj mahal", "rajput", "akbar", "shah jahan"],
+        "mesoamerican": ["aztec", "maya", "inca", "tenochtitlan", "machu picchu", "quetzalcoatl"],
+        "sub_saharan_african": ["mali empire", "great zimbabwe", "timbuktu", "mansa musa", "axum", "benin"],
+        "viking_norse": ["viking", "norse", "varangian", "rune", "longship"],
+        "ottoman_empire": ["ottoman", "turkish", "sultanate"],
+        "medieval_europe": ["medieval", "middle ages", "gothic", "romanesque", "crusade"],
+        "victorian_england": ["victorian", "industrial revolution", "british empire"],
+        "ancient_rome_greece": ["roman", "greek", "classical antiquity", "ancient rome", "ancient greece"],
+        "ancient_egypt": ["egypt", "pharaoh", "hieroglyph", "nile"],
+        "colonial_americas": ["colonial", "puritan", "pilgrim", "new world"],
+    }
+
+    priority_order = [
+        "byzantine", "renaissance_europe", "islamic_golden_age",
+        "east_asian_imperial", "indian_subcontinent", "mesoamerican",
+        "sub_saharan_african", "viking_norse", "ottoman_empire",
+        "medieval_europe", "victorian_england", "ancient_rome_greece",
+        "ancient_egypt", "colonial_americas",
+    ]
+
+    for key in priority_order:
+        keywords = _DETECT_KEYWORDS[key]
+        if any(kw in text_lower for kw in keywords):
+            return key
+
     return None
 
 

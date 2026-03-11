@@ -63,7 +63,9 @@ from google.cloud import firestore, storage
 from google.genai import types as genai_types
 from pydantic import ConfigDict, Field
 
+from .rate_limiter import GlobalRateLimiter
 from .historical_period_profiles import (
+    detect_period,
     detect_period_key,
     get_mood_lighting,
     get_period_negative_prompt_additions,
@@ -77,6 +79,10 @@ from .sse_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Fallback rate limiters used when no limiter is injected via the factory.
+_fallback_gemini_limiter = GlobalRateLimiter(12, "gemini")
+_fallback_imagen_limiter = GlobalRateLimiter(8, "imagen")
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +177,10 @@ _VEO2_MODEL: str = "veo-2.0-generate-001"
 _VEO2_POLL_INTERVAL_SECONDS: int = 20
 _VEO2_MAX_POLLS: int = 30  # 30 x 20s = 10-minute timeout per operation
 
+# Hard timeout for Veo 2 operations: if polling exceeds this, the video is
+# gracefully skipped and the segment proceeds with images only.
+_VEO2_HARD_TIMEOUT_SECONDS: float = 180.0
+
 # Each frame in a segment gets a distinct composition modifier.
 # Combined with the enriched_prompt base, this produces four visually coherent
 # but compositionally distinct images per scene.
@@ -211,6 +221,30 @@ _ERA_ART_STYLE_REFERENCES: dict[str, str] = {
     ),
     "colonial_americas": (
         "Dutch Golden Age painting precision, Vermeer-like light quality"
+    ),
+    "islamic_golden_age": (
+        "Persian miniature painting, jewel-toned pigments, geometric precision"
+    ),
+    "east_asian_imperial": (
+        "Song dynasty ink-wash landscape painting, atmospheric perspective"
+    ),
+    "indian_subcontinent": (
+        "Mughal miniature painting, precise naturalistic detail, jewel tones"
+    ),
+    "mesoamerican": (
+        "Maya polychrome ceramic painting, bold outlines, vivid mineral pigments"
+    ),
+    "sub_saharan_african": (
+        "Benin bronze relief aesthetic, formal composition, warm earth tones"
+    ),
+    "byzantine": (
+        "Byzantine mosaic style, gold ground, jeweled colors, frontal figures"
+    ),
+    "viking_norse": (
+        "Bayeux Tapestry narrative style, bold outlines, Northern light"
+    ),
+    "renaissance_europe": (
+        "Italian Renaissance painting, linear perspective, sfumato technique"
     ),
 }
 
@@ -522,6 +556,98 @@ async def _upload_image_bytes_async(
 
 
 # ---------------------------------------------------------------------------
+# GCS cache: module-level storage client + batch existence checks (Task #16)
+# ---------------------------------------------------------------------------
+
+_storage_client: storage.Client | None = None
+
+
+def _get_storage_client() -> storage.Client:
+    """Return a lazily initialised module-level GCS storage client."""
+    global _storage_client
+    if _storage_client is None:
+        _storage_client = storage.Client()
+    return _storage_client
+
+
+def _check_blob_exists_sync(bucket_name: str, blob_name: str) -> bool:
+    """Check if a GCS blob exists (synchronous, runs in executor)."""
+    client = _get_storage_client()
+    return client.bucket(bucket_name).blob(blob_name).exists()
+
+
+async def _check_blob_exists_async(
+    bucket_name: str,
+    blob_name: str,
+) -> tuple[str, bool]:
+    """Async wrapper: check GCS blob existence via thread executor.
+
+    Returns:
+        Tuple of ``(blob_name, exists)`` so the caller can build a dict.
+    """
+    loop = asyncio.get_running_loop()
+    exists = await loop.run_in_executor(
+        None,
+        _check_blob_exists_sync,
+        bucket_name,
+        blob_name,
+    )
+    return blob_name, exists
+
+
+async def _batch_check_existing_frames(
+    bucket_name: str,
+    session_id: str,
+    segments: list[dict[str, Any]],
+    narrative_role_map: dict[str, str],
+) -> dict[str, str]:
+    """Check GCS for existing Imagen 3 frames across all segments.
+
+    Runs all existence checks concurrently. Returns a mapping from blob names
+    that already exist to their ``gs://`` URIs. The caller uses this to skip
+    regeneration of frames that are already in GCS (idempotent re-runs).
+
+    Args:
+        bucket_name: GCS bucket for generated images.
+        session_id: Active session ID.
+        segments: List of SegmentScript dicts.
+        narrative_role_map: Maps scene_id -> narrative_role for frame planning.
+
+    Returns:
+        Dict mapping blob_name to ``gs://{bucket_name}/{blob_name}`` for hits.
+    """
+    tasks: list[Any] = []
+    for seg in segments:
+        segment_id = seg.get("id", "unknown")
+        scene_id = seg.get("scene_id", "unknown")
+        narrative_role = narrative_role_map.get(scene_id, "")
+        frame_indices = _frames_for_segment(seg, narrative_role)
+        for frame_idx in frame_indices:
+            blob_name = (
+                f"sessions/{session_id}/images/{segment_id}/frame_{frame_idx}.jpg"
+            )
+            tasks.append(_check_blob_exists_async(bucket_name, blob_name))
+
+    if not tasks:
+        return {}
+
+    results: list[tuple[str, bool]] = await asyncio.gather(*tasks)
+    total_checked = len(results)
+    hits: dict[str, str] = {}
+    for blob_name, exists in results:
+        if exists:
+            hits[blob_name] = f"gs://{bucket_name}/{blob_name}"
+
+    logger.info(
+        "GCS cache check: %d/%d frames exist, %d to generate",
+        len(hits),
+        total_checked,
+        total_checked - len(hits),
+    )
+    return hits
+
+
+# ---------------------------------------------------------------------------
 # Prompt construction
 # ---------------------------------------------------------------------------
 
@@ -612,9 +738,37 @@ def _build_imagen_prompt(
         excerpt_str = scene_brief.get("document_excerpt", "")
     site_negatives = _build_site_negative_additions(era, title_str, excerpt_str)
 
+    # --- Period profile enrichment (Task #7) ---
+    # Detect historical period from visual_bible + scene text and inject
+    # period-specific visual elements, colors, and negatives into the prompt.
+    scene_text = f"{era} {title_str} {excerpt_str}"
+    period_key = detect_period(f"{visual_bible} {scene_text}")
+    period_visual_elements: str = ""
+    period_colors: str = ""
+    period_profile_negatives: str = ""
+    if period_key and period_key in HISTORICAL_PERIOD_PROFILES:
+        profile = HISTORICAL_PERIOD_PROFILES[period_key]
+        # Visual elements: architecture, materials, crowd details
+        arch = profile.get("architecture", [])
+        mats = profile.get("materials_textures", [])
+        elements = arch[:3] + mats[:2]  # 5 most salient elements
+        if elements:
+            period_visual_elements = (
+                f"Period-accurate details: {', '.join(elements)}."
+            )
+        # Color palette
+        colors = profile.get("color_palette", [])
+        if colors:
+            period_colors = f"Color palette: {', '.join(colors[:5])}."
+        # Negative prompt from profile
+        era_neg = profile.get("era_markers_negative", [])
+        if era_neg:
+            period_profile_negatives = ", ".join(era_neg)
+
     def _assemble_prompt(core_prompt: str) -> str:
         """Wrap a core prompt with temporal prefix, style_anchor, narrative
-        prefix/suffix, lens spec, film stock, art style, and lighting."""
+        prefix/suffix, lens spec, film stock, art style, period profile
+        enrichment, and lighting."""
         parts: list[str] = []
         if temporal_prefix:
             parts.append(temporal_prefix)
@@ -623,6 +777,10 @@ def _build_imagen_prompt(
             parts.append(art_style_ref + ",")
         parts.append(narrative_prefix)
         parts.append(core_prompt)
+        if period_visual_elements:
+            parts.append(period_visual_elements)
+        if period_colors:
+            parts.append(period_colors)
         parts.append(f"{narrative_suffix}, {lens_spec}.")
         parts.append(f"\n\nLighting: {lighting_directive}")
         parts.append(f"\n\n{film_stock}.")
@@ -633,6 +791,8 @@ def _build_imagen_prompt(
         negative = f"{period_prefix}{_BASE_NEGATIVE_PROMPT}"
         if period_additions:
             negative = f"{negative}, {period_additions}"
+        if period_profile_negatives:
+            negative = f"{negative}, {period_profile_negatives}"
         if site_negatives:
             negative = f"{negative}, {site_negatives}"
         return negative
@@ -765,26 +925,45 @@ async def _generate_one_frame(
     bucket_name: str,
     blob_name: str,
     enhance_prompt: bool = True,
+    existing_cache: dict[str, str] | None = None,
+    imagen_rate_limiter: GlobalRateLimiter | None = None,
 ) -> str | None:
     """Generate a single Imagen 3 frame, upload to GCS, return GCS URI.
 
     Returns ``None`` if the image is filtered by Imagen 3's safety system or
     if an API error occurs -- the caller handles partial completion gracefully.
 
+    If ``existing_cache`` contains an entry for ``blob_name``, the cached GCS
+    URI is returned immediately without calling Imagen 3.
+
+    When an ``imagen_rate_limiter`` is provided, the Imagen 3 API call is
+    gated through the limiter (with in-flight tracking and wait-time
+    warnings) instead of the legacy asyncio.Semaphore.
+
     Args:
         client: Shared google-genai Vertex AI client.
-        semaphore: Rate-limit gate shared across all concurrent scenes.
+        semaphore: Legacy rate-limit gate (used when no imagen_rate_limiter).
         prompt: Full Imagen 3 text prompt.
         negative_prompt: Comma-separated elements to exclude.
         bucket_name: GCS bucket for upload.
         blob_name: Target blob path within the bucket.
         enhance_prompt: Whether Imagen 3 should auto-enhance the prompt.
             Disabled for long enriched prompts that are already detailed.
+        existing_cache: Optional dict mapping blob names to GCS URIs for
+            frames that already exist in GCS (cache hits skip generation).
+        imagen_rate_limiter: Optional ``GlobalRateLimiter`` for Imagen 3 calls.
 
     Returns:
         GCS URI string or ``None`` on failure.
     """
-    async with semaphore:
+    # GCS cache hit: skip Imagen 3 generation entirely
+    if existing_cache and blob_name in existing_cache:
+        logger.debug("GCS cache hit for %s -- skipping Imagen 3", blob_name)
+        return existing_cache[blob_name]
+
+    limiter = imagen_rate_limiter or _fallback_imagen_limiter
+
+    async with limiter.acquire(caller=f"imagen3:{blob_name}"):
         try:
             response = await client.aio.models.generate_images(
                 model=_IMAGEN_MODEL,
@@ -840,6 +1019,8 @@ async def _generate_segment_images(
     bucket_name: str,
     narrative_role: str = "",
     scene_brief: dict[str, Any] | None = None,
+    existing_cache: dict[str, str] | None = None,
+    imagen_rate_limiter: GlobalRateLimiter | None = None,
 ) -> list[str]:
     """Generate Imagen 3 frames for one segment, selecting which frames based on narrative role.
 
@@ -857,6 +1038,8 @@ async def _generate_segment_images(
         bucket_name: Target GCS bucket.
         narrative_role: Dramatic arc position for styling.
         scene_brief: Optional SceneBrief dict for temporal accuracy injection.
+        existing_cache: Optional dict mapping blob names to GCS URIs for
+            frames that already exist in GCS (cache hits skip generation).
 
     Returns:
         List of GCS URIs for successfully generated frames (0-4 items).
@@ -884,6 +1067,8 @@ async def _generate_segment_images(
                 bucket_name=bucket_name,
                 blob_name=blob_name,
                 enhance_prompt=use_enhance,
+                existing_cache=existing_cache,
+                imagen_rate_limiter=imagen_rate_limiter,
             )
         )
 
@@ -1061,6 +1246,41 @@ async def _update_segment_video_in_firestore(
         )
 
 
+async def _mark_segment_video_skipped(
+    db: firestore.AsyncClient,
+    session_id: str,
+    segment_id: str,
+    reason: str = "timeout",
+) -> None:
+    """Mark a segment's video as skipped in Firestore (non-propagating).
+
+    Called when Veo 2 times out or fails irrecoverably. Sets ``videoUrl``
+    to ``None`` and writes a ``videoStatus`` field so the frontend and
+    debugging tools can distinguish "no video attempted" from "video
+    skipped due to timeout/error".
+
+    This method never raises -- all exceptions are caught and logged so
+    that a Firestore failure here cannot crash the pipeline.
+    """
+    ref = (
+        db.collection("sessions")
+        .document(session_id)
+        .collection("segments")
+        .document(segment_id)
+    )
+    try:
+        await ref.update({
+            "videoUrl": None,
+            "videoStatus": f"skipped:{reason}",
+        })
+    except Exception as exc:
+        logger.warning(
+            "Firestore video skip update failed for %s: %s",
+            segment_id,
+            exc,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Per-segment generation runner
 # ---------------------------------------------------------------------------
@@ -1079,6 +1299,8 @@ async def _run_segment_generation(
     image_url_store: dict[str, list[str]],
     narrative_role: str = "",
     scene_brief: dict[str, Any] | None = None,
+    existing_cache: dict[str, str] | None = None,
+    imagen_rate_limiter: GlobalRateLimiter | None = None,
 ) -> tuple[str, str, Any] | None:
     """Generate images for one segment, persist to Firestore, emit SSE.
 
@@ -1103,6 +1325,7 @@ async def _run_segment_generation(
         image_url_store: Mutable dict populated with completed image URLs.
         narrative_role: Dramatic arc position for styling.
         scene_brief: Optional SceneBrief dict for temporal accuracy injection.
+        existing_cache: Optional GCS cache dict for skipping already-generated frames.
 
     Returns:
         ``(segment_id, scene_id, veo2_operation)`` if Veo 2 was triggered,
@@ -1127,7 +1350,7 @@ async def _run_segment_generation(
             ),
         )
 
-    # --- Generate Imagen 3 frames (concurrent) ---
+    # --- Generate Imagen 3 frames (concurrent, with GCS cache) ---
     image_urls = await _generate_segment_images(
         client=client,
         semaphore=semaphore,
@@ -1138,6 +1361,8 @@ async def _run_segment_generation(
         bucket_name=bucket_name,
         narrative_role=narrative_role,
         scene_brief=scene_brief,
+        existing_cache=existing_cache,
+        imagen_rate_limiter=imagen_rate_limiter,
     )
 
     t_elapsed = round(time.monotonic() - t_start, 1)
@@ -1259,6 +1484,14 @@ class VisualDirectorOrchestrator(BaseAgent):
         default=None,
         description="Optional SSE emitter for frontend progress events.",
     )
+    gemini_rate_limiter: Any = Field(
+        default=None,
+        description="Optional GlobalRateLimiter for Gemini API call concurrency control.",
+    )
+    imagen_rate_limiter: Any = Field(
+        default=None,
+        description="Optional GlobalRateLimiter for Imagen 3 API call concurrency control.",
+    )
     sub_agents: list[BaseAgent] = Field(
         default_factory=list,
         description=(
@@ -1362,6 +1595,16 @@ class VisualDirectorOrchestrator(BaseAgent):
                 )
 
         # ------------------------------------------------------------------
+        # GCS cache check: identify already-generated frames (Task #16)
+        # ------------------------------------------------------------------
+        existing_cache: dict[str, str] = await _batch_check_existing_frames(
+            bucket_name=self.gcs_bucket,
+            session_id=session_id,
+            segments=script_raw,
+            narrative_role_map=narrative_role_map,
+        )
+
+        # ------------------------------------------------------------------
         # Per-segment generation coroutine
         # ------------------------------------------------------------------
         async def _generate(
@@ -1384,6 +1627,8 @@ class VisualDirectorOrchestrator(BaseAgent):
                 image_url_store=image_url_store,
                 narrative_role=role,
                 scene_brief=brief,
+                existing_cache=existing_cache,
+                imagen_rate_limiter=self.imagen_rate_limiter,
             )
 
         # ------------------------------------------------------------------
@@ -1483,11 +1728,52 @@ class VisualDirectorOrchestrator(BaseAgent):
                 scene_id: str,
                 operation: Any,
             ) -> None:
-                """Poll one Veo 2 operation and update Firestore + SSE on completion."""
-                video_uri = await _poll_veo2_operation(
-                    client, operation, segment_id, scene_id
-                )
+                """Poll one Veo 2 operation with hard timeout.
+
+                If polling exceeds ``_VEO2_HARD_TIMEOUT_SECONDS``, the video
+                is gracefully skipped: Firestore is updated with a skip marker,
+                a segment_update SSE is emitted (without video_url), and the
+                pipeline continues without raising.
+                """
+                timed_out = False
+                video_uri: str | None = None
+                try:
+                    video_uri = await asyncio.wait_for(
+                        _poll_veo2_operation(
+                            client, operation, segment_id, scene_id
+                        ),
+                        timeout=_VEO2_HARD_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    video_uri = None
+                    timed_out = True
+                    logger.warning(
+                        "Veo 2 hard timeout (%.0fs) for segment %s / scene %s",
+                        _VEO2_HARD_TIMEOUT_SECONDS,
+                        segment_id,
+                        scene_id,
+                    )
+
                 if not video_uri:
+                    # Graceful skip: mark in Firestore + emit segment_update
+                    reason = "timeout" if timed_out else "generation_failed"
+                    await _mark_segment_video_skipped(
+                        db, session_id, segment_id, reason=reason,
+                    )
+                    if self.emitter:
+                        await self.emitter.emit(
+                            "segment_update",
+                            build_segment_update_event(
+                                segment_id=segment_id,
+                                scene_id=scene_id,
+                                status="complete",
+                            ),
+                        )
+                    logger.info(
+                        "Veo 2 video skipped for segment %s (reason=%s)",
+                        segment_id,
+                        reason,
+                    )
                     return
 
                 # Store in session state
@@ -1575,6 +1861,8 @@ class VisualDirectorOrchestrator(BaseAgent):
 
 def build_visual_director_orchestrator(
     emitter: SSEEmitter | None = None,
+    gemini_rate_limiter: GlobalRateLimiter | None = None,
+    imagen_rate_limiter: GlobalRateLimiter | None = None,
 ) -> VisualDirectorOrchestrator:
     """Construct a ``VisualDirectorOrchestrator`` from environment variables.
 
@@ -1584,6 +1872,8 @@ def build_visual_director_orchestrator(
 
     Args:
         emitter: Optional SSE emitter for frontend progress events.
+        gemini_rate_limiter: Optional ``GlobalRateLimiter`` for Gemini API calls.
+        imagen_rate_limiter: Optional ``GlobalRateLimiter`` for Imagen 3 API calls.
 
     Returns:
         Configured ``VisualDirectorOrchestrator`` ready for pipeline integration.
@@ -1601,4 +1891,6 @@ def build_visual_director_orchestrator(
         firestore_project=os.environ["GCP_PROJECT_ID"],
         gcs_bucket=os.environ["GCS_BUCKET_NAME"],
         emitter=emitter,
+        gemini_rate_limiter=gemini_rate_limiter,
+        imagen_rate_limiter=imagen_rate_limiter,
     )
