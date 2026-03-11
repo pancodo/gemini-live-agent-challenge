@@ -1,3 +1,48 @@
+/* ── Self-hosted Variable Fonts ────────────────────────── */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('/fonts/CormorantGaramond-Variable.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 92%;
+  descent-override: 25%;
+  size-adjust: 105%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+0370-03FF, U+0400-04FF, U+2000-206F,
+    U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('/fonts/CormorantGaramond-Variable-Italic.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: italic;
+  font-display: swap;
+  ascent-override: 92%;
+  descent-override: 25%;
+  size-adjust: 105%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+0370-03FF, U+0400-04FF, U+2000-206F,
+    U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-Variable.woff2') format('woff2-variations');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: optional;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-Variable-Italic.woff2') format('woff2-variations');
+  font-weight: 100 1000;
+  font-style: italic;
+  font-display: optional;
+}
+
 @import "tailwindcss";
 
 /* ── Design Tokens ─────────────────────────────────────── */
@@ -25,33 +70,57 @@
   /* Typography */
   --font-serif: 'Cormorant Garamond', Georgia, serif;
   --font-sans:  'DM Sans', system-ui, sans-serif;
+
+  /* Fluid type scale (320px → 1440px viewport) */
+  --text-caption: clamp(1.5rem, 1.3rem + 0.8vw, 1.75rem);
+  --text-segment: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+  --text-header:  clamp(1.75rem, 1.5rem + 1vw, 2.25rem);
+
+  /* Warm hover states (oklch for perceptually uniform mixing) */
+  --color-bg-hover:  color-mix(in oklch, var(--color-bg) 92%, var(--color-gold) 8%);
+  --color-bg-active: color-mix(in oklch, var(--color-bg) 85%, var(--color-gold) 15%);
 }
 
-/* ── CSS Custom Properties (for dynamic/JS-driven values) ─ */
+/* ── Runtime-only CSS Custom Properties (JS-driven, not in @theme) ─ */
 :root {
-  --bg:     #F2EDE3;
-  --bg2:    #EBE4D8;
-  --bg3:    #E2D9CA;
-  --bg4:    #D6CCBA;
-  --gold:   #8B5E1A;
-  --gold-d: #5C3D0E;
-  --text:   #1E170C;
-  --muted:  #8A7A62;
-  --green:  #2E6E44;
-  --teal:   #1E5E5E;
-
-  --bg-deep:   #0d0b09;
-  --bg-card:   #1a1510;
-
-  --glow-primary:   #c4956a;
-  --glow-secondary: #d4a574;
   --shadow-warm:    rgba(139, 105, 20, 0.15);
+  --ambient-color:  rgba(196, 149, 106, 0.06);
 
   /* Audio-reactive (overridden dynamically by useAudioVisualSync) */
   --ken-speed:    28s;
   --glow-opacity: 0.5;
   --vig-spread:   110%;
   --cap-shadow:   28px;
+
+  /* Short aliases → @theme tokens (single source of truth in @theme) */
+  --bg:     var(--color-bg);
+  --bg2:    var(--color-bg2);
+  --bg3:    var(--color-bg3);
+  --bg4:    var(--color-bg4);
+  --gold:   var(--color-gold);
+  --gold-d: var(--color-gold-d);
+  --text:   var(--color-text);
+  --muted:  var(--color-muted);
+  --green:  var(--color-green);
+  --teal:   var(--color-teal);
+  --bg-deep:         var(--color-bg-deep);
+  --bg-card:         var(--color-bg-card);
+  --glow-primary:    var(--color-glow-primary);
+  --glow-secondary:  var(--color-glow-secondary);
+}
+
+/* ── Tailwind v4 border color default ────────────────────
+   v4 changed bare `border` from gray-200 to currentColor.
+   Restore a neutral default so bare `border` utilities on
+   parchment elements don't render in text color.           */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-bg4);
+  }
 }
 
 /* ── Base ──────────────────────────────────────────────── */
@@ -60,8 +129,8 @@
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--color-bg);
+  color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -122,33 +191,42 @@ body {
 .agent-card.searching {
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--bg2), var(--bg2)) padding-box,
+    linear-gradient(var(--color-bg2), var(--color-bg2)) padding-box,
     conic-gradient(
       from var(--border-angle),
-      transparent 25%,
-      var(--teal) 50%,
-      transparent 75%
+      var(--color-teal) 0%,
+      transparent 30%,
+      transparent 70%,
+      var(--color-teal) 100%
     ) border-box;
   animation: rotate-border 3s linear infinite;
 }
 @keyframes rotate-border { to { --border-angle: 360deg; } }
 
+.agent-card.evaluating {
+  overflow: hidden;
+}
 .agent-card.evaluating::before {
   content: '';
   position: absolute;
   inset: -1px;
   border-radius: inherit;
   background: linear-gradient(
-    90deg,
+    105deg,
     transparent 0%,
-    rgba(196, 149, 106, 0.5) 50%,
+    rgba(139, 94, 26, 0.45) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.8s ease-in-out infinite;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   padding: 1px;
+}
+
+@keyframes shimmer-sweep {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
 }
 
 .agent-card {
@@ -182,7 +260,7 @@ body {
   100% { background-position: -200% 0; }
 }
 .seg-card.generating .seg-title {
-  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background: linear-gradient(90deg, var(--color-bg3) 25%, var(--color-bg4) 50%, var(--color-bg3) 75%);
   background-size: 200% 100%;
   background-attachment: fixed;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
@@ -210,7 +288,7 @@ body {
   content: '';
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, transparent, var(--gold), transparent);
+  background: linear-gradient(to right, transparent, var(--color-gold), transparent);
   transform: scaleX(0);
   transform-origin: center;
   animation: draw-rule 0.8s ease-out forwards;
@@ -218,7 +296,7 @@ body {
 .phase-divider-dot {
   width: 4px; height: 4px;
   border-radius: 50%;
-  background: var(--gold);
+  background: var(--color-gold);
   opacity: 0;
   animation: dot-appear 0.3s 0.4s ease-out forwards;
 }
@@ -230,8 +308,8 @@ body {
   animation: stat-flash 0.5s ease-out;
 }
 @keyframes stat-flash {
-  0%   { color: var(--green); transform: scale(1.1); }
-  100% { color: var(--gold);  transform: scale(1); }
+  0%   { color: var(--color-green); transform: scale(1.1); }
+  100% { color: var(--color-gold);  transform: scale(1); }
 }
 
 /* ── Archival Corner Brackets ───────────────────────────── */
@@ -243,7 +321,7 @@ body {
   content: '';
   position: absolute;
   width: 12px; height: 12px;
-  border-color: var(--gold);
+  border-color: var(--color-gold);
   border-style: solid;
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -259,7 +337,13 @@ body {
 .archival-frame:hover::before,
 .archival-frame:hover::after { opacity: 0.6; }
 
-/* ── PDF Text Layer + Entity Highlights ─────────────────── */
+/* ── CSS Custom Highlight API (entity matches) ────────── */
+::highlight(entity-matches) {
+  background-color: rgba(139, 94, 26, 0.22);
+  color: var(--color-text);
+}
+
+/* ── PDF Text Layer + Entity Highlights (DOM fallback) ─── */
 .pdf-text-layer {
   line-height: 1;
   user-select: text;
@@ -284,6 +368,17 @@ body {
 
 .pdf-text-layer:hover .entity-highlight {
   background: rgba(139, 94, 26, 0.30);
+}
+
+/* Entity pulse — triggered when scrollToEntity navigates to a match */
+@keyframes entity-pulse {
+  0%   { background: rgba(139, 94, 26, 0.22); }
+  50%  { background: rgba(139, 94, 26, 0.55); box-shadow: 0 0 12px rgba(139, 94, 26, 0.35); }
+  100% { background: rgba(139, 94, 26, 0.22); }
+}
+.entity-highlight.entity-pulse {
+  animation: entity-pulse 1.5s ease-in-out;
+  pointer-events: none;
 }
 
 /* ── Ink Ripple ────────────────────────────────────────── */
@@ -340,7 +435,7 @@ body {
   display: inline-block;
   width: 2px;
   height: 1em;
-  background: var(--gold);
+  background: var(--color-gold);
   margin-left: 2px;
   vertical-align: text-bottom;
   animation: cursor-blink 0.8s step-end infinite;
@@ -351,7 +446,7 @@ body {
 
 /* ── Log source shimmer ─────────────────────────────────── */
 .log-source.evaluating {
-  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background: linear-gradient(90deg, var(--color-bg3) 25%, var(--color-bg4) 50%, var(--color-bg3) 75%);
   background-size: 200% 100%;
   animation: skeleton-pulse 1.2s ease-in-out infinite;
 }
@@ -370,9 +465,60 @@ body {
   transition-duration: 0.01ms !important;
 }
 
+/* ── Vignettes ────────────────────────────────────────── */
+.pdf-viewer-container {
+  position: relative;
+}
+.pdf-viewer-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 70% at 50% 50%,
+    transparent 40%, rgba(92,61,14,0.04) 70%, rgba(30,23,12,0.10) 100%);
+  z-index: 1;
+}
+
+.ken-burns-stage {
+  position: relative;
+}
+.ken-burns-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 80% at 50% 50%,
+    transparent 30%, rgba(13,11,9,0.35) 65%, rgba(13,11,9,0.8) 100%);
+  z-index: 1;
+}
+
+/* ── Font Optical Sizing (DM Sans small text) ─────────── */
+.body-text, .agent-log, .metadata, .status-label {
+  font-optical-sizing: auto;
+}
+[class*="text-xs"], [class*="text-sm"] {
+  font-optical-sizing: auto;
+}
+
 /* ── Documentary Player (always dark) ─────────────────── */
 .player-root {
-  background: var(--bg-deep);
+  background: var(--color-bg-deep);
   color: #e8ddd0;
   font-family: var(--font-serif);
+  color-scheme: only dark;
+}
+
+/* ── Ambient Color Glow (YouTube ambient mode) ─────────── */
+.player-stage {
+  position: relative;
+}
+.player-stage::before {
+  content: '';
+  position: absolute;
+  inset: -120px;
+  background: var(--ambient-color, transparent);
+  filter: blur(80px);
+  transition: background 2.5s ease;
+  pointer-events: none;
+  z-index: -1;
 }
