@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DropZone } from '../components/upload';
+import { DropZone, PersonaSelector } from '../components/upload';
 import { Badge } from '../components/ui';
 import { useSessionStore } from '../store/sessionStore';
 import type { RecentSession } from '../store/sessionStore';
 import { useResearchStore } from '../store/researchStore';
 import { usePlayerStore } from '../store/playerStore';
 import { uploadDocument } from '../services/upload';
-import type { SessionStatus } from '../types';
+import type { SessionStatus, PersonaType } from '../types';
 
 /** Prefetch the WorkspacePage chunk so it is cached before navigation */
 const prefetchWorkspace = () => import('./WorkspacePage');
@@ -48,6 +48,7 @@ const SAMPLE_DOCS = [
 function SampleDocuments() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
+  const persona = useSessionStore((s) => s.persona) as PersonaType;
   const resetResearch = useResearchStore((s) => s.reset);
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ function SampleDocuments() {
         if (!res.ok) throw new Error('fetch failed');
         const blob = await res.blob();
         const file = new File([blob], doc.filename, { type: 'application/pdf' });
-        const { sessionId, gcsPath } = await uploadDocument(file, doc.language);
+        const { sessionId, gcsPath } = await uploadDocument(file, doc.language, persona);
         resetResearch();
         setSession({ sessionId, gcsPath, status: 'processing' });
         navigate('/workspace');
@@ -68,7 +69,7 @@ function SampleDocuments() {
         setLoading(null);
       }
     },
-    [navigate, setSession, resetResearch]
+    [navigate, setSession, persona, resetResearch]
   );
 
   return (
@@ -239,6 +240,9 @@ function DevSeedBar() {
 }
 
 export function UploadPage() {
+  const persona = useSessionStore((s) => s.persona) as PersonaType;
+  const setSession = useSessionStore((s) => s.setSession);
+
   return (
     <main className="min-h-screen bg-[var(--bg)] flex flex-col">
       <section className="flex-1 flex flex-col items-center justify-center px-8 pb-8 pt-8">
@@ -251,6 +255,15 @@ export function UploadPage() {
         <p className="text-[13px] text-[var(--muted)] font-sans text-center mb-6">
           Begin your documentary in under 45 seconds
         </p>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--muted)] font-sans mb-3 text-center">
+          Choose your historian
+        </p>
+        <div className="mb-6">
+          <PersonaSelector
+            value={persona}
+            onChange={(p) => setSession({ persona: p })}
+          />
+        </div>
         <DropZone />
         <SampleDocuments />
         <RecentSessions />

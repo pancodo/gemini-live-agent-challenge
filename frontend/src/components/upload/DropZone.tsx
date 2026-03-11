@@ -6,6 +6,7 @@ import { useResearchStore } from '../../store/researchStore';
 import { uploadDocument } from '../../services/upload';
 import { InkButton } from '../ui';
 import { FormatBadge } from './FormatBadge';
+import type { PersonaType } from '../../types';
 
 type DropState = 'idle' | 'drag-active' | 'uploading' | 'error';
 
@@ -28,6 +29,7 @@ function formatFileSize(bytes: number): string {
 export function DropZone() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
+  const persona = useSessionStore((s) => s.persona) as PersonaType;
   const resetResearch = useResearchStore((s) => s.reset);
   const shouldReduceMotion = useReducedMotion();
 
@@ -62,6 +64,7 @@ export function DropZone() {
         const { sessionId, gcsPath } = await uploadDocument(
           file,
           language || undefined,
+          persona,
           (pct) => setProgress(pct)
         );
 
@@ -80,7 +83,7 @@ export function DropZone() {
         );
       }
     },
-    [language, navigate, setSession, resetResearch]
+    [language, persona, navigate, setSession, resetResearch]
   );
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {

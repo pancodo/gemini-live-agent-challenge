@@ -3,6 +3,9 @@
 // All components, hooks, and stores import from this file.
 // ============================================================
 
+// ── Persona ─────────────────────────────────────────────────
+export type PersonaType = 'professor' | 'storyteller' | 'explorer';
+
 // ── Session ──────────────────────────────────────────────────
 export type SessionStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'playing';
 

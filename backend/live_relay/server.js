@@ -24,8 +24,9 @@
 const http = require('node:http');
 const { URL } = require('node:url');
 const { WebSocket, WebSocketServer } = require('ws');
-const { fetchDocumentaryContext } = require('./firestore-context');
+const { fetchDocumentaryContext, getFirestore } = require('./firestore-context');
 const { buildSystemInstruction } = require('./prompt-builder');
+const { PERSONA_PROMPTS } = require('./personas');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -74,7 +75,22 @@ async function getSystemInstruction(sessionId) {
   }
 
   const context = await fetchDocumentaryContext(sessionId);
-  const text = buildSystemInstruction(context);
+
+  // Fetch persona preference from the session document
+  let persona = 'professor';
+  try {
+    const db = getFirestore();
+    const sessionDoc = await db.collection('sessions').doc(sessionId).get();
+    if (sessionDoc.exists) {
+      persona = sessionDoc.data()?.persona || 'professor';
+    }
+  } catch (err) {
+    console.warn(`[live-relay] Failed to fetch persona for session=${sessionId}, using default:`, err.message);
+  }
+
+  const personaPrompt = PERSONA_PROMPTS[persona] || PERSONA_PROMPTS.professor;
+  const documentaryInstruction = buildSystemInstruction(context);
+  const text = `${personaPrompt}\n\n${documentaryInstruction}`;
 
   systemInstructionCache.set(sessionId, {
     text,

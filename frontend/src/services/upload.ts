@@ -5,9 +5,10 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 export async function uploadDocument(
   file: File,
   language?: string,
+  persona?: string,
   onProgress?: (pct: number) => void
 ): Promise<{ sessionId: string; gcsPath: string }> {
-  const { sessionId, uploadUrl, gcsPath } = await createSession(file.name, language);
+  const { sessionId, uploadUrl, gcsPath } = await createSession(file.name, language, persona);
 
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();

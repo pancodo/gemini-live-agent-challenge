@@ -108,4 +108,4 @@ async function fetchDocumentaryContext(sessionId) {
   return result;
 }
 
-module.exports = { fetchDocumentaryContext };
+module.exports = { fetchDocumentaryContext, getFirestore };
