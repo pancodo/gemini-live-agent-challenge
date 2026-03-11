@@ -1,18 +1,22 @@
 """ADK Pipeline — SequentialAgent orchestrating the full documentary generation flow.
 
 Current pipeline order (Phases I–V fully integrated):
-    1. document_analyzer      — OCR, semantic chunking, parallel summarisation,
-                                narrative curation → scene_briefs + visual_bible
-    2. scene_research_orch    — Parallel scene research (one google_search agent
-                                per SceneBrief) → research_0 … research_N
-    3. aggregator_agent       — Merges all research_N outputs into unified context
-    4. script_orch            — Script Agent (gemini-2.0-pro) → SegmentScript list,
-                                Firestore write, segment_update SSE (Phase III)
-    5. visual_research_orch   — Per-scene 6-stage micro-pipeline → VisualDetailManifest
-                                per scene, Firestore write, segment_update(ready) SSE (Phase IV)
-    6. visual_director_orch   — Reads manifests → Imagen 3 (4 frames/scene) + Veo 2
-                                → GCS upload, Firestore imageUrls/videoUrl, segment_update(complete)
-                                SSE (Phase V)
+    1. document_analyzer            — OCR, semantic chunking, parallel summarisation,
+                                      narrative curation → scene_briefs + visual_bible
+    2. scene_research_orch          — Parallel scene research (one google_search agent
+                                      per SceneBrief) → research_0 … research_N
+    3. aggregator_agent             — Merges all research_N outputs into unified context
+    4. script_orch                  — Script Agent (gemini-2.0-pro) → SegmentScript list,
+                                      Firestore write, segment_update SSE (Phase III)
+    5. narrative_visual_planner     — Single Gemini Pro call producing VisualStoryboard
+                                      with per-scene primary subjects, avoid lists,
+                                      targeted searches, and 4 frame concepts (Phase 4.0)
+    6. visual_research_orch         — Per-scene 6-stage micro-pipeline → VisualDetailManifest
+                                      per scene, Firestore write, segment_update(ready) SSE
+                                      (Phase IV — now reads visual_storyboard when available)
+    7. visual_director_orch         — Reads manifests → Imagen 3 (4 frames/scene) + Veo 2
+                                      → GCS upload, Firestore imageUrls/videoUrl,
+                                      segment_update(complete) SSE (Phase V)
 
 Legacy agents (scan_agent, build_research_agents) remain in this file and are
 used by the legacy ``build_pipeline`` path. They will be removed once all
@@ -33,6 +37,7 @@ from google.adk.agents.sequential_agent import SequentialAgent
 from google.adk.tools import google_search
 
 from .document_analyzer import build_document_analyzer
+from .narrative_visual_planner import build_narrative_visual_planner
 from .scene_research_agent import build_scene_research_orchestrator
 from .script_agent_orchestrator import build_script_agent_orchestrator
 from .sse_helpers import SSEEmitter
@@ -329,14 +334,20 @@ def build_new_pipeline(
 ) -> SequentialAgent:
     """Assemble the complete Phase I–V documentary generation pipeline.
 
-    This is the production pipeline. All five phases are fully integrated:
-    - Phase I  (DocumentAnalyzerAgent):     OCR → chunks → summaries → scene_briefs
-    - Phase II (SceneResearchOrchestrator): per-scene google_search corroboration
-    - Phase III (ScriptAgentOrchestrator):  script generation + Firestore + SSE
-    - Phase IV (VisualResearchOrchestrator): 6-stage per-scene visual research
-      micro-pipeline → VisualDetailManifest per scene → Firestore + SSE
-    - Phase V  (VisualDirectorOrchestrator): Imagen 3 (4 frames/scene) + Veo 2
-      generation → GCS upload → Firestore imageUrls/videoUrl → SSE complete
+    This is the production pipeline. All phases are fully integrated:
+    - Phase I   (DocumentAnalyzerAgent):     OCR → chunks → summaries → scene_briefs
+    - Phase II  (SceneResearchOrchestrator): per-scene google_search corroboration
+    - Phase III (ScriptAgentOrchestrator):   script generation + Firestore + SSE
+    - Phase 4.0 (NarrativeVisualPlanner):    single Gemini Pro call producing a
+      VisualStoryboard with per-scene primary subjects, avoid lists, targeted
+      searches, and 4 frame concepts.  Must run AFTER Phase III (reads ``script``
+      from session.state) and BEFORE Phase IV (writes ``visual_storyboard``).
+    - Phase IV  (VisualResearchOrchestrator): 6-stage per-scene visual research
+      micro-pipeline → VisualDetailManifest per scene → Firestore + SSE.
+      Now reads ``visual_storyboard`` when available for targeted searches.
+    - Phase V   (VisualDirectorOrchestrator): Imagen 3 (4 frames/scene) + Veo 2
+      generation → GCS upload → Firestore imageUrls/videoUrl → SSE complete.
+      Now applies narrative-role styling and uses frame_prompts from storyboard.
 
     Args:
         emitter: Optional SSE emitter forwarded to all phase orchestrators
@@ -345,40 +356,37 @@ def build_new_pipeline(
     Returns:
         A SequentialAgent running:
         document_analyzer → scene_research → aggregator
-        → ParallelAgent(script_orch, visual_research_orch)
+        → script_orch → narrative_visual_planner → visual_research_orch
         → visual_director_orch
     """
     document_analyzer = build_document_analyzer(emitter=emitter)
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     script_orch = build_script_agent_orchestrator(emitter=emitter)
+    narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
     visual_research_orch = build_visual_research_orchestrator(emitter=emitter)
     visual_director_orch = build_visual_director_orchestrator(emitter=emitter)
 
-    # Phase III (script generation) and Phase IV (visual research) are independent:
-    # both only need scene_briefs + visual_bible (Phase I) and aggregated_research
-    # (Aggregator). Neither depends on the other's output. Running them in parallel
-    # saves the full runtime of whichever finishes first (~30-60s saved).
-    synthesis_parallel = ParallelAgent(
-        name="synthesis_parallel",
-        sub_agents=[script_orch, visual_research_orch],
-        description=(
-            "Runs Phase III (script generation) and Phase IV (visual research) "
-            "concurrently — both feed Phase V but neither depends on the other."
-        ),
-    )
+    # NOTE: Phase III, Phase 4.0, and Phase IV must run sequentially:
+    #   - Phase 4.0 reads session.state["script"] (produced by Phase III)
+    #   - Phase IV  reads session.state["visual_storyboard"] (produced by Phase 4.0)
+    # The previous parallel execution of Phase III + IV is no longer possible
+    # because the NarrativeVisualPlanner sits between them in the data flow.
 
     return SequentialAgent(
         name="historian_pipeline",
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
-            "scene research (Phase II), parallel script + visual research "
-            "(Phase III + IV), and visual generation (Phase V)."
+            "scene research (Phase II), script generation (Phase III), "
+            "visual storyboard planning (Phase 4.0), visual research (Phase IV), "
+            "and visual generation (Phase V)."
         ),
         sub_agents=[
-            document_analyzer,        # Phase I:    OCR → chunks → summaries → scene_briefs
-            scene_research,           # Phase II:   per-scene google_search corroboration
-            _make_aggregator_agent(), # Aggregator: research_{n} → aggregated_research
-            synthesis_parallel,       # Phase III+IV (parallel): script + visual research
-            visual_director_orch,     # Phase V:    Imagen 3 + Veo 2 → GCS + Firestore + SSE
+            document_analyzer,               # Phase I:    OCR → chunks → summaries → scene_briefs
+            scene_research,                  # Phase II:   per-scene google_search corroboration
+            _make_aggregator_agent(),        # Aggregator: research_{n} → aggregated_research
+            script_orch,                     # Phase III:  script generation → session.state["script"]
+            narrative_visual_planner_orch,   # Phase 4.0:  visual storyboard → session.state["visual_storyboard"]
+            visual_research_orch,            # Phase IV:   per-scene visual research (reads storyboard)
+            visual_director_orch,            # Phase V:    Imagen 3 + Veo 2 → GCS + Firestore + SSE
         ],
     )
