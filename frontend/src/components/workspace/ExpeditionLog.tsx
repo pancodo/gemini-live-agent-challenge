@@ -290,6 +290,7 @@ export function ExpeditionLog() {
 
   const agentList = Object.values(agents);
   const activeAgentCount = agentList.filter((a) => a.status === 'searching').length;
+  const searchingCount = activeAgentCount;
   const selectedAgent = selectedAgentId ? (agents[selectedAgentId] ?? null) : null;
 
   // The active phase is the last phase in the list (most recently started)
@@ -305,21 +306,23 @@ export function ExpeditionLog() {
         >
           Expedition Log
         </h2>
-        {activeAgentCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+        {searchingCount > 0 && (
+          <motion.span
+            key={searchingCount}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
             style={{
               fontFamily: 'var(--font-sans)',
               fontSize: 10,
-              letterSpacing: '0.15em',
-              textTransform: 'uppercase' as const,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
               color: 'var(--teal)',
+              display: 'block',
               marginTop: 4,
             }}
           >
-            {activeAgentCount} agent{activeAgentCount !== 1 ? 's' : ''} working in parallel
-          </motion.div>
+            {searchingCount} agent{searchingCount !== 1 ? 's' : ''} working
+          </motion.span>
         )}
       </div>
 
