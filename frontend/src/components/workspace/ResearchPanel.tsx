@@ -7,6 +7,7 @@ import { usePlayerStore } from '../../store/playerStore';
 import { HistorianPanel } from './HistorianPanel';
 import { AgentModal } from './AgentModal';
 import { SegmentCard } from './SegmentCard';
+import { usePDFViewer } from './PDFViewerContext';
 import type { AgentState, AgentStatus, EvaluatedSource, Segment } from '../../types';
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ function SourcesPopover({ agents }: { agents: Record<string, AgentState> }) {
   );
 }
 
-function FactsPopover({ agents }: { agents: Record<string, AgentState> }) {
+function FactsPopover({ agents, onEntityClick }: { agents: Record<string, AgentState>; onEntityClick?: (text: string) => void }) {
   const groups: { query: string; facts: string[] }[] = [];
   for (const agent of Object.values(agents)) {
     if (agent.facts && agent.facts.length > 0) {
@@ -185,12 +186,24 @@ function FactsPopover({ agents }: { agents: Record<string, AgentState> }) {
     <div className="flex flex-col gap-3">
       {groups.map((g, gi) => (
         <div key={gi}>
-          <p className="font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--muted)] mb-1 truncate">{g.query}</p>
+          <button
+            type="button"
+            onClick={() => onEntityClick?.(g.query)}
+            className="font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--muted)] mb-1 truncate block text-left cursor-pointer hover:text-[var(--gold)] transition-colors"
+          >
+            {g.query}
+          </button>
           <ul className="flex flex-col gap-1">
             {g.facts.map((fact, fi) => (
               <li key={fi} className="flex items-start gap-1.5">
                 <span className="mt-1.5 w-1 h-1 rounded-full bg-[var(--gold)] shrink-0 opacity-60" />
-                <span className="font-sans text-[12px] text-[var(--text)] leading-snug">{fact}</span>
+                <button
+                  type="button"
+                  onClick={() => onEntityClick?.(fact)}
+                  className="font-sans text-[12px] text-[var(--text)] leading-snug text-left cursor-pointer hover:text-[var(--gold)] transition-colors"
+                >
+                  {fact}
+                </button>
               </li>
             ))}
           </ul>
@@ -258,9 +271,10 @@ function ElapsedTimer({ startElapsed, isActive }: { startElapsed: number; isActi
 interface AgentCardProps {
   agent: AgentState;
   onClick: () => void;
+  onEntityClick?: (text: string) => void;
 }
 
-function AgentCard({ agent, onClick }: AgentCardProps) {
+function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
 
@@ -311,7 +325,23 @@ function AgentCard({ agent, onClick }: AgentCardProps) {
         {/* Query + elapsed */}
         <div className="flex-1 min-w-0">
           <p className="font-sans text-[13px] text-[var(--text)] truncate">
-            {agent.query}
+            <span
+              role="link"
+              tabIndex={-1}
+              className="cursor-pointer hover:text-[var(--gold)] transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEntityClick?.(agent.query);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.stopPropagation();
+                  onEntityClick?.(agent.query);
+                }
+              }}
+            >
+              {agent.query}
+            </span>
           </p>
         </div>
 
@@ -397,8 +427,13 @@ export function ResearchPanel() {
   const segments = useResearchStore((s) => s.segments);
   const stats = useResearchStore((s) => s.stats);
   const triggerIris = usePlayerStore((s) => s.triggerIris);
+  const pdfViewer = usePDFViewer();
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  const handleEntityClick = useCallback((text: string) => {
+    pdfViewer?.scrollToEntity(text);
+  }, [pdfViewer]);
 
   // ── Toast notifications on agent state transitions ──────
   const prevAgentStatusRef = useRef<Record<string, AgentStatus>>({});
@@ -472,7 +507,7 @@ export function ResearchPanel() {
           <StatButton
             label="facts verified"
             value={stats.factsVerified}
-            popover={<FactsPopover agents={agents} />}
+            popover={<FactsPopover agents={agents} onEntityClick={handleEntityClick} />}
           />
           <span className="text-[var(--bg4)]">{'\u00B7'}</span>
           <StatButton
@@ -500,6 +535,7 @@ export function ResearchPanel() {
                     key={agent.id}
                     agent={agent}
                     onClick={() => setSelectedAgentId(agent.id)}
+                    onEntityClick={handleEntityClick}
                   />
                 ))}
               </div>
