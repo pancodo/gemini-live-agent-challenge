@@ -421,9 +421,13 @@ resource "google_cloud_run_v2_service" "historian_api" {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
       }
+      # AGENT_ORCHESTRATOR_URL is set after first apply via:
+      #   gcloud run services update historian-api --region=REGION \
+      #     --update-env-vars AGENT_ORCHESTRATOR_URL=$(terraform output -raw agent_orchestrator_url)
+      # Cannot reference agent_orchestrator.uri here (circular dependency).
       env {
         name  = "AGENT_ORCHESTRATOR_URL"
-        value = "https://agent-orchestrator-${data.google_project.current.number}.${var.region}.run.app"
+        value = "https://agent-orchestrator-placeholder.${var.region}.run.app"
       }
       env {
         name = "DOCUMENT_AI_PROCESSOR_NAME"
@@ -683,14 +687,6 @@ resource "google_cloud_run_v2_service_iam_member" "live_relay_public" {
 }
 
 # ─────────────────────────────────────────────
-# Data Sources
-# ─────────────────────────────────────────────
-
-data "google_project" "current" {
-  project_id = var.project_id
-}
-
-# ─────────────────────────────────────────────
 # Outputs
 # ─────────────────────────────────────────────
 
@@ -732,4 +728,14 @@ output "service_account_email" {
 output "firestore_database" {
   description = "Firestore database name"
   value       = google_firestore_database.historian.name
+}
+
+output "project_id" {
+  description = "GCP project ID"
+  value       = var.project_id
+}
+
+output "region" {
+  description = "GCP region"
+  value       = var.region
 }
