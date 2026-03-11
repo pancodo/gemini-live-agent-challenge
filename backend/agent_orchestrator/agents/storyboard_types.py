@@ -7,7 +7,12 @@ before any research begins.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+import logging
+import re
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +84,16 @@ class SceneVisualPlan(BaseModel):
             "from 4 camera angles."
         ),
     )
+    temporal_state: str = Field(
+        default="",
+        description=(
+            "Description of the building/site's physical state at the exact "
+            "historical moment depicted — e.g., 'freshly completed in 80 AD, "
+            "all four exterior stories intact, marble cladding pristine, no "
+            "damage', or 'in active daily use, well-maintained, showing minor "
+            "weathering'. Drives temporal accuracy in image generation."
+        ),
+    )
     narrative_bridge: str = Field(
         ...,
         description=(
@@ -114,6 +129,38 @@ class SceneVisualPlan(BaseModel):
                 )
                 raise ValueError(msg)
         return v
+
+    @model_validator(mode="after")
+    def _warn_short_temporal_state(self) -> SceneVisualPlan:
+        """Log a warning if temporal_state is too short for era-specific scenes.
+
+        When the scene's ``scene_id`` or other context implies a specific
+        historical period, a detailed temporal_state (>= 20 chars) is strongly
+        recommended to prevent AI image models defaulting to the modern state.
+        """
+        if len(self.temporal_state) < 20:
+            # Check if any field hints at a specific date/century
+            _era_pattern = re.compile(
+                r"\b(\d{1,4}\s*(AD|BC|BCE|CE|century|c\.))\b",
+                re.IGNORECASE,
+            )
+            searchable = " ".join(
+                [
+                    self.primary_subject,
+                    " ".join(self.frame_concepts),
+                    self.narrative_bridge,
+                ]
+            )
+            if _era_pattern.search(searchable):
+                _logger.warning(
+                    "SceneVisualPlan '%s': temporal_state is only %d chars but "
+                    "the scene references a specific historical period. "
+                    "A detailed temporal_state (>= 20 chars) is strongly "
+                    "recommended for period-accurate image generation.",
+                    self.scene_id,
+                    len(self.temporal_state),
+                )
+        return self
 
 
 # ---------------------------------------------------------------------------

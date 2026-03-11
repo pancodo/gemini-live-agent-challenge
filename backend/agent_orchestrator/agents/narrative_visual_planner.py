@@ -131,31 +131,37 @@ def _build_prompt(
                 "scene_0": {
                     "scene_id": "scene_0",
                     "primary_subject": "The grand bazaar at its commercial peak",
+                    "temporal_state": "Grand Bazaar in active daily use circa 1560, "
+                    "freshly expanded under Suleiman the Magnificent, stone vaults "
+                    "intact with recent masonry, painted interior arches in Ottoman "
+                    "geometric patterns — NOT the modern tourist market",
                     "perspective": "Eye-level walking through crowded market stalls",
                     "time_of_day": "Late afternoon golden hour",
                     "color_palette": ["burnt sienna", "saffron gold", "deep indigo"],
                     "avoid_list": [
                         "Do not show military formations (scene_1 territory)",
                         "Do not show religious ceremonies (scene_2 territory)",
+                        "Modern tourist bazaar with electric lighting and contemporary goods",
                     ],
                     "targeted_searches": [
-                        "Ottoman bazaar merchant stalls 16th century archaeological evidence",
-                        "Istanbul Grand Bazaar historical engravings primary sources",
-                        "Suleiman era marketplace trade goods museum collection",
+                        "Ottoman bazaar merchant stalls 16th century archaeological reconstruction",
+                        "Istanbul Grand Bazaar Suleiman era original appearance scholarly illustration",
+                        "Ottoman marketplace 1560 historical reconstruction museum rendering",
                     ],
                     "frame_concepts": [
                         "Wide shot of covered bazaar interior with shafts of dusty "
                         "light falling through roof openings onto silk merchants, "
+                        "freshly laid stone vaults with painted geometric arches, "
                         "warm amber tones",
                         "Medium shot of a spice merchant weighing goods on a brass "
                         "scale, surrounded by pyramids of coloured powder, soft "
-                        "side-lighting from a lantern",
+                        "side-lighting from an oil lantern in a recently built stall",
                         "Close-up of ornate metalwork on a merchant's strongbox, "
                         "showing period-specific geometric patterns, shallow depth "
                         "of field with bokeh background",
                         "Dramatic low-angle shot looking up at the bazaar's vaulted "
                         "ceiling with smoke from incense drifting through light beams, "
-                        "high contrast chiaroscuro",
+                        "high contrast chiaroscuro, stone arches pristine and unweathered",
                     ],
                     "narrative_bridge": "From the commerce of the bazaar, we follow "
                     "a royal messenger carrying trade reports toward the palace walls",
@@ -180,6 +186,20 @@ RULES:
 5. color_temperature_arc across ALL scenes should create emotional progression matching the dramatic arc: warm opening -> neutral rising_action -> cool/high-contrast climax -> warm resolution -> melancholic coda.
 6. perspective should vary across scenes — do not use the same camera philosophy twice.
 7. time_of_day should vary across scenes to create visual rhythm.
+8. For each scene, specify the TEMPORAL STATE of the primary subject in the "temporal_state" field. This is CRITICAL for historical accuracy.
+  - If depicting a building being constructed: specify how far along construction is, what materials are visible, scaffolding details.
+  - If depicting a building in its prime: specify "fully intact, in active use at [date]" with specific architectural details that distinguish it from its modern state.
+  - If depicting a building after destruction/abandonment: specify the exact damage state at that moment in history.
+  - ALWAYS include whether it should look NEWLY BUILT or AGED/USED — never leave this ambiguous.
+  - Example: "Colosseum freshly completed in 80 AD, all four exterior stories intact, travertine limestone cream-white, marble cladding on exterior, velarium awning deployed, bronze shields between arches, NO weathering, no damage, no ruins."
+9. For ancient Greek and Roman scenes, ALWAYS specify polychrome paint in temporal_state. Ancient buildings and sculptures were vividly painted, NOT plain white marble. Include: "painted in vivid polychrome — cinnabar red, Egyptian blue, and gold leaf over marble — NOT plain white unpainted marble."
+10. targeted_searches must find PERIOD-ACCURATE RECONSTRUCTION sources, not tourist photos. For any famous historical site, use queries like:
+  - "[site] [year] archaeological reconstruction digital rendering"
+  - "[site] original appearance [era] museum scholarly illustration"
+  - "[site] polychrome fully intact historical reconstruction"
+  NEVER use queries that would return modern tourist photography of ruins.
+11. avoid_list MUST include the modern/ruined state of any famous historical site. Example: "modern Colosseum ruins with missing walls", "weathered modern tourist version", "contemporary ruin photographs", "plain white unpainted marble."
+12. frame_concepts must specify the temporal state in each concept. Each frame concept should mention: who is present, what they are doing, AND what state the architecture is in. Example: "Workers finishing the marble cladding on the second story, freshly cut white marble with crisp edges, wooden scaffolding still in place, late afternoon light."
 
 SCENE BRIEFS:
 {scene_summaries}{script_section}{bible_section}
@@ -282,6 +302,15 @@ def _repair_scene_plan(
     while len(valid_concepts) < 4:
         valid_concepts.append(_DEFAULT_FRAME_CONCEPT)
     repaired["frame_concepts"] = valid_concepts[:4]
+
+    # Ensure temporal_state
+    if not repaired.get("temporal_state"):
+        era = brief.get("era", "historical period")
+        repaired["temporal_state"] = (
+            f"Historical reconstruction of this scene from {era}, fully intact "
+            f"and in active use, period-accurate construction materials and "
+            f"decoration, no modern elements or damage"
+        )
 
     # Ensure narrative_bridge
     if not repaired.get("narrative_bridge"):
@@ -520,6 +549,7 @@ class NarrativeVisualPlanner(BaseAgent):
                     exc,
                 )
                 # Last-resort fallback: build a minimal valid plan
+                era_fb = brief.get("era", "historical period")
                 fallback = SceneVisualPlan(
                     scene_id=scene_id,
                     primary_subject=brief.get("title", "Historical scene"),
@@ -535,6 +565,12 @@ class NarrativeVisualPlanner(BaseAgent):
                     ]
                     * 3,
                     frame_concepts=[_DEFAULT_FRAME_CONCEPT] * 4,
+                    temporal_state=(
+                        f"Historical reconstruction of this scene from {era_fb}, "
+                        f"fully intact and in active use, period-accurate "
+                        f"construction materials and decoration, no modern "
+                        f"elements or damage"
+                    ),
                     narrative_bridge="",
                 )
                 validated_scenes[scene_id] = fallback
