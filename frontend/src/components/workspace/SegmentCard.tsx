@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, memo, type MouseEvent } from 'react';
 import { motion, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
 import { Badge, Button } from '../ui';
 import { usePlayerStore } from '../../store/playerStore';
@@ -14,7 +14,7 @@ interface SegmentCardProps {
 
 // ── Component ───────────────────────────────────────────────────
 
-export function SegmentCard({ segment, index }: SegmentCardProps) {
+export const SegmentCard = memo(function SegmentCard({ segment, index }: SegmentCardProps) {
   const triggerIris = usePlayerStore((s) => s.triggerIris);
   const reducedMotion = useReducedMotion();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -156,4 +156,4 @@ export function SegmentCard({ segment, index }: SegmentCardProps) {
       )}
     </motion.div>
   );
-}
+});

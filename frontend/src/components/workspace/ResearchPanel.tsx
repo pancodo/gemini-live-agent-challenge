@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback, type MouseEvent, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo, type MouseEvent, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 import { useResearchStore } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { usePlayerStore } from '../../store/playerStore';
@@ -274,7 +275,7 @@ interface AgentCardProps {
   onEntityClick?: (text: string) => void;
 }
 
-function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
+const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
 
@@ -425,7 +426,7 @@ function AgentCard({ agent, onClick, onEntityClick }: AgentCardProps) {
       </AnimatePresence>
     </motion.div>
   );
-}
+});
 
 // ── Phase Divider ───────────────────────────────────────────────
 
@@ -445,8 +446,8 @@ function PhaseDivider({ number, label }: { number: string; label: string }) {
 
 export function ResearchPanel() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  const agents = useResearchStore((s) => s.agents);
-  const segments = useResearchStore((s) => s.segments);
+  const agents = useResearchStore(useShallow((s) => s.agents));
+  const segments = useResearchStore(useShallow((s) => s.segments));
   const stats = useResearchStore((s) => s.stats);
   const triggerIris = usePlayerStore((s) => s.triggerIris);
   const pdfViewer = usePDFViewer();
@@ -491,21 +492,19 @@ export function ResearchPanel() {
     prevAgentStatusRef.current = next;
   }, [agents]);
 
-  // Group agents by phase
-  const agentList = Object.values(agents);
-  const agentsByPhase: AgentState[][] = [[], [], [], []];
-  for (const agent of agentList) {
-    const phase = agentPhase(agent.id);
-    agentsByPhase[phase]?.push(agent);
-  }
+  const activePhases = useMemo(() => {
+    const byPhase: AgentState[][] = [[], [], [], []];
+    for (const agent of Object.values(agents)) {
+      const phase = agentPhase(agent.id);
+      byPhase[phase]?.push(agent);
+    }
+    return PHASE_LABELS
+      .map(([num, label], i) => ({ num, label, agents: byPhase[i] ?? [] }))
+      .filter((p) => p.agents.length > 0);
+  }, [agents]);
 
-  const segmentList = Object.values(segments);
+  const segmentList = useMemo(() => Object.values(segments), [segments]);
   const selectedAgent = selectedAgentId ? agents[selectedAgentId] ?? null : null;
-
-  // Determine which phases to show (only phases with agents)
-  const activePhases = PHASE_LABELS
-    .map(([num, label], i) => ({ num, label, agents: agentsByPhase[i] ?? [] }))
-    .filter((p) => p.agents.length > 0);
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-y-auto px-4 py-4">
