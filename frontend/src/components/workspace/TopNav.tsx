@@ -242,14 +242,59 @@ export function TopNav() {
             <GearIcon />
           </button>
           {settingsOpen && (
-            <div className="absolute right-0 top-[calc(100%+8px)] bg-[var(--bg2)] border border-[var(--bg4)] rounded-lg p-3 w-52 z-50 shadow-md">
-              <div className="flex items-center justify-between py-1.5">
-                <span className="font-sans text-[12px] text-[var(--text)]">Reduced motion</span>
-                <Toggle on={settings.reducedMotion} onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)} />
+            <div className="absolute right-0 top-[calc(100%+8px)] bg-[var(--bg2)] border border-[var(--bg4)] rounded-lg py-2 w-56 z-50 shadow-md">
+              {/* Header */}
+              <div className="px-3 pb-2 border-b border-[var(--bg4)]">
+                <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Settings</span>
               </div>
-              <div className="flex items-center justify-between py-1.5">
-                <span className="font-sans text-[12px] text-[var(--text)]">Auto-watch</span>
+
+              {/* Playback section */}
+              <div className="px-3 pt-2 pb-1">
+                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-[var(--muted)]/60">Playback</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div>
+                  <span className="font-sans text-[12px] text-[var(--text)]">Auto-watch</span>
+                  <p className="font-sans text-[10px] text-[var(--muted)] leading-tight">Open player when ready</p>
+                </div>
                 <Toggle on={settings.autoWatch} onToggle={() => updateSetting('autoWatch', !settings.autoWatch)} />
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div>
+                  <span className="font-sans text-[12px] text-[var(--text)]">Captions</span>
+                  <p className="font-sans text-[10px] text-[var(--muted)] leading-tight">Show narration text</p>
+                </div>
+                <Toggle on={settings.showCaptions} onToggle={() => updateSetting('showCaptions', !settings.showCaptions)} />
+              </div>
+
+              {/* Divider */}
+              <div className="mx-3 my-1.5 border-t border-[var(--bg4)]" />
+
+              {/* Voice section */}
+              <div className="px-3 pb-1">
+                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-[var(--muted)]/60">Voice</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div>
+                  <span className="font-sans text-[12px] text-[var(--text)]">Historian voice</span>
+                  <p className="font-sans text-[10px] text-[var(--muted)] leading-tight">Enable live conversation</p>
+                </div>
+                <Toggle on={settings.voiceEnabled} onToggle={() => updateSetting('voiceEnabled', !settings.voiceEnabled)} />
+              </div>
+
+              {/* Divider */}
+              <div className="mx-3 my-1.5 border-t border-[var(--bg4)]" />
+
+              {/* Accessibility section */}
+              <div className="px-3 pb-1">
+                <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-[var(--muted)]/60">Accessibility</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <div>
+                  <span className="font-sans text-[12px] text-[var(--text)]">Reduced motion</span>
+                  <p className="font-sans text-[10px] text-[var(--muted)] leading-tight">Disable animations</p>
+                </div>
+                <Toggle on={settings.reducedMotion} onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)} />
               </div>
             </div>
           )}

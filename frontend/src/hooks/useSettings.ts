@@ -5,11 +5,15 @@ const STORAGE_KEY = 'ai-historian-settings';
 interface Settings {
   reducedMotion: boolean;
   autoWatch: boolean;
+  voiceEnabled: boolean;
+  showCaptions: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   reducedMotion: false,
   autoWatch: false,
+  voiceEnabled: true,
+  showCaptions: true,
 };
 
 function loadSettings(): Settings {
@@ -22,6 +26,8 @@ function loadSettings(): Settings {
     return {
       reducedMotion: typeof obj['reducedMotion'] === 'boolean' ? obj['reducedMotion'] : DEFAULT_SETTINGS.reducedMotion,
       autoWatch: typeof obj['autoWatch'] === 'boolean' ? obj['autoWatch'] : DEFAULT_SETTINGS.autoWatch,
+      voiceEnabled: typeof obj['voiceEnabled'] === 'boolean' ? obj['voiceEnabled'] : DEFAULT_SETTINGS.voiceEnabled,
+      showCaptions: typeof obj['showCaptions'] === 'boolean' ? obj['showCaptions'] : DEFAULT_SETTINGS.showCaptions,
     };
   } catch {
     return DEFAULT_SETTINGS;
