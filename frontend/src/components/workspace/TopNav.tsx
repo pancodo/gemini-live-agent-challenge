@@ -235,11 +235,12 @@ export function TopNav() {
           <button
             type="button"
             onClick={() => setSettingsOpen((o) => !o)}
-            className="text-[var(--muted)] hover:text-[var(--gold-d)] transition-colors duration-150 cursor-pointer p-1"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted)] hover:text-[var(--gold-d)] hover:bg-[var(--bg3)] transition-colors duration-150 cursor-pointer"
             aria-label="Settings"
             aria-expanded={settingsOpen}
           >
             <GearIcon />
+            <span className="font-sans text-[11px] uppercase tracking-[0.15em]">Settings</span>
           </button>
           {settingsOpen && (
             <div className="absolute right-0 top-[calc(100%+8px)] bg-[var(--bg2)] border border-[var(--bg4)] rounded-lg py-2 w-56 z-50 shadow-md">
