@@ -289,6 +289,7 @@ export function ExpeditionLog() {
   }, [phases, agents]);
 
   const agentList = Object.values(agents);
+  const activeAgentCount = agentList.filter((a) => a.status === 'searching').length;
   const selectedAgent = selectedAgentId ? (agents[selectedAgentId] ?? null) : null;
 
   // The active phase is the last phase in the list (most recently started)
@@ -304,6 +305,22 @@ export function ExpeditionLog() {
         >
           Expedition Log
         </h2>
+        {activeAgentCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: 10,
+              letterSpacing: '0.15em',
+              textTransform: 'uppercase' as const,
+              color: 'var(--teal)',
+              marginTop: 4,
+            }}
+          >
+            {activeAgentCount} agent{activeAgentCount !== 1 ? 's' : ''} working in parallel
+          </motion.div>
+        )}
       </div>
 
       {/* Scrollable log area */}

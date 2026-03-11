@@ -507,77 +507,86 @@ export function ResearchPanel() {
   const selectedAgent = selectedAgentId ? agents[selectedAgentId] ?? null : null;
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto px-4 py-4">
-      {/* Historian Panel */}
-      <HistorianPanel />
+    <div className="flex flex-col h-full">
+      {/* Scrollable content area */}
+      <div className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4">
+        {/* Historian Panel */}
+        <HistorianPanel />
 
-      {/* Section Header */}
-      <div>
-        <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-2">
-          Research Activity
-        </h2>
-
-        {/* Stats bar */}
-        <div className="flex items-center gap-4">
-          <StatButton
-            label="sources found"
-            value={stats.sourcesFound}
-            popover={<SourcesPopover agents={agents} />}
-          />
-          <span className="text-[var(--bg4)]">{'\u00B7'}</span>
-          <StatButton
-            label="facts verified"
-            value={stats.factsVerified}
-            popover={<FactsPopover agents={agents} onEntityClick={handleEntityClick} />}
-          />
-          <span className="text-[var(--bg4)]">{'\u00B7'}</span>
-          <StatButton
-            label="segments ready"
-            value={stats.segmentsReady}
-            popover={<SegmentsPopover segments={segments} triggerIris={triggerIris} />}
-          />
+        {/* Section Header */}
+        <div>
+          <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-2">
+            Research Activity
+          </h2>
         </div>
+
+        {/* Agent cards grouped by phase */}
+        <motion.div
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
+          className="space-y-1"
+        >
+          <AnimatePresence>
+            {activePhases.map((phase) => (
+              <div key={phase.num}>
+                <PhaseDivider number={phase.num} label={phase.label} />
+                <div className="space-y-2">
+                  {phase.agents.map((agent) => (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      onClick={() => setSelectedAgentId(agent.id)}
+                      onEntityClick={handleEntityClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+
+        {/* Segments section */}
+        {segmentList.length > 0 && (
+          <div>
+            <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-3">
+              Segments
+            </h2>
+            <div className="space-y-3">
+              {segmentList.map((segment, i) => (
+                <SegmentCard key={segment.id} segment={segment} index={i} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Agent cards grouped by phase */}
-      <motion.div
-        variants={listVariants}
-        initial="hidden"
-        animate="show"
-        className="space-y-1"
+      {/* Sticky stats footer — always visible */}
+      <div
+        className="shrink-0 flex items-center gap-4 px-4 py-2"
+        style={{
+          background: 'var(--bg2)',
+          borderTop: '1px solid rgba(139,94,26,0.12)',
+        }}
       >
-        <AnimatePresence>
-          {activePhases.map((phase) => (
-            <div key={phase.num}>
-              <PhaseDivider number={phase.num} label={phase.label} />
-              <div className="space-y-2">
-                {phase.agents.map((agent) => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    onClick={() => setSelectedAgentId(agent.id)}
-                    onEntityClick={handleEntityClick}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </AnimatePresence>
-      </motion.div>
-
-      {/* Segments section */}
-      {segmentList.length > 0 && (
-        <div>
-          <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-3">
-            Segments
-          </h2>
-          <div className="space-y-3">
-            {segmentList.map((segment, i) => (
-              <SegmentCard key={segment.id} segment={segment} index={i} />
-            ))}
-          </div>
-        </div>
-      )}
+        <StatButton
+          label="sources found"
+          value={stats.sourcesFound}
+          popover={<SourcesPopover agents={agents} />}
+        />
+        <span className="text-[var(--bg4)]">{'\u00B7'}</span>
+        <StatButton
+          label="facts verified"
+          value={stats.factsVerified}
+          popover={<FactsPopover agents={agents} onEntityClick={handleEntityClick} />}
+        />
+        <span className="text-[var(--bg4)]">{'\u00B7'}</span>
+        <StatButton
+          label="segments ready"
+          value={stats.segmentsReady}
+          popover={<SegmentsPopover segments={segments} triggerIris={triggerIris} />}
+        />
+      </div>
 
       {/* Agent Modal */}
       {sessionId && (
