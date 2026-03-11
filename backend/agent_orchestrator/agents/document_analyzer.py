@@ -58,9 +58,13 @@ from google.genai import types as genai_types
 from pydantic import ConfigDict, Field
 
 from .chunk_types import ChunkRecord, DocumentMap, SceneBrief
+from .rate_limiter import GlobalRateLimiter, rate_limited_generate
 from .sse_helpers import SSEEmitter, build_agent_status_event, build_pipeline_phase_event
 
 logger = logging.getLogger(__name__)
+
+# Fallback rate limiter used when no limiter is injected via the factory.
+_fallback_limiter = GlobalRateLimiter(12, "gemini")
 
 # ---------------------------------------------------------------------------
 # Step 1 -- OCR helpers
@@ -350,50 +354,61 @@ async def _summarise_single_chunk(
     chunk: ChunkRecord,
     client: google_genai.Client,
     semaphore: asyncio.Semaphore,
+    rate_limiter: GlobalRateLimiter | None = None,
 ) -> str:
     """Summarise a single chunk using Gemini 2.0 Flash.
 
-    The call is gated by *semaphore* to respect API rate limits. On failure
-    the first 200 characters of the raw text are returned as a degraded
-    fallback so that downstream agents still receive context.
+    When a *rate_limiter* is provided, calls go through
+    ``rate_limited_generate`` which adds concurrency gating and automatic
+    retry with exponential backoff on 429/500/503 errors. Otherwise the
+    call is gated by the legacy *semaphore*.
+
+    On failure the first 200 characters of the raw text are returned as a
+    degraded fallback so that downstream agents still receive context.
 
     Args:
         chunk: The chunk to summarise.
         client: Pre-constructed GenAI client.
-        semaphore: Concurrency limiter.
+        semaphore: Legacy concurrency limiter (used when no rate_limiter).
+        rate_limiter: Optional ``GlobalRateLimiter`` for rate-limited calls.
 
     Returns:
         Summary text (3-5 sentences) or a truncated fallback.
     """
-    async with semaphore:
-        try:
-            response = await client.aio.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=_SUMMARISE_INSTRUCTION.format(text=chunk.raw_text),
-                config=genai_types.GenerateContentConfig(
-                    max_output_tokens=256,
-                    temperature=0.1,
-                ),
-            )
-            return response.text
-        except Exception as exc:
-            logger.warning(
-                "Summarisation failed for %s (%s), using fallback",
-                chunk.chunk_id,
-                exc,
-            )
-            return chunk.raw_text[:200] + "..."
+    limiter = rate_limiter or _fallback_limiter
+    try:
+        response = await rate_limited_generate(
+            client,
+            limiter,
+            model="gemini-2.0-flash",
+            contents=_SUMMARISE_INSTRUCTION.format(text=chunk.raw_text),
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=256,
+                temperature=0.1,
+            ),
+            caller=f"summarizer:{chunk.chunk_id}",
+        )
+        return response.text
+    except Exception as exc:
+        logger.warning(
+            "Summarisation failed for %s (%s), using fallback",
+            chunk.chunk_id,
+            exc,
+        )
+        return chunk.raw_text[:200] + "..."
 
 
 async def _summarise_all_chunks(
     chunks: list[ChunkRecord],
     max_concurrent: int = 10,
+    rate_limiter: GlobalRateLimiter | None = None,
 ) -> list[ChunkRecord]:
     """Summarise all chunks in parallel with bounded concurrency.
 
     Args:
         chunks: Ordered list of chunks to summarise.
         max_concurrent: Maximum number of simultaneous Gemini API calls.
+        rate_limiter: Optional ``GlobalRateLimiter`` for rate-limited calls.
 
     Returns:
         New list of ``ChunkRecord`` objects with ``summary`` populated.
@@ -406,7 +421,10 @@ async def _summarise_all_chunks(
     )
 
     summaries = await asyncio.gather(
-        *[_summarise_single_chunk(c, client, semaphore) for c in chunks]
+        *[
+            _summarise_single_chunk(c, client, semaphore, rate_limiter=rate_limiter)
+            for c in chunks
+        ]
     )
 
     return [
@@ -549,7 +567,8 @@ Visual Bible Seed:
 {visual_bible_seed}
 
 YOUR TASK:
-Select exactly 4 cinematically compelling moments from the document (was 4-8 — restore range before submission). Prioritise:
+Select approximately {recommended_scene_count} cinematically compelling moments
+(guidance based on document length; stay within 2–6 scenes total). Prioritise:
   - Narrative turning points that create dramatic tension
   - High-contrast scenes (conflict, transformation, revelation)
   - Visually specific moments (described settings, objects, weather, light)
@@ -631,6 +650,10 @@ class DocumentAnalyzerAgent(BaseAgent):
         default=None,
         description="Optional SSE emitter for frontend progress events.",
     )
+    rate_limiter: Any = Field(
+        default=None,
+        description="Optional GlobalRateLimiter for Gemini API call concurrency control.",
+    )
     max_concurrent_summaries: int = Field(
         default=10,
         description="Maximum parallel Gemini calls during chunk summarisation.",
@@ -702,6 +725,11 @@ class DocumentAnalyzerAgent(BaseAgent):
         # ------------------------------------------------------------------
         chunks = semantic_chunk(ocr_text, session_id)
 
+        total_chunks = len(chunks)
+        recommended_scene_count = min(max(2, total_chunks // 3), 6)
+        ctx.session.state["recommended_scene_count"] = recommended_scene_count
+        logger.info("Dynamic scene count: %d chunks -> %d recommended scenes", total_chunks, recommended_scene_count)
+
         if self.emitter is not None:
             await self.emitter.emit(
                 "stats_update",
@@ -726,7 +754,9 @@ class DocumentAnalyzerAgent(BaseAgent):
 
         t_sum_start = time.monotonic()
         chunks_with_summaries = await _summarise_all_chunks(
-            chunks, self.max_concurrent_summaries
+            chunks,
+            self.max_concurrent_summaries,
+            rate_limiter=self.rate_limiter,
         )
         t_sum_elapsed = time.monotonic() - t_sum_start
         logger.info(
@@ -859,6 +889,7 @@ class DocumentAnalyzerAgent(BaseAgent):
 
 def build_document_analyzer(
     emitter: SSEEmitter | None = None,
+    rate_limiter: GlobalRateLimiter | None = None,
 ) -> DocumentAnalyzerAgent:
     """Construct a ``DocumentAnalyzerAgent`` from environment variables.
 
@@ -871,6 +902,8 @@ def build_document_analyzer(
 
     Args:
         emitter: Optional SSE emitter for frontend progress events.
+        rate_limiter: Optional ``GlobalRateLimiter`` for Gemini API call
+            concurrency control during parallel chunk summarisation.
 
     Returns:
         Configured ``DocumentAnalyzerAgent`` ready for pipeline integration.
@@ -885,5 +918,6 @@ def build_document_analyzer(
         gcs_bucket=os.environ["GCS_BUCKET_NAME"],
         firestore_project=os.environ["GCP_PROJECT_ID"],
         emitter=emitter,
+        rate_limiter=rate_limiter,
         sub_agents=[_make_narrative_curator()],
     )

@@ -58,6 +58,7 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.cloud import firestore
 from pydantic import ConfigDict, Field
 
+from .rate_limiter import GlobalRateLimiter, rate_limited_generate
 from .script_types import SegmentScript
 from .sse_helpers import (
     SSEEmitter,
@@ -88,6 +89,9 @@ logger = logging.getLogger(__name__)
 _FAST_PATH_MAX_SOURCES: int = 3
 _DEEP_PATH_MAX_SOURCES: int = 5
 _SEMAPHORE_LIMIT: int = 6  # Max concurrent Gemini calls across all scenes
+
+# Fallback rate limiter used when no limiter is injected via the factory.
+_fallback_limiter = GlobalRateLimiter(12, "gemini")
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +156,7 @@ async def _batch_evaluate_sources(
     storyboard_plan: dict[str, Any] | None,
     client: google_genai.Client,
     semaphore: asyncio.Semaphore,
+    rate_limiter: GlobalRateLimiter | None = None,
 ) -> tuple[list[EvaluatedSource], list[EvaluatedSource]]:
     """Evaluate all fetched sources in a single Gemini 2.0 Flash call.
 
@@ -216,17 +221,22 @@ Return JSON array only, no markdown:
     # Build a URL→FetchedContent lookup for source_type resolution
     content_by_url: dict[str, FetchedContent] = {s.url: s for s in fetched_content}
 
+    limiter = rate_limiter or _fallback_limiter
+
     for attempt in range(3):
         try:
-            async with semaphore:
-                response = await client.aio.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=prompt,
-                    config=genai_types.GenerateContentConfig(
-                        max_output_tokens=2048,
-                        temperature=0.1,
-                    ),
-                )
+            response = await rate_limited_generate(
+                client,
+                limiter,
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    max_output_tokens=2048,
+                    temperature=0.1,
+                ),
+                caller=f"batch_evaluate:{scene_brief.get('scene_id', '?')}",
+                max_retries=1,  # Outer loop handles retries
+            )
 
             raw_text = response.text.strip()
             # Strip markdown fences if present
@@ -336,6 +346,7 @@ async def _run_scene_pipeline(
     emitter: SSEEmitter | None,
     fast_path: bool,
     visual_bible: str = "",
+    rate_limiter: GlobalRateLimiter | None = None,
 ) -> VisualDetailManifest | None:
     """Run Stages 0–6 for a single scene and return the completed manifest.
 
@@ -471,7 +482,8 @@ async def _run_scene_pipeline(
     if storyboard_plan:
         # Single-call batch evaluation when storyboard is available
         accepted_sources, rejected_sources = await _batch_evaluate_sources(
-            fetched_content, scene_brief, storyboard_plan, client, semaphore
+            fetched_content, scene_brief, storyboard_plan, client, semaphore,
+            rate_limiter=rate_limiter,
         )
     else:
         # Fallback to original dual evaluate
@@ -628,6 +640,14 @@ class VisualResearchOrchestrator(BaseAgent):
         default="",
         description="GCS bucket for Imagen 3 image uploads. When non-empty, image generation runs inline after each manifest completes.",
     )
+    rate_limiter: Any = Field(
+        default=None,
+        description="Optional GlobalRateLimiter for Gemini API call concurrency control.",
+    )
+    imagen_rate_limiter: Any = Field(
+        default=None,
+        description="Optional GlobalRateLimiter for Imagen 3 API calls during inline generation.",
+    )
     emitter: Any = Field(
         default=None,
         description="Optional SSE emitter for frontend progress events.",
@@ -770,6 +790,7 @@ class VisualResearchOrchestrator(BaseAgent):
                 emitter=self.emitter,
                 fast_path=fast_path,
                 visual_bible=_visual_bible,
+                rate_limiter=self.rate_limiter,
             )
             if manifest:
                 ctx.session.state["visual_research_manifest"][manifest.scene_id] = (
@@ -794,6 +815,7 @@ class VisualResearchOrchestrator(BaseAgent):
                         emitter=self.emitter,
                         image_url_store=image_url_store,
                         narrative_role=brief.get("narrative_role", ""),
+                        imagen_rate_limiter=self.imagen_rate_limiter,
                     )
 
         tasks = []
@@ -848,6 +870,8 @@ class VisualResearchOrchestrator(BaseAgent):
 
 def build_visual_research_orchestrator(
     emitter: SSEEmitter | None = None,
+    rate_limiter: GlobalRateLimiter | None = None,
+    imagen_rate_limiter: GlobalRateLimiter | None = None,
 ) -> VisualResearchOrchestrator:
     """Construct a ``VisualResearchOrchestrator`` from environment variables.
 
@@ -860,6 +884,8 @@ def build_visual_research_orchestrator(
 
     Args:
         emitter: Optional SSE emitter for frontend progress events.
+        rate_limiter: Optional ``GlobalRateLimiter`` for Gemini API call
+            concurrency control during source evaluation.
 
     Returns:
         Configured ``VisualResearchOrchestrator`` ready for pipeline integration.
@@ -876,5 +902,7 @@ def build_visual_research_orchestrator(
         firestore_project=os.environ["GCP_PROJECT_ID"],
         processor_name=os.environ.get("DOCUMENT_AI_PROCESSOR_NAME"),
         gcs_bucket=os.environ.get("GCS_BUCKET_NAME", ""),
+        rate_limiter=rate_limiter,
+        imagen_rate_limiter=imagen_rate_limiter,
         emitter=emitter,
     )
