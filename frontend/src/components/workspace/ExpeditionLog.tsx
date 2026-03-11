@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { motion, useReducedMotion, type Variants } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
 import { useResearchStore, type PhaseEntry } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { typewriteEntry } from '../../hooks/useTypewriter';
@@ -134,6 +134,7 @@ function StatBadge({ label, value }: { label: string; value: number }) {
 // ── PhaseBlock ──────────────────────────────────────────
 interface PhaseBlockProps {
   entry: PhaseEntry;
+  isActive: boolean;
   reduced: boolean;
   typewrittenRef: React.RefObject<Set<string>>;
   phaseAgents: AgentState[];
@@ -142,11 +143,27 @@ interface PhaseBlockProps {
 
 function PhaseBlock({
   entry,
+  isActive,
   reduced,
   typewrittenRef,
   phaseAgents,
   onAgentClick,
 }: PhaseBlockProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Auto-collapse completed phases after 2 seconds
+  useEffect(() => {
+    if (!isActive) {
+      const allDone = phaseAgents.length > 0 && phaseAgents.every(
+        (a) => a.status === 'done' || a.status === 'error',
+      );
+      if (allDone) {
+        const t = setTimeout(() => setCollapsed(true), 2000);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [isActive, phaseAgents]);
+
   const messageCallbackRef = useCallback(
     (node: HTMLSpanElement | null, key: string, text: string) => {
       if (!node) return;
@@ -161,6 +178,10 @@ function PhaseBlock({
     [reduced, typewrittenRef],
   );
 
+  const headerLabel = entry.phase in ROMAN
+    ? `Phase ${ROMAN[entry.phase as 1 | 2 | 3 | 4]} — ${entry.label}`
+    : `Phase — ${entry.label}`;
+
   return (
     <motion.div
       variants={reduced ? undefined : listVariants}
@@ -168,58 +189,80 @@ function PhaseBlock({
       animate="show"
       transition={reduced ? staticTransition : undefined}
     >
-      {/* Phase header */}
-      <p
-        className="text-[11px] font-serif uppercase tracking-[0.35em] text-[var(--gold)] mb-0"
-        style={{ fontWeight: 400 }}
+      {/* Phase header — clickable to toggle collapse */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center gap-2 text-left cursor-pointer bg-transparent border-none p-0 mb-0"
+        aria-expanded={!collapsed}
       >
-        {entry.phase in ROMAN
-          ? `Phase ${ROMAN[entry.phase as 1 | 2 | 3 | 4]} — ${entry.label}`
-          : `Phase — ${entry.label}`}
-      </p>
+        <p
+          className="text-[11px] font-serif uppercase tracking-[0.35em] text-[var(--gold)] mb-0 flex-1"
+          style={{ fontWeight: 400 }}
+        >
+          {headerLabel}
+        </p>
+        <span className="text-[9px] text-[var(--muted)] opacity-40 shrink-0 select-none">
+          {collapsed ? '\u25B6' : '\u25BC'}
+        </span>
+      </button>
 
       {/* Self-drawing divider */}
       <div className="phase-divider">
         <div className="phase-divider-dot" />
       </div>
 
-      {/* Messages */}
-      {entry.messages.map((msg, idx) => {
-        const key = `${entry.phase}-${idx}`;
-        return (
+      {/* Collapsible content */}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
           <motion.div
-            key={key}
-            className="flex items-start gap-2 mb-1.5"
-            variants={reduced ? undefined : entryVariants}
-            transition={reduced ? staticTransition : undefined}
+            key={`phase-content-${entry.phase}`}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            style={{ overflow: 'hidden' }}
           >
-            <span className="mt-[5px] inline-block w-[5px] h-[5px] rounded-full bg-[var(--gold)] shrink-0" />
-            <span
-              ref={(node) => messageCallbackRef(node, key, msg)}
-              className="text-[13px] font-sans text-[var(--text)] leading-relaxed"
-            />
-          </motion.div>
-        );
-      })}
+            {/* Messages */}
+            {entry.messages.map((msg, idx) => {
+              const key = `${entry.phase}-${idx}`;
+              return (
+                <motion.div
+                  key={key}
+                  className="flex items-start gap-2 mb-1.5"
+                  variants={reduced ? undefined : entryVariants}
+                  transition={reduced ? staticTransition : undefined}
+                >
+                  <span className="mt-[5px] inline-block w-[5px] h-[5px] rounded-full bg-[var(--gold)] shrink-0" />
+                  <span
+                    ref={(node) => messageCallbackRef(node, key, msg)}
+                    className="text-[13px] font-sans text-[var(--text)] leading-relaxed"
+                  />
+                </motion.div>
+              );
+            })}
 
-      {/* Agent rows — clickable for detail */}
-      {phaseAgents.length > 0 && (
-        <motion.div
-          className="mt-2 space-y-0.5"
-          variants={reduced ? undefined : listVariants}
-          initial="hidden"
-          animate="show"
-        >
-          {phaseAgents.map((agent) => (
-            <LogAgentRow
-              key={agent.id}
-              agent={agent}
-              onClick={() => onAgentClick(agent.id)}
-              reduced={reduced}
-            />
-          ))}
-        </motion.div>
-      )}
+            {/* Agent rows — clickable for detail */}
+            {phaseAgents.length > 0 && (
+              <motion.div
+                className="mt-2 space-y-0.5"
+                variants={reduced ? undefined : listVariants}
+                initial="hidden"
+                animate="show"
+              >
+                {phaseAgents.map((agent) => (
+                  <LogAgentRow
+                    key={agent.id}
+                    agent={agent}
+                    onClick={() => onAgentClick(agent.id)}
+                    reduced={reduced}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -247,6 +290,9 @@ export function ExpeditionLog() {
 
   const agentList = Object.values(agents);
   const selectedAgent = selectedAgentId ? (agents[selectedAgentId] ?? null) : null;
+
+  // The active phase is the last phase in the list (most recently started)
+  const activePhaseNumber = phases.length > 0 ? phases[phases.length - 1].phase : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -281,6 +327,7 @@ export function ExpeditionLog() {
             <PhaseBlock
               key={entry.phase}
               entry={entry}
+              isActive={entry.phase === activePhaseNumber}
               reduced={reduced}
               typewrittenRef={typewrittenRef}
               phaseAgents={phaseAgents}

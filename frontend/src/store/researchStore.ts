@@ -1,5 +1,8 @@
 import { create } from 'zustand';
+import { subscribeWithSelector } from 'zustand/middleware';
 import type { AgentState, EvaluatedSource, Segment } from '../types';
+
+const MAX_EVALUATED_SOURCES = 50;
 
 export interface PhaseEntry {
   phase: 1 | 2 | 3 | 4 | 5;
@@ -24,7 +27,7 @@ interface ResearchStore {
   reset: () => void;
 }
 
-export const useResearchStore = create<ResearchStore>()((set) => ({
+export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((set) => ({
   agents: {},
   segments: {},
   stats: { sourcesFound: 0, factsVerified: 0, segmentsReady: 0 },
@@ -69,12 +72,16 @@ export const useResearchStore = create<ResearchStore>()((set) => ({
     set((s) => {
       const agent = s.agents[agentId];
       if (!agent) return s;
+      let sources = [...(agent.evaluatedSources ?? []), source];
+      if (sources.length > MAX_EVALUATED_SOURCES) {
+        sources = sources.slice(-MAX_EVALUATED_SOURCES);
+      }
       return {
         agents: {
           ...s.agents,
           [agentId]: {
             ...agent,
-            evaluatedSources: [...(agent.evaluatedSources ?? []), source],
+            evaluatedSources: sources,
           },
         },
       };
@@ -88,4 +95,4 @@ export const useResearchStore = create<ResearchStore>()((set) => ({
       phases: [],
       scanEntities: [],
     }),
-}));
+})));

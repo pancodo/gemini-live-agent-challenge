@@ -89,6 +89,24 @@ export function WorkspacePage() {
   useSession(sessionId);
   useSSE(sessionId);
 
+  // Reset research store when leaving the workspace to free memory
+  useEffect(() => {
+    return () => useResearchStore.getState().reset();
+  }, []);
+
+  // Prefetch player chunk when first segment becomes ready
+  const playerPrefetched = useRef(false);
+  useEffect(() => {
+    if (playerPrefetched.current) return;
+    const hasReady = Object.values(segments).some(
+      (s) => s.status === 'ready' || s.status === 'complete',
+    );
+    if (hasReady) {
+      playerPrefetched.current = true;
+      import('./PlayerPage').catch(() => {});
+    }
+  }, [segments]);
+
   // When pipeline finishes, fetch full segments from Firestore (with signed image URLs)
   useEffect(() => {
     if ((status === 'ready' || status === 'playing') && sessionId) {
