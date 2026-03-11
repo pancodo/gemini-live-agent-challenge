@@ -563,29 +563,22 @@ export function ResearchPanel() {
 
       {/* Sticky stats footer — always visible */}
       <div
-        className="shrink-0 flex items-center gap-4 px-4 py-2"
-        style={{
-          background: 'var(--bg2)',
-          borderTop: '1px solid rgba(139,94,26,0.12)',
-        }}
+        className="sticky bottom-0 shrink-0 flex gap-4 px-4 py-2 border-t"
+        style={{ borderColor: 'rgba(139,94,26,0.12)', background: 'var(--bg2)' }}
       >
-        <StatButton
-          label="sources found"
-          value={stats.sourcesFound}
-          popover={<SourcesPopover agents={agents} />}
-        />
-        <span className="text-[var(--bg4)]">{'\u00B7'}</span>
-        <StatButton
-          label="facts verified"
-          value={stats.factsVerified}
-          popover={<FactsPopover agents={agents} onEntityClick={handleEntityClick} />}
-        />
-        <span className="text-[var(--bg4)]">{'\u00B7'}</span>
-        <StatButton
-          label="segments ready"
-          value={stats.segmentsReady}
-          popover={<SegmentsPopover segments={segments} triggerIris={triggerIris} />}
-        />
+        {([
+          { label: 'Sources', value: stats.sourcesFound, popover: <SourcesPopover agents={agents} /> },
+          { label: 'Facts', value: stats.factsVerified, popover: <FactsPopover agents={agents} onEntityClick={handleEntityClick} /> },
+          { label: 'Segments', value: stats.segmentsReady, popover: <SegmentsPopover segments={segments} triggerIris={triggerIris} /> },
+        ] as const).map(({ label, value, popover }) => (
+          <div key={label} className="flex flex-col items-center gap-0.5">
+            <StatButton
+              label={label.toLowerCase()}
+              value={value}
+              popover={popover}
+            />
+          </div>
+        ))}
       </div>
 
       {/* Agent Modal */}
