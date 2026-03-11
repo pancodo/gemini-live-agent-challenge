@@ -1,0 +1,18 @@
+{
+  "name": "live-relay",
+  "version": "1.0.0",
+  "description": "WebSocket relay between browser and Gemini Live API with Firestore context injection",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.11.0",
+    "ws": "^8.18.0"
+  },
+  "private": true
+}
