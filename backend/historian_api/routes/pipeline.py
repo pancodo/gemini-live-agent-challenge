@@ -8,9 +8,10 @@ import asyncio
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from google.cloud import firestore, storage
 from google.adk.runners import Runner
@@ -23,13 +24,48 @@ if _backend_root not in sys.path:
     sys.path.insert(0, _backend_root)
 
 from agent_orchestrator.agents.pipeline import build_new_pipeline
-from agent_orchestrator.agents.sse_helpers import QueueSSEEmitter
+from agent_orchestrator.agents.sse_helpers import LogSSEEmitter
 from ..models import ProcessRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_sse_queues: dict[str, asyncio.Queue] = {}
+# ---------------------------------------------------------------------------
+# SessionEventLog — append-only event log with async notification for SSE
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SessionEventLog:
+    """Append-only event log that supports replay for SSE reconnection.
+
+    Each appended message gets a monotonically increasing event ID (its index).
+    Reconnecting clients send ``Last-Event-ID`` and replay from that cursor.
+    """
+
+    events: list[str] = field(default_factory=list)
+    finished: bool = False
+    _notify: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def append(self, message: str) -> int:
+        """Append a serialised JSON payload and return its event ID."""
+        event_id = len(self.events)
+        self.events.append(message)
+        # Wake all waiters, then replace the Event so future waiters block
+        self._notify.set()
+        self._notify = asyncio.Event()
+        return event_id
+
+    def finish(self) -> None:
+        """Mark the log as complete — no more events will be appended."""
+        self.finished = True
+        self._notify.set()
+
+    async def wait_for_new(self) -> None:
+        """Block until a new event is appended or the log is finished."""
+        await self._notify.wait()
+
+
+_event_logs: dict[str, SessionEventLog] = {}
 
 _db: firestore.AsyncClient | None = None
 _gcs: storage.Client | None = None
@@ -61,10 +97,31 @@ def _make_document_url(session_id: str) -> str:
 
 @router.post("/session/{session_id}/process", status_code=202)
 async def process_session(session_id: str, body: ProcessRequest) -> dict:
-    if session_id in _sse_queues:
-        raise HTTPException(status_code=409, detail="Pipeline already running for this session")
-    queue: asyncio.Queue[str | None] = asyncio.Queue()
-    _sse_queues[session_id] = queue
+    # Allow re-trigger if the previous run ended in error (supports retry).
+    # Only block if a pipeline is actively running.  When session status is
+    # "error" from a previous failed run, the old log is stale -- remove it
+    # so we can start fresh.
+    if session_id in _event_logs:
+        try:
+            db_check = get_db()
+            snap = await db_check.collection("sessions").document(session_id).get()
+            session_data = snap.to_dict() or {} if snap.exists else {}
+            if session_data.get("status") == "error":
+                _event_logs.pop(session_id, None)
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Pipeline already running for this session",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=409,
+                detail="Pipeline already running for this session",
+            )
+    log = SessionEventLog()
+    _event_logs[session_id] = log
 
     # Generate a signed GET URL so the PDF viewer can load the document
     try:
@@ -81,13 +138,13 @@ async def process_session(session_id: str, body: ProcessRequest) -> dict:
         await db.collection("sessions").document(session_id).update(update)
     except Exception as exc:
         logger.exception("Failed to update session status for %s", session_id)
-        del _sse_queues[session_id]
+        del _event_logs[session_id]
         raise HTTPException(status_code=500, detail="Could not update session") from exc
-    asyncio.create_task(_run_pipeline(session_id, body.gcsPath, queue))
+    asyncio.create_task(_run_pipeline(session_id, body.gcsPath, log))
     return {"sessionId": session_id, "status": "processing"}
 
-async def _run_pipeline(session_id: str, gcs_path: str, queue: asyncio.Queue) -> None:
-    emitter = QueueSSEEmitter(queue=queue)
+async def _run_pipeline(session_id: str, gcs_path: str, log: SessionEventLog) -> None:
+    emitter = LogSSEEmitter(log=log)
     db = get_db()
     try:
         session_service = InMemorySessionService()
@@ -108,38 +165,58 @@ async def _run_pipeline(session_id: str, gcs_path: str, queue: asyncio.Queue) ->
         await db.collection("sessions").document(session_id).update({"status": "ready"})
     except Exception:
         logger.exception("Pipeline failed for session %s", session_id)
-        await queue.put('data: {"type":"error","message":"Pipeline failed"}\n\n')
+        log.append('{"type":"error","message":"Pipeline failed"}')
         try:
             await db.collection("sessions").document(session_id).update({"status": "error"})
         except Exception:
             pass
     finally:
-        # Signal end-of-stream. Do NOT pop the queue here — the queue must
-        # remain alive so that clients which connect after the pipeline
-        # finishes can still drain all buffered events. The SSE endpoint
-        # removes the queue once the client reads the None sentinel.
-        await queue.put(None)
+        log.finish()
+        asyncio.create_task(_cleanup_log(session_id, delay=300))
+
+
+async def _cleanup_log(session_id: str, delay: int = 300) -> None:
+    """Remove a finished session event log after a grace period.
+
+    The 5-minute (300s) delay allows reconnecting clients to replay events
+    even after the pipeline has completed.
+    """
+    await asyncio.sleep(delay)
+    _event_logs.pop(session_id, None)
+
 
 @router.get("/session/{session_id}/stream")
-async def stream_session(session_id: str) -> StreamingResponse:
-    if session_id not in _sse_queues:
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
-        _sse_queues[session_id] = queue
-    else:
-        queue = _sse_queues[session_id]
+async def stream_session(session_id: str, request: Request) -> StreamingResponse:
+    # Read Last-Event-ID header for reconnection replay
+    last_event_id_header = request.headers.get("Last-Event-ID")
+    cursor = int(last_event_id_header) + 1 if last_event_id_header else 0
+
     async def event_generator():
+        nonlocal cursor
+        # Initial keepalive so the connection is established immediately
         yield ": keep-alive\n\n"
+
+        log = _event_logs.get(session_id)
+        if log is None:
+            return
+
         while True:
+            # Replay any events from the cursor onward
+            events_snapshot = log.events[cursor:]
+            for payload in events_snapshot:
+                yield f"id: {cursor}\ndata: {payload}\n\n"
+                cursor += 1
+
+            # If the log is finished and we've caught up, close the stream
+            if log.finished and cursor >= len(log.events):
+                break
+
+            # Wait for new events or send keepalive on timeout
             try:
-                message = await asyncio.wait_for(queue.get(), timeout=25.0)
+                await asyncio.wait_for(log.wait_for_new(), timeout=25.0)
             except asyncio.TimeoutError:
                 yield ": keep-alive\n\n"
-                continue
-            if message is None:
-                # Pipeline finished — clean up queue and close stream
-                _sse_queues.pop(session_id, None)
-                break
-            yield message
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",

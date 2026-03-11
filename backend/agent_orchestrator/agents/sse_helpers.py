@@ -46,6 +46,22 @@ class QueueSSEEmitter:
         await self.queue.put(message)
 
 
+@dataclass
+class LogSSEEmitter:
+    """Emits SSE events to a SessionEventLog for replay-capable SSE streaming.
+
+    Unlike QueueSSEEmitter, events are appended to a persistent log so that
+    reconnecting clients can replay missed events via the Last-Event-ID header.
+    """
+
+    log: Any  # SessionEventLog — using Any to avoid circular import
+
+    async def emit(self, event_type: str, data: dict[str, Any]) -> None:
+        """Serialize and append an SSE event to the session log."""
+        payload = json.dumps(data, default=str)
+        self.log.append(payload)
+
+
 def build_agent_source_evaluation_event(
     *,
     agent_id: str,
@@ -82,6 +98,7 @@ def build_agent_status_event(
     query: str | None = None,
     facts: list[str] | None = None,
     elapsed: float | None = None,
+    error_message: str | None = None,
 ) -> dict[str, Any]:
     """Build an agent_status SSE event payload.
 
@@ -98,6 +115,8 @@ def build_agent_status_event(
         event["facts"] = facts
     if elapsed is not None:
         event["elapsed"] = elapsed
+    if error_message is not None:
+        event["errorMessage"] = error_message
     return event
 
 
