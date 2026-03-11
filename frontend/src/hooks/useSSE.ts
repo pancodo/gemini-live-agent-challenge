@@ -151,13 +151,20 @@ export function useSSE(sessionId: string | null): void {
 
     connect();
 
-    // Drip: release one buffered event per 150ms, wrapped in startTransition
+    // Adaptive drip: release buffered events per 150ms tick.
+    // Batch size scales with queue depth so parallel agent bursts catch up
+    // quickly while normal single-event flow retains the 150ms drip feel.
     const drip = setInterval(() => {
-      const event = pendingRef.current.shift();
-      if (!event) return;
+      const queueLength = pendingRef.current.length;
+      if (queueLength === 0) return;
+
+      const batchSize = queueLength > 10 ? 8 : queueLength > 2 ? 3 : 1;
+      const batch = pendingRef.current.splice(0, batchSize);
 
       startTransition(() => {
-        processEvent(event);
+        for (const event of batch) {
+          processEvent(event);
+        }
       });
     }, 150);
 
