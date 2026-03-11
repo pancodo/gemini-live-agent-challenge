@@ -164,18 +164,33 @@ The `veo2_scene` field is optional. Include it ONLY if the segment has a \
 visually dramatic moment: sweeping environment (harbor, plaza, forest), \
 atmospheric dynamics (fog, fire, water), or architectural scale.
 
-When present, the Veo 2 prompt MUST:
-- Open with a camera motion verb: "Slow dolly in", "Crane shot rising", \
-"Pan right across", "Static shot of", "Slow arc around".
-- Include a film look anchor: "shot on 35mm film, anamorphic lens" or \
-"35mm film grain, shallow depth of field".
-- Stay within 40-70 words total.
+When present, the Veo 2 prompt MUST follow this EXACT structure:
+"[Camera movement]. [Subject/environment in period context with temporal \
+state]. [Atmospheric motion element]. Shot on 35mm film, anamorphic lens."
+
+MANDATORY RULES:
+- SINGLE camera movement only — NEVER combine movements (pan + zoom), \
+(dolly + crane), etc. Choose ONE: "Slow dolly in", "Crane shot rising", \
+"Pan right across", "Static shot of", "Slow arc around", "Tracking shot \
+along". One movement per clip, no exceptions.
+- Include ONE atmospheric motion element — fog drifting, dust floating in \
+light shafts, candlelight flickering, water rippling, shadows lengthening, \
+smoke curling, leaves stirring, fabric billowing. This gives Veo 2 \
+something to animate.
+- Stay within 30-50 words maximum. Shorter is sharper — over 50 words \
+dilutes Veo 2's focus and produces muddled output.
+- The depicted environment must reflect its STATE at the historical period — \
+specify if it is freshly built, intact, in active use, polychrome-painted, \
+etc. NEVER default to the modern ruined appearance of famous sites.
+- NO negative descriptions — Veo 2 cannot process negations. Describe WHAT \
+IS THERE, not what should be absent.
 - Contain NO human faces, NO identifiable individuals — describe environment, \
 objects, atmospheric movement, and traces of human activity only.
 - Include time-of-day as atmosphere shorthand: "at golden hour", "pre-dawn \
 blue light", "dusk last light".
-- Example: "Slow crane shot rising over [location], [atmospheric detail], \
-[film look], [color palette]."
+- Example: "Slow crane shot rising over the intact Colosseum at golden hour, \
+its travertine arches painted in ochre and cinnabar, dust motes drifting \
+through the archways. Shot on 35mm film, anamorphic lens."
 
 If the segment has no dramatic visual moment, omit the `veo2_scene` key \
 entirely — do not force it.

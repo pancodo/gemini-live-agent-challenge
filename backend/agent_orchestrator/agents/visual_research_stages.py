@@ -1057,16 +1057,39 @@ PERIOD-ACCURATE VISUAL DETAILS (sourced from archival research):
 Write a MASTER VISUAL PROMPT of 200-300 words that serves as the shared foundation \
 for 4 cinematic frames of this scene.
 
+CRITICAL TEMPORAL ACCURACY RULE:
+The enriched_prompt MUST specify the TEMPORAL STATE of the scene — how the depicted \
+buildings, sites, and environments appeared AT THE TIME of the scene's era. This means:
+- Newly built and pristine (if the era depicts construction or recent completion)
+- In their prime, fully intact and in active use (for scenes during the site's heyday)
+- In a specific aged but maintained state (for scenes generations after construction)
+NEVER generate prompts that default to the "modern ruin" appearance of famous sites. \
+For every building or site depicted, EXPLICITLY state its condition at the depicted era.
+
+REQUIRED: The prompt must open with one of these genre framings:
+- "Archaeological reconstruction illustration: " (for ancient/classical scenes)
+- "Historical reconstruction showing: " (for medieval/early modern scenes)
+This genre phrase activates scholarly visualization knowledge, not tourist photography.
+
+POLYCHROME RULE: If the scene depicts ancient Greek or Roman architecture (check the \
+era field for Classical, Hellenistic, Roman, or Augustan periods), the prompt MUST \
+include: "painted in vivid polychrome — cinnabar red, Egyptian blue, and gold leaf \
+over marble surfaces, NOT plain white unpainted marble."
+
 This master prompt will be used for all four frames (wide establishing shot, medium \
 shot, close-up detail, dramatic angle). It must be:
 - Evocative but compositionally flexible (describes the scene's essence, not one fixed framing)
 - Rich with period-accurate visual vocabulary from the sourced details above
 - Strong on: lighting conditions, material textures, color palette, atmospheric quality
 - Free of anachronisms — use the era_markers list as visual exclusion anchors
+- Include atmospheric depth: dust motes in light, subtle haze between planes
 
-Open with: "In the style of {visual_bible_style_prefix}."
+After the genre framing, continue with: "In the style of {visual_bible_style_prefix}."
 Include: the scene's specific location and era + all extracted lighting/materials/palette/architecture \
 details + subject descriptions (people by occupation/posture/clothing only) + atmospheric qualities
+Include a temporal anchor phrase such as: "historical reconstruction showing [site] as it \
+appeared in [era/year], fully intact" or "period-accurate reconstruction, NOT the modern \
+ruined state"
 End with era exclusion line: "Exclude from all frames: [comma-separated era_markers]."
 - No bullet points, no headers — flowing prose only
 - No modern elements whatsoever; no anachronisms
@@ -1103,21 +1126,34 @@ Output ONLY the prompt text, no preamble.
     }
     era = scene_brief.get("era", "historical period")
 
+    # Lens and film stock specifications per frame index
+    _FRAME_LENS_SPECS: dict[int, str] = {
+        0: "24mm anamorphic lens, deep focus, Kodak Vision3 250D",
+        1: "50mm lens at f/4, natural perspective, Kodak Vision3 250D",
+        2: "100mm macro lens at f/4, shallow depth of field, Kodak Vision3 250D",
+        3: "35mm anamorphic lens at f/2.8, atmospheric bokeh, Kodak Vision3 500T",
+    }
+
     if use_storyboard_concepts:
         # Use storyboard frame_concepts instead of generic frame descriptions
         frame_descriptions_text = "\n\n".join(
-            f"Frame {i}: {frame_concepts[i]}"
+            f"Frame {i} (concept: {frame_concepts[i]}): "
+            f"Lens/stock: {_FRAME_LENS_SPECS[i]}"
             for i in range(4)
         )
         frame_concept_preamble = (
-            "The documentary director has specified these 4 distinct frame concepts for this scene.\n"
-            "Generate frame_prompts that implement each concept, enriched with the archival visual\n"
-            "details you just compiled. Each frame_prompt should be 80-120 words and describe a\n"
-            "different subject/moment from the scene:\n\n"
+            "The documentary director has assigned these SPECIFIC TEMPORAL CONCEPTS for this scene's 4 frames.\n"
+            "Generate frame_prompts that implement each concept with full period accuracy:\n\n"
+            "Each frame_prompt must:\n"
+            "- Specify the TEMPORAL STATE (intact, freshly built, polychrome, etc.) explicitly\n"
+            "- Begin with \"Archaeological reconstruction: \" or \"Historical reconstruction: \"\n"
+            "- End with: \"[lens spec from below], atmospheric depth, dust motes in light\"\n"
+            "- Be 80-120 words\n\n"
         )
     else:
         frame_descriptions_text = "\n\n".join(
-            _FRAME_DESCRIPTIONS[i].replace("{era}", era) for i in needed_frames
+            f"{_FRAME_DESCRIPTIONS[i].replace('{era}', era)}\nLens/stock: {_FRAME_LENS_SPECS[i]}"
+            for i in needed_frames
         )
         frame_concept_preamble = ""
 
@@ -1144,10 +1180,17 @@ Write {frame_count} Imagen 3 prompt(s) for this scene. Each must describe a DIFF
 {frame_concept_preamble}{frame_descriptions_text}
 
 Each prompt must:
-- Start with "Cinematic still photograph."
+- Start with "Archaeological reconstruction: " or "Historical reconstruction: " \
+(this genre framing activates scholarly visualization knowledge)
 - Be {frame_word_range} words
 - Contain the explicit era/century (e.g. "{scene_brief.get('era', 'historical era')}")
 - Use period-specific vocabulary from the extracted details above
+- Specify the TEMPORAL STATE of any buildings/sites — fully intact, freshly built, \
+polychrome-painted, in active use — NEVER default to the modern ruined appearance
+- If depicting ancient Greek or Roman architecture, include polychrome: "painted in \
+vivid polychrome — cinnabar red, Egyptian blue, and gold leaf over marble surfaces"
+- End with the lens/film stock specification listed for that frame, followed by: \
+"atmospheric depth, dust motes in light, subtle haze between planes"
 
 Output ONLY a JSON array of exactly {frame_count} string(s), in the order listed above:
 {json.dumps(['Frame ' + str(i) + ' text...' for i in needed_frames])}
