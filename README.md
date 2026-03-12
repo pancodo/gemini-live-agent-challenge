@@ -27,6 +27,7 @@ AI Historian is a real-time multimodal research and documentary engine. Drop any
 | **Research** | 7-phase ADK pipeline with Google Search grounding, Wikipedia, and Gemini multimodal evaluation |
 | **Output** | Self-generating documentary: Imagen 3 visuals · Veo 2 video · AI narration |
 | **Voice** | Gemini 2.5 Flash Native Audio — always listening, responds in < 300ms, resumes after interruption |
+| **Grounding** | Every spoken question retrieves the 4 most relevant source passages via Firestore vector search — the historian cites actual document pages, not just scripted narration |
 | **Adaptation** | Documentary branches based on your questions — no two sessions are identical |
 
 ---
@@ -105,6 +106,8 @@ flowchart TD
 4. **Narrative Curator** — ADK Agent (Gemini 2.0 Pro) selects 4–8 cinematically compelling scenes and produces structured `SceneBrief` objects and the Visual Bible style guide
 
 **Outputs:** `scene_briefs`, `visual_bible`, `document_map`, `gcs_ocr_path`
+
+5. **Background Embedding** — after chunks are written to Firestore, their summaries are batch-embedded with `gemini-embedding-2-preview` (768 dims, `RETRIEVAL_DOCUMENT` task type) as a background `asyncio.Task`. Phase II starts immediately — vectors are written concurrently without blocking the pipeline. Failures on individual chunks are skipped so a bad chunk never aborts the batch.
 
 </details>
 
@@ -191,6 +194,49 @@ Every completed phase is checkpointed to Firestore (`/sessions/{id}/checkpoints/
 
 ---
 
+## Live Historian Grounding (RAG)
+
+The live historian persona has semantic access to the actual source document — not just the scripted narration — via a lightweight RAG layer that runs entirely on the voice hot path.
+
+**How it works:**
+
+```
+User speaks → Gemini Live → inputTranscript event
+                                    ↓
+                         live-relay intercepts (>15 chars)
+                                    ↓
+                    POST /api/session/{id}/retrieve  (1.5s timeout)
+                                    ↓
+               historian-api embeds query (gemini-embedding-2-preview)
+               Firestore find_nearest() → top-4 chunks by cosine distance
+                                    ↓
+              live-relay injects passages as clientContent turn
+              before the historian's audio response arrives
+```
+
+**Best-effort at every step — nothing can break the voice session:**
+
+| Layer | Failure mode | Behavior |
+|---|---|---|
+| Background embed task | Exception in `_embed_and_write_background` | Caught and logged — Phase II unaffected |
+| Individual chunk | `embed_content` API error | Chunk `embedding` stays `None`, skipped |
+| Retrieve endpoint | Any exception | Returns `{"chunks": []}` — never HTTP 500 |
+| live-relay injection | Timeout (>1.5s) or network error | `retrieveContext` returns `""` — injection skipped |
+| Historian response | No context injected | Answers from existing session context as before |
+
+**Firestore vector index** (one-time setup, 5–15 min to provision):
+
+```bash
+gcloud firestore indexes composite create \
+  --collection-group=chunks \
+  --query-scope=COLLECTION \
+  --field-config field-path=embedding,vector-config='{"dimension":"768","flat":"{}"}' \
+  --database="(default)" \
+  --project=$GCP_PROJECT_ID
+```
+
+---
+
 ## Tech Stack
 
 ### AI Models
@@ -200,6 +246,7 @@ Every completed phase is checkpointed to Firestore (`/sessions/{id}/checkpoints/
 | `gemini-2.5-flash-native-audio-preview-12-2025` | Historian persona — Gemini Live API |
 | `gemini-2.0-pro` | Script generation, Visual Planner, Narrative Curator |
 | `gemini-2.0-flash` | Scan Agent, Research Subagents, Fact Validator, Visual Research |
+| `gemini-embedding-2-preview` | Chunk summary embeddings (768 dims) + query embedding for RAG retrieval |
 | `imagen-3.0-fast-generate-001` | Scene images (4 frames per segment, ~5s each) |
 | `veo-2.0-generate-001` | Dramatic video clips (async, 1–2 min each) |
 
@@ -210,7 +257,7 @@ Every completed phase is checkpointed to Firestore (`/sessions/{id}/checkpoints/
 | **Cloud Run** | All three backend services — historian-api, agent-orchestrator, live-relay |
 | **Vertex AI** | Imagen 3, Veo 2, Gemini model hosting |
 | **Gemini Live API** | Real-time bidirectional voice with interruption and resumption |
-| **Firestore** | Session state, agent logs, segments, manifests, phase checkpoints |
+| **Firestore** | Session state, agent logs, segments, manifests, phase checkpoints; chunk `Vector(768)` fields for RAG vector search |
 | **Cloud Storage** | Uploaded documents, generated images, MP4 videos |
 | **Document AI** | Multilingual OCR (`OCR_PROCESSOR`) |
 | **Pub/Sub** | Async agent event messaging |
@@ -368,7 +415,11 @@ cd frontend && pnpm install && pnpm dev
 │       └── pages/                      UploadPage · WorkspacePage · PlayerPage (lazy-loaded)
 │
 ├── backend/
-│   ├── historian_api/                  FastAPI gateway — session, SSE stream, status
+│   ├── historian_api/
+│   │   └── routes/
+│   │       ├── session.py              Session lifecycle, SSE stream, status
+│   │       ├── pipeline.py             Pipeline trigger, segment endpoints
+│   │       └── retrieve.py             POST /api/session/{id}/retrieve — RAG vector search
 │   ├── agent_orchestrator/
 │   │   └── agents/
 │   │       ├── pipeline.py             ResumablePipelineAgent — checkpoint-aware orchestrator
@@ -387,6 +438,7 @@ cd frontend && pnpm install && pnpm dev
 │   │       ├── storyboard_types.py     VisualStoryboard
 │   │       └── visual_detail_types.py  VisualDetailManifest
 │   └── live_relay/                     Node.js 20 WebSocket proxy → Gemini Live API
+│                                       + RAG injection on inputTranscript events
 │
 └── docs/
     ├── architecture-diagram.md         Full + compact Mermaid diagrams
