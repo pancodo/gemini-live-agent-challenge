@@ -32,6 +32,7 @@ export function VoiceLayer() {
     onAudioChunk: (pcm: ArrayBuffer) => {
       playback.enqueue(pcm);
       if (useVoiceStore.getState().state !== 'historian_speaking') {
+        useVoiceStore.getState().setUserTranscript(null);
         transition('historian_speaking');
       }
     },

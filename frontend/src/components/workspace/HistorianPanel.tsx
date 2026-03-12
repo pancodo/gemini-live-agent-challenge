@@ -243,6 +243,7 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
   const voiceState = useVoiceStore((s) => s.state);
   const beginConsultation = useVoiceStore((s) => s.beginConsultation);
   const caption = useVoiceStore((s) => s.caption);
+  const userTranscript = useVoiceStore((s) => s.userTranscript);
   const reducedMotion = useReducedMotion();
   const active = isVoiceActive(voiceState);
   const isIdle = voiceState === 'idle';
@@ -326,7 +327,11 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
           className="font-serif text-[14px] italic leading-relaxed text-center max-h-[4.5em] overflow-hidden"
           style={{ color: active ? 'var(--text)' : 'var(--muted)' }}
         >
-          &ldquo;{voiceState === 'historian_speaking' && caption ? caption : VOICE_MESSAGES[voiceState]}&rdquo;
+          &ldquo;{voiceState === 'historian_speaking' && caption
+            ? caption
+            : voiceState === 'listening' && userTranscript
+              ? userTranscript
+              : VOICE_MESSAGES[voiceState]}&rdquo;
         </motion.p>
 
         {/* CTA button — only in standby */}
