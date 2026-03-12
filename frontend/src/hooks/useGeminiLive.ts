@@ -181,9 +181,14 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
       }
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (event: CloseEvent) => {
       setIsConnected(false);
       isReadyRef.current = false;
+
+      // Auto-reconnect on unexpected closure (not user-initiated 1000)
+      if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnect();
+      }
     });
 
     ws.addEventListener('error', (event) => {
@@ -201,6 +206,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     }
 
     reconnectAttemptsRef.current += 1;
+    const attempt = reconnectAttemptsRef.current;
 
     // Clean up the old socket before reconnecting
     const ws = wsRef.current;
@@ -210,10 +216,14 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     wsRef.current = null;
     isReadyRef.current = false;
 
+    // Exponential backoff: 500ms, 1500ms, 4500ms
+    const delay = RECONNECT_DELAY_MS * Math.pow(3, attempt - 1);
+    console.log(`[useGeminiLive] Reconnecting in ${delay}ms (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})`);
+
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       connect();
-    }, RECONNECT_DELAY_MS);
+    }, delay);
   }, [connect]);
 
   const sendPCM = useCallback((chunk: Int16Array) => {
