@@ -93,3 +93,25 @@ class GroundingSourceItem(BaseModel):
 
 class GroundingSourcesResponse(BaseModel):
     sources: list[GroundingSourceItem]
+
+
+# ── RAG Retrieval ──────────────────────────────────────────────
+
+class RetrieveRequest(BaseModel):
+    query: str
+    top_k: int = 4
+
+
+class RetrievedChunk(BaseModel):
+    chunk_id: str
+    text: str
+    summary: str | None = None
+    score: float
+    page_start: int
+    page_end: int
+    heading: str | None = None
+
+
+class RetrieveResponse(BaseModel):
+    chunks: list[RetrievedChunk]
+    query: str

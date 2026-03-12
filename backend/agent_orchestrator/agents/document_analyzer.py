@@ -493,6 +493,96 @@ async def _write_scene_briefs_to_firestore(
 
 
 # ---------------------------------------------------------------------------
+# Embedding helpers (RAG preparation — runs in background after chunk writes)
+# ---------------------------------------------------------------------------
+
+
+async def _embed_chunk_summaries(
+    chunks: list[ChunkRecord],
+    genai_client: google_genai.Client,
+    semaphore: asyncio.Semaphore,
+) -> list[ChunkRecord]:
+    """Embed each chunk's summary (or raw_text[:2000] fallback) using
+    gemini-embedding-2-preview at 768 dimensions.
+
+    Returns a new list of ChunkRecord instances with the ``embedding`` field
+    populated. Failures on individual chunks are logged and skipped (embedding
+    stays None) so a single bad chunk never aborts the whole batch.
+    """
+    from google.genai import types as genai_types  # local import — already a dep
+
+    async def _one(chunk: ChunkRecord) -> ChunkRecord:
+        async with semaphore:
+            text = chunk.summary or chunk.raw_text[:2000]
+            try:
+                resp = await genai_client.aio.models.embed_content(
+                    model="gemini-embedding-2-preview",
+                    contents=text,
+                    config=genai_types.EmbedContentConfig(
+                        task_type="RETRIEVAL_DOCUMENT",
+                        output_dimensionality=768,
+                    ),
+                )
+                return chunk.model_copy(update={"embedding": resp.embeddings[0].values})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Embedding failed for chunk %s: %s", chunk.chunk_id, exc)
+                return chunk
+
+    return list(await asyncio.gather(*[_one(c) for c in chunks]))
+
+
+async def _write_embeddings_to_firestore(
+    db: firestore.AsyncClient,
+    chunks: list[ChunkRecord],
+) -> None:
+    """Write the ``embedding`` VectorValue field to existing chunk documents.
+
+    Uses ``batch.update()`` (not set) so it merges with the already-written
+    chunk fields rather than overwriting them.
+    """
+    from google.cloud.firestore_v1.vector import Vector  # type: ignore[import]
+
+    to_write = [c for c in chunks if c.embedding is not None]
+    if not to_write:
+        logger.warning("No embeddings to write — all chunks failed embedding step")
+        return
+
+    batch = db.batch()
+    for chunk in to_write:
+        ref = (
+            db.collection("sessions")
+            .document(chunk.session_id)
+            .collection("chunks")
+            .document(chunk.chunk_id)
+        )
+        batch.update(ref, {"embedding": Vector(chunk.embedding)})
+    await batch.commit()
+    logger.info("Wrote embeddings for %d/%d chunks", len(to_write), len(chunks))
+
+
+async def _embed_and_write_background(
+    db: firestore.AsyncClient,
+    chunks: list[ChunkRecord],
+    genai_client: google_genai.Client,
+) -> None:
+    """Fire-and-forget coroutine: embed chunks then persist vectors.
+
+    Designed to run as an asyncio.Task so it does not block Phase II from
+    starting. Errors are caught and logged — never propagated.
+    """
+    try:
+        sem = asyncio.Semaphore(10)
+        chunks_with_embeddings = await _embed_chunk_summaries(chunks, genai_client, sem)
+        await _write_embeddings_to_firestore(db, chunks_with_embeddings)
+        logger.info(
+            "Background embedding complete for session %s",
+            chunks[0].session_id if chunks else "unknown",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Background embedding task failed: %s", exc, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Document Map builder
 # ---------------------------------------------------------------------------
 
@@ -770,6 +860,19 @@ class DocumentAnalyzerAgent(BaseAgent):
         # ------------------------------------------------------------------
         db = firestore.AsyncClient(project=self.firestore_project)
         await _write_chunks_to_firestore(db, chunks_with_summaries)
+
+        # Embed chunk summaries in the background — does not block Phase II.
+        # Vectors will be ready in Firestore before the user opens the live session.
+        _embed_bg_client = google_genai.Client(
+            vertexai=True,
+            project=os.environ["GCP_PROJECT_ID"],
+            location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
+        )
+        _embed_task = asyncio.create_task(
+            _embed_and_write_background(db, chunks_with_summaries, _embed_bg_client)
+        )
+        # Keep reference so GC doesn't cancel it
+        ctx.session.state["_embedding_task_ref"] = id(_embed_task)
 
         # ------------------------------------------------------------------
         # Build Document Map for downstream agents

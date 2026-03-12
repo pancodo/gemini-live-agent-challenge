@@ -88,6 +88,11 @@ class ChunkRecord(BaseModel):
             "None until that agent has processed this chunk."
         ),
     )
+    embedding: list[float] | None = Field(
+        default=None,
+        description="gemini-embedding-2-preview vector (768 dims). None until embedding step completes.",
+        exclude=True,  # Never serialised to Firestore via model_dump() — written separately as VectorValue
+    )
 
     @model_validator(mode="after")
     def _auto_compute_char_count(self) -> ChunkRecord:
