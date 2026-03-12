@@ -525,6 +525,21 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
           },
         })
       );
+    } else if (msg.type === 'text' && msg.text) {
+      // Forward text message to Gemini as clientContent
+      geminiWs.send(
+        JSON.stringify({
+          clientContent: {
+            turns: [
+              {
+                role: 'user',
+                parts: [{ text: msg.text }],
+              },
+            ],
+            turnComplete: true,
+          },
+        })
+      );
     }
   });
 
