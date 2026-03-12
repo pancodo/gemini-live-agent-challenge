@@ -83,7 +83,8 @@ export type VoiceState =
   | 'listening'
   | 'processing'
   | 'historian_speaking'
-  | 'interrupted';
+  | 'interrupted'
+  | 'reconnecting';
 
 // ── SSE Events ───────────────────────────────────────────────
 export type SSEEventType =
