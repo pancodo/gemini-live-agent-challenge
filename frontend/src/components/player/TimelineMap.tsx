@@ -10,6 +10,13 @@ const ROUTE_SOURCE_PREFIX = 'route-';
 const ROUTE_LAYER_PREFIX = 'route-layer-';
 const PIN_ANIMATION_DELAY = 200;
 
+/** Escape HTML entities to prevent XSS from LLM-generated geo data */
+function escapeHtml(str: string): string {
+  const el = document.createElement('span');
+  el.textContent = str;
+  return el.innerHTML;
+}
+
 export function TimelineMap({
   onPinClick,
 }: {
@@ -93,8 +100,8 @@ export function TimelineMap({
 
     popupRef.current?.remove();
 
-    const era = event.era ? `<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px">${event.era}</span>` : '';
-    const desc = event.description ? `<div style="font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px">${event.description}</div>` : '';
+    const era = event.era ? `<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px">${escapeHtml(event.era)}</span>` : '';
+    const desc = event.description ? `<div style="font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px">${escapeHtml(event.description)}</div>` : '';
 
     const popup = new maplibregl.Popup({
       closeButton: false,
@@ -105,7 +112,7 @@ export function TimelineMap({
       .setLngLat([event.lng, event.lat])
       .setHTML(`
         <div style="font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em">
-          ${event.name}${era}
+          ${escapeHtml(event.name)}${era}
         </div>
         ${desc}
       `)
