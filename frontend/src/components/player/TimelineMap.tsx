@@ -9,7 +9,7 @@ import type { GeoEvent, GeoRoute } from '../../types';
 
 const ROUTE_SOURCE_PREFIX = 'route-';
 const ROUTE_LAYER_PREFIX = 'route-layer-';
-const PIN_ANIMATION_DELAY = 150; // ms between pin appearances
+const PIN_ANIMATION_DELAY = 200; // ms between pin appearances
 
 /**
  * TimelineMap — Animated geographic map synced to documentary narration.
@@ -24,7 +24,7 @@ export function TimelineMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
-  const [hoveredPin, setHoveredPin] = useState<string | null>(null);
+  const [hoveredPin, setHoveredPin] = useState<GeoEvent | null>(null);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const { geo } = useSegmentGeo(currentSegmentId);
@@ -87,46 +87,63 @@ export function TimelineMap({
       const el = document.createElement('div');
       el.className = 'timeline-map-pin';
 
-      const isCity = event.type === 'city';
       const isBattle = event.type === 'battle';
-      const size = isCity ? 12 : isBattle ? 14 : 10;
-      const color = isBattle ? '#c0392b' : 'var(--glow-primary)';
+      const size = isBattle ? 18 : 16;
+      const color = isBattle ? '#c0392b' : '#c4956a';
 
+      // Outer glow ring
       el.style.cssText = `
         width: ${size}px;
         height: ${size}px;
-        border-radius: 50%;
+        border-radius: ${isBattle ? '3px' : '50%'};
         background: ${color};
-        box-shadow: 0 0 12px ${color}, 0 0 24px rgba(196,149,106,0.3);
+        border: 2px solid rgba(255,255,255,0.3);
+        box-shadow: 0 0 16px ${color}, 0 0 32px ${color}80;
         cursor: pointer;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
-        opacity: 0;
-        transform: scale(0);
-        animation: pin-appear 0.4s ease forwards;
-        animation-delay: ${index * PIN_ANIMATION_DELAY}ms;
+        transform: ${isBattle ? 'rotate(45deg)' : ''} scale(1);
+        position: relative;
+        z-index: 10;
       `;
 
-      if (isBattle) {
-        // Diamond shape for battles
-        el.style.borderRadius = '2px';
-        el.style.transform = 'rotate(45deg) scale(0)';
-      }
+      // Animate in with delay
+      el.style.opacity = '0';
+      setTimeout(() => {
+        el.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.2s ease';
+        el.style.opacity = '1';
+      }, index * PIN_ANIMATION_DELAY);
+
+      // Add a pulsing ring behind the pin
+      const pulse = document.createElement('div');
+      pulse.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: ${size * 3}px;
+        height: ${size * 3}px;
+        border-radius: 50%;
+        border: 1px solid ${color}60;
+        transform: translate(-50%, -50%);
+        animation: pin-pulse 2s ease-out infinite;
+        animation-delay: ${index * PIN_ANIMATION_DELAY + 400}ms;
+        pointer-events: none;
+      `;
+      el.appendChild(pulse);
 
       el.addEventListener('mouseenter', () => {
-        setHoveredPin(event.name);
-        el.style.transform = isBattle
-          ? 'rotate(45deg) scale(1.5)'
-          : 'scale(1.5)';
-        el.style.boxShadow = `0 0 20px ${color}, 0 0 40px rgba(196,149,106,0.5)`;
+        setHoveredPin(event);
+        el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.6)`;
+        el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
       });
 
       el.addEventListener('mouseleave', () => {
         setHoveredPin(null);
-        el.style.transform = isBattle ? 'rotate(45deg) scale(1)' : 'scale(1)';
-        el.style.boxShadow = `0 0 12px ${color}, 0 0 24px rgba(196,149,106,0.3)`;
+        el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1)`;
+        el.style.boxShadow = `0 0 16px ${color}, 0 0 32px ${color}80`;
       });
 
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
         onPinClick?.(event.name);
       });
 
@@ -169,9 +186,9 @@ export function TimelineMap({
       source: sourceId,
       paint: {
         'line-color': colorMap[route.style] ?? '#d4a574',
-        'line-width': 2,
-        'line-opacity': 0.7,
-        'line-dasharray': [2, 2],
+        'line-width': 2.5,
+        'line-opacity': 0.8,
+        'line-dasharray': [3, 2],
       },
     });
   }, []);
@@ -216,11 +233,10 @@ export function TimelineMap({
 
   return (
     <div className="relative w-full h-full">
-      {/* Pin appear animation */}
       <style>{`
-        @keyframes pin-appear {
-          from { opacity: 0; transform: scale(0); }
-          to   { opacity: 1; transform: scale(1); }
+        @keyframes pin-pulse {
+          0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
+          100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
         }
         .maplibregl-ctrl-group {
           background: rgba(26,21,16,0.8) !important;
@@ -244,36 +260,45 @@ export function TimelineMap({
       <AnimatePresence>
         {hoveredPin && (
           <motion.div
-            key={hoveredPin}
-            initial={{ opacity: 0, y: 4 }}
+            key={hoveredPin.name}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.15 }}
             className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20"
             style={{
-              fontFamily: 'var(--font-serif)',
-              fontWeight: 400,
-              fontSize: 16,
-              color: 'var(--glow-primary)',
-              textShadow: '0 2px 12px rgba(0,0,0,0.8)',
-              letterSpacing: '0.05em',
+              background: 'rgba(13,11,9,0.85)',
+              border: '1px solid rgba(196,149,106,0.3)',
+              borderRadius: 8,
+              padding: '8px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
             }}
           >
-            {hoveredPin}
-            {geo?.events.find((e) => e.name === hoveredPin)?.era && (
-              <span
-                style={{
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 10,
-                  letterSpacing: '0.15em',
-                  color: 'var(--muted)',
-                  marginLeft: 8,
-                  textTransform: 'uppercase',
-                }}
-              >
-                {geo.events.find((e) => e.name === hoveredPin)?.era}
-              </span>
-            )}
+            <span
+              style={{
+                fontFamily: 'var(--font-serif)',
+                fontWeight: 400,
+                fontSize: 16,
+                color: 'var(--glow-primary)',
+                letterSpacing: '0.05em',
+              }}
+            >
+              {hoveredPin.name}
+            </span>
+            <span
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: 10,
+                letterSpacing: '0.15em',
+                color: 'var(--muted)',
+                textTransform: 'uppercase',
+              }}
+            >
+              {[hoveredPin.era, hoveredPin.description].filter(Boolean).join(' — ')}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
