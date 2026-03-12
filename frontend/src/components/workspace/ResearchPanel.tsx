@@ -430,15 +430,45 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
 
 // ── Phase Divider ───────────────────────────────────────────────
 
-function PhaseDivider({ number, label }: { number: string; label: string }) {
+interface PhaseDividerProps {
+  number: string;
+  label: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function PhaseDivider({ number, label, isExpanded, onToggle }: PhaseDividerProps) {
+  const reducedMotion = useReducedMotion();
   return (
-    <div className="phase-divider">
+    <button
+      type="button"
+      onClick={onToggle}
+      className="phase-divider w-full cursor-pointer group"
+      aria-expanded={isExpanded}
+      aria-label={`Phase ${number} — ${label}, ${isExpanded ? 'collapse' : 'expand'}`}
+    >
       <span className="phase-divider-dot" />
-      <span className="font-serif text-[10px] uppercase tracking-[0.3em] text-[var(--gold)] whitespace-nowrap">
+      <span className="font-serif text-[10px] uppercase tracking-[0.3em] text-[var(--gold)] whitespace-nowrap group-hover:text-[var(--gold-d)] transition-colors">
         Phase {number} &mdash; {label}
       </span>
       <span className="phase-divider-dot" />
-    </div>
+      <motion.svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={12}
+        height={12}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="ml-1 shrink-0 text-[var(--gold)] group-hover:text-[var(--gold-d)] transition-colors"
+        animate={reducedMotion ? undefined : { rotate: isExpanded ? 0 : -90 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </motion.svg>
+    </button>
   );
 }
 
@@ -453,6 +483,19 @@ export function ResearchPanel() {
   const pdfViewer = usePDFViewer();
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+
+  const togglePhase = useCallback((phaseNum: string) => {
+    setCollapsedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(phaseNum)) {
+        next.delete(phaseNum);
+      } else {
+        next.add(phaseNum);
+      }
+      return next;
+    });
+  }, []);
 
   const handleEntityClick = useCallback((text: string) => {
     pdfViewer?.scrollToEntity(text);
@@ -528,21 +571,42 @@ export function ResearchPanel() {
           className="space-y-1"
         >
           <AnimatePresence>
-            {activePhases.map((phase) => (
-              <div key={phase.num}>
-                <PhaseDivider number={phase.num} label={phase.label} />
-                <div className="space-y-2">
-                  {phase.agents.map((agent) => (
-                    <AgentCard
-                      key={agent.id}
-                      agent={agent}
-                      onClick={() => setSelectedAgentId(agent.id)}
-                      onEntityClick={handleEntityClick}
-                    />
-                  ))}
+            {activePhases.map((phase) => {
+              const isExpanded = !collapsedPhases.has(phase.num);
+              return (
+                <div key={phase.num}>
+                  <PhaseDivider
+                    number={phase.num}
+                    label={phase.label}
+                    isExpanded={isExpanded}
+                    onToggle={() => togglePhase(phase.num)}
+                  />
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        key={`phase-agents-${phase.num}`}
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 280, damping: 28, opacity: { duration: 0.18 } }}
+                        style={{ overflow: 'hidden' }}
+                      >
+                        <div className="space-y-2 pt-1">
+                          {phase.agents.map((agent) => (
+                            <AgentCard
+                              key={agent.id}
+                              agent={agent}
+                              onClick={() => setSelectedAgentId(agent.id)}
+                              onEntityClick={handleEntityClick}
+                            />
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </AnimatePresence>
         </motion.div>
 

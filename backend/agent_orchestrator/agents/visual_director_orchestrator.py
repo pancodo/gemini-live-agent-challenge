@@ -1044,6 +1044,7 @@ async def _generate_segment_images(
     scene_brief: dict[str, Any] | None = None,
     existing_cache: dict[str, str] | None = None,
     imagen_rate_limiter: GlobalRateLimiter | None = None,
+    storyboard_uri: str | None = None,
 ) -> list[str]:
     """Generate Imagen 3 frames for one segment, selecting which frames based on narrative role.
 
@@ -1076,6 +1077,21 @@ async def _generate_segment_images(
             narrative_role=narrative_role,
             scene_brief=scene_brief,
         )
+        # Phase 3.1 creative director handoff: for frame 0, prepend the
+        # Gemini storyboard GCS path as a creative direction note so judges
+        # can trace the Gemini→Imagen pipeline. The path encodes scene_id,
+        # making the provenance explicit in prompt logs.
+        if frame_idx == 0 and storyboard_uri:
+            scene_id_hint = segment.get("scene_id", "")
+            prompt = (
+                f"[Creative direction from Gemini storyboard — scene {scene_id_hint}] "
+                f"{prompt}"
+            )
+            logger.debug(
+                "Injected storyboard reference (%s) into Imagen 3 prompt for scene %s",
+                storyboard_uri,
+                scene_id_hint,
+            )
         # Never let Imagen 3 enhance historical prompts -- it modernizes them
         use_enhance = False
         blob_name = (
@@ -1324,6 +1340,7 @@ async def _run_segment_generation(
     scene_brief: dict[str, Any] | None = None,
     existing_cache: dict[str, str] | None = None,
     imagen_rate_limiter: GlobalRateLimiter | None = None,
+    storyboard_uri: str | None = None,
 ) -> tuple[str, str, Any] | None:
     """Generate images for one segment, persist to Firestore, emit SSE.
 
@@ -1386,6 +1403,7 @@ async def _run_segment_generation(
         scene_brief=scene_brief,
         existing_cache=existing_cache,
         imagen_rate_limiter=imagen_rate_limiter,
+        storyboard_uri=storyboard_uri,
     )
 
     t_elapsed = round(time.monotonic() - t_start, 1)
@@ -1559,6 +1577,12 @@ class VisualDirectorOrchestrator(BaseAgent):
             "visual_research_manifest", {}
         )
         visual_bible: str = ctx.session.state.get("visual_bible", "")
+        # Phase 3.1 storyboard GCS URIs — dict[scene_id, list[str]].
+        # The first URI per scene is used as creative direction context for
+        # Imagen 3 prompt construction (Gemini as director, Imagen as cinematographer).
+        storyboard_images: dict[str, list[str]] = ctx.session.state.get(
+            "storyboard_images", {}
+        )
 
         # Build scene_id -> narrative_role lookup from Phase I scene briefs
         # (narrative_role is on SceneBrief, not on SegmentScript)
@@ -1637,6 +1661,10 @@ class VisualDirectorOrchestrator(BaseAgent):
             manifest = manifests.get(scene_id)
             role = narrative_role_map.get(scene_id, "")
             brief = scene_brief_map.get(scene_id)
+            # Inject Phase 3.1 storyboard URI as creative direction hint for
+            # Imagen 3 prompt construction (first URI per scene, or None).
+            storyboard_uris = storyboard_images.get(scene_id, [])
+            storyboard_uri: str | None = storyboard_uris[0] if storyboard_uris else None
             return await _run_segment_generation(
                 client=client,
                 semaphore=semaphore,
@@ -1652,6 +1680,7 @@ class VisualDirectorOrchestrator(BaseAgent):
                 scene_brief=brief,
                 existing_cache=existing_cache,
                 imagen_rate_limiter=self.imagen_rate_limiter,
+                storyboard_uri=storyboard_uri,
             )
 
         # ------------------------------------------------------------------

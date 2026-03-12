@@ -90,6 +90,15 @@ class SegmentScript(BaseModel):
         default_factory=list,
         description="Source citations used to ground the narration.",
     )
+    storyboard_image_urls: list[str] = Field(
+        default_factory=list,
+        description=(
+            "GCS URIs for Gemini-generated storyboard frames (Phase 3.1). "
+            "Produced by the NarrativeDirectorAgent via response_modalities=['TEXT','IMAGE']. "
+            "Phase V (VisualDirectorOrchestrator) uses these as reference images "
+            "when building Imagen 3 prompts. Empty until Phase 3.1 completes."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
