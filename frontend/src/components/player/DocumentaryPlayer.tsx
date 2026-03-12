@@ -10,6 +10,7 @@ import { KenBurnsStage } from './KenBurnsStage';
 import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
 import { ShareButton } from './ShareButton';
+import { HistorianAvatar } from '../voice/HistorianAvatar';
 import { useSessionStore } from '../../store/sessionStore';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
 
@@ -37,6 +38,7 @@ export function DocumentaryPlayer() {
   const setVoiceState = useVoiceStore((s) => s.setState);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
+  const isConversationMode = usePlayerStore((s) => s.isConversationMode);
   const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const isIdle = usePlayerStore((s) => s.isIdle);
   const setIdle = usePlayerStore((s) => s.setIdle);
@@ -248,6 +250,28 @@ export function DocumentaryPlayer() {
             onActiveImageChange={handleActiveImageChange}
           />
         </motion.div>
+      </AnimatePresence>
+
+      {/* Layer 1.5: Conversation mode — Historian avatar overlay */}
+      <AnimatePresence>
+        {isConversationMode && (
+          <motion.div
+            key="conversation-avatar"
+            className="absolute inset-0 z-[5] flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, ease: 'easeInOut' }}
+            style={{
+              background: 'radial-gradient(circle at center, rgba(26,21,16,0.85) 0%, rgba(13,11,9,0.95) 70%)',
+            }}
+          >
+            <HistorianAvatar
+              size={400}
+              active={true}
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Layer 2: Top bar */}
