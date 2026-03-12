@@ -134,8 +134,16 @@ export function VoiceLayer() {
         transition('listening');
         break;
 
+      case 'reconnecting':
+        // Manual retry — reset attempts and reconnect
+        disconnect();
+        connect();
+        void capture.start();
+        transition('listening');
+        break;
+
       default:
-        // processing, interrupted, reconnecting — no-op
+        // processing, interrupted — no-op
         break;
     }
   }, [connect, disconnect, capture, playback, transition, reset, clearResumptionToken]);
