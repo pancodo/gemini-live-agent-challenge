@@ -148,28 +148,34 @@ export function TimelineMap({
         z-index: 10;
       `;
 
-      el.style.opacity = '0';
-      const tid = setTimeout(() => {
-        el.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.2s ease';
-        el.style.opacity = '1';
-      }, index * PIN_ANIMATION_DELAY);
-      pinTimeoutIds.current.push(tid);
+      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      const pulse = document.createElement('div');
-      pulse.style.cssText = `
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: ${size * 3}px;
-        height: ${size * 3}px;
-        border-radius: 50%;
-        border: 1px solid ${color}60;
-        transform: translate(-50%, -50%);
-        animation: pin-pulse 2s ease-out infinite;
-        animation-delay: ${index * PIN_ANIMATION_DELAY + 400}ms;
-        pointer-events: none;
-      `;
-      el.appendChild(pulse);
+      if (prefersReduced) {
+        el.style.opacity = '1';
+      } else {
+        el.style.opacity = '0';
+        const tid = setTimeout(() => {
+          el.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.2s ease';
+          el.style.opacity = '1';
+        }, index * PIN_ANIMATION_DELAY);
+        pinTimeoutIds.current.push(tid);
+
+        const pulse = document.createElement('div');
+        pulse.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: ${size * 3}px;
+          height: ${size * 3}px;
+          border-radius: 50%;
+          border: 1px solid ${color}60;
+          transform: translate(-50%, -50%);
+          animation: pin-pulse 2s ease-out infinite;
+          animation-delay: ${index * PIN_ANIMATION_DELAY + 400}ms;
+          pointer-events: none;
+        `;
+        el.appendChild(pulse);
+      }
 
       // Invisible hit area so hover doesn't flicker from scale transform
       const hitArea = document.createElement('div');
