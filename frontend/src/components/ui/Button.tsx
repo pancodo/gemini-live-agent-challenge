@@ -13,7 +13,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       'inline-flex items-center justify-center font-sans font-medium tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] disabled:opacity-50 disabled:pointer-events-none cursor-pointer';
 
     const variants = {
-      primary: 'bg-[var(--gold)] text-[#f5f0e8] hover:bg-[var(--gold-d)]',
+      primary: 'bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-d)]',
       secondary: 'border border-[var(--gold)]/40 bg-transparent text-[var(--gold)] hover:bg-[var(--gold)]/10',
       ghost: 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)]',
     };

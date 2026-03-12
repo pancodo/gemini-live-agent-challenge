@@ -34,7 +34,7 @@ export function InkButton({ children, className = '', onClick, ...props }: InkBu
       whileTap={{ scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       onClick={handleClick}
-      className={`relative overflow-hidden inline-flex items-center justify-center bg-[var(--gold)] text-[#f5f0e8] font-sans font-medium tracking-wide px-6 py-3 rounded-lg cursor-pointer ${className}`}
+      className={`relative overflow-hidden inline-flex items-center justify-center bg-[var(--gold)] text-[var(--bg)] font-sans font-medium tracking-wide px-6 py-3 rounded-lg cursor-pointer ${className}`}
       {...(props as object)}
     >
       {children}
