@@ -44,7 +44,7 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   isKenBurnsPaused: false,
   isIdle: false,
   open: (segmentId) => set({ isOpen: true, currentSegmentId: segmentId, isIdle: false }),
-  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '' }),
+  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {} }),
   setCaption: (captionText) => set({ captionText }),
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
   setIdle: (isIdle) => set({ isIdle }),
