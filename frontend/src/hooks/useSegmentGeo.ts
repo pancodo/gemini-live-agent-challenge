@@ -35,7 +35,7 @@ export function useSegmentGeo(segmentId: string | null): {
     inFlightRef.current.add(segmentId);
     setIsLoading(true);
 
-    extractGeoData(segmentId, segment.script, segment.title)
+    extractGeoData(segmentId, segment.script, segment.title, abortController.signal)
       .then((result) => {
         if (!abortController.signal.aborted) {
           setSegmentGeo(segmentId, result);

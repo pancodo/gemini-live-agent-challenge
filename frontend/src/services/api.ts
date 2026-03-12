@@ -42,7 +42,7 @@ const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/model
  * Extract geographic locations and routes from a segment script using Gemini Flash.
  * Runs client-side to avoid modifying the backend agent pipeline.
  */
-export async function extractGeoData(segmentId: string, script: string, title: string): Promise<SegmentGeo> {
+export async function extractGeoData(segmentId: string, script: string, title: string, signal?: AbortSignal): Promise<SegmentGeo> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('VITE_GEMINI_API_KEY not set — cannot extract geographic data');
@@ -86,7 +86,9 @@ Rules:
   const res = await fetch(`${GEMINI_FLASH_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(15_000),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+      : AbortSignal.timeout(15_000),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
