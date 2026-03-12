@@ -172,11 +172,32 @@ export function VoiceLayer() {
     }, 1500);
   };
 
+  // Stable ref for sendTextToHistorian — same pattern as beginConsultation.
+  const sendTextRef = useRef((_text: string) => {});
+  sendTextRef.current = (text: string) => {
+    const currentState = useVoiceStore.getState().state;
+    if (currentState === 'idle') {
+      // Auto-connect if not yet connected, then send after setup delay
+      connect();
+      void capture.start();
+      transition('listening');
+      setTimeout(() => sendText(text), 1500);
+    } else {
+      sendText(text);
+    }
+  };
+
   // Register once on mount, clean up on unmount. The stable lambda
   // delegates to speakRef.current so it always calls the latest closure.
   useEffect(() => {
-    useVoiceStore.setState({ beginConsultation: () => speakRef.current() });
-    return () => useVoiceStore.setState({ beginConsultation: null });
+    useVoiceStore.setState({
+      beginConsultation: () => speakRef.current(),
+      sendTextToHistorian: (text: string) => sendTextRef.current(text),
+    });
+    return () => useVoiceStore.setState({
+      beginConsultation: null,
+      sendTextToHistorian: null,
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playbackAnalyser = playback.getAnalyser();
