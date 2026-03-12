@@ -79,6 +79,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
   const isReadyRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectRef = useRef<() => void>(() => {});
 
   // Keep config callbacks in a ref so the message handler never goes stale
   const configRef = useRef(config);
@@ -164,7 +165,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
 
         case 'go_away':
           cfg.onGoAway?.();
-          reconnect();
+          reconnectRef.current();
           break;
 
         case 'resumption_expired':
@@ -199,7 +200,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
 
       // Auto-reconnect on unexpected closure (not user-initiated 1000)
       if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-        reconnect();
+        reconnectRef.current();
       }
     });
 
@@ -240,6 +241,9 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
       connect();
     }, delay);
   }, [connect]);
+
+  // Keep ref in sync so close/go_away handlers always call the latest reconnect
+  reconnectRef.current = reconnect;
 
   const sendPCM = useCallback((chunk: Int16Array) => {
     const ws = wsRef.current;
