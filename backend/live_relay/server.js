@@ -467,10 +467,15 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       }
 
       // Input transcript (user speech -> text)
-      if (msg.serverContent?.inputTranscript?.text) {
-        const transcript = msg.serverContent.inputTranscript.text;
+      if (msg.serverContent?.inputTranscription?.text) {
+        const transcript = msg.serverContent.inputTranscription.text.trim();
 
-        // Always forward transcript to the frontend (branch detection, captions).
+        // Skip noise markers and single-char garbage from VAD
+        if (!transcript || transcript === '<noise>' || transcript.length < 2) {
+          return;
+        }
+
+        // Forward transcript to the frontend (branch detection, captions).
         clientWs.send(JSON.stringify({ type: 'transcript', text: transcript }));
 
         // RAG injection: for substantive questions (>15 chars), retrieve relevant
