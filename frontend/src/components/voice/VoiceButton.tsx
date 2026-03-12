@@ -50,7 +50,7 @@ function MicIcon({ muted }: { muted: boolean }) {
       height="22"
       viewBox="0 0 24 24"
       fill="none"
-      stroke={muted ? 'var(--muted)' : '#c4956a'}
+      stroke={muted ? 'var(--muted)' : 'var(--gold)'}
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -187,7 +187,7 @@ export function VoiceButton({
             className="whitespace-nowrap text-[11px] font-normal uppercase tracking-[0.15em]"
             style={{
               fontFamily: 'var(--font-sans)',
-              color: '#c4956a',
+              color: 'var(--gold)',
             }}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}

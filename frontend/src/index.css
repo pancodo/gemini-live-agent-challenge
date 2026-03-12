@@ -81,6 +81,11 @@
   --color-bg-active: color-mix(in oklch, var(--color-bg) 85%, var(--color-gold) 15%);
 }
 
+/* ── Base html rule ─────────────────────────────────────── */
+html {
+  color-scheme: light dark;
+}
+
 /* ── Runtime-only CSS Custom Properties (JS-driven, not in @theme) ─ */
 :root {
   --shadow-warm:    rgba(139, 105, 20, 0.15);
@@ -109,6 +114,60 @@
   --glow-secondary:  var(--color-glow-secondary);
 }
 
+/* ── Dark Theme Overrides ─────────────────────────────── */
+[data-theme="dark"] {
+  --bg:     #0d0b09;
+  --bg2:    #1a1510;
+  --bg3:    #231d16;
+  --bg4:    #2f2519;
+  --gold:   #c4956a;
+  --gold-d: #9a6d45;
+  --text:   #f5e8d4;
+  --muted:  #9e8c76;
+  --green:  #3d9e5e;
+  --teal:   #2d8a8a;
+  --shadow-warm: rgba(196, 149, 106, 0.2);
+  --ambient-color: rgba(196, 149, 106, 0.08);
+  color-scheme: dark;
+}
+
+/* ── Dark Theme — Aurora Blob Overrides ───────────────── */
+[data-theme="dark"] .aurora-blob:nth-child(1) {
+  background: #c4956a;
+  opacity: 0.05;
+}
+[data-theme="dark"] .aurora-blob:nth-child(2) {
+  background: #5a3e22;
+  opacity: 0.07;
+}
+[data-theme="dark"] .aurora-blob:nth-child(3) {
+  background: #3d2a14;
+  opacity: 0.06;
+}
+
+/* ── Dark Theme — Grain Overlay Blend Mode ─────────────── */
+[data-theme="dark"] .grain-overlay {
+  mix-blend-mode: screen;
+  opacity: 0.015;
+}
+
+/* ── Dark Theme — Segment Title Skeleton ───────────────── */
+[data-theme="dark"] .seg-card.generating .seg-title {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  background-attachment: fixed;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Dark Theme — Log Source Shimmer ───────────────────── */
+[data-theme="dark"] .log-source.evaluating {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
 /* ── Tailwind v4 border color default ────────────────────
    v4 changed bare `border` from gray-200 to currentColor.
    Restore a neutral default so bare `border` utilities on
@@ -119,7 +178,7 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-bg4);
+    border-color: var(--bg4);
   }
 }
 
@@ -129,9 +188,10 @@
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.15s ease;
 }
 
 /* ── Film Grain Overlay ────────────────────────────────── */
@@ -191,13 +251,13 @@ body {
 .agent-card.searching {
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--color-bg2), var(--color-bg2)) padding-box,
+    linear-gradient(var(--bg2), var(--bg2)) padding-box,
     conic-gradient(
       from var(--border-angle),
-      var(--color-teal) 0%,
+      var(--teal) 0%,
       transparent 30%,
       transparent 70%,
-      var(--color-teal) 100%
+      var(--teal) 100%
     ) border-box;
   animation: rotate-border 3s linear infinite;
 }
@@ -265,7 +325,7 @@ body {
   100% { background-position: -200% 0; }
 }
 .seg-card.generating .seg-title {
-  background: linear-gradient(90deg, var(--color-bg3) 25%, var(--color-bg4) 50%, var(--color-bg3) 75%);
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
   background-size: 200% 100%;
   background-attachment: fixed;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
@@ -293,7 +353,7 @@ body {
   content: '';
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, transparent, var(--color-gold), transparent);
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
   transform: scaleX(0);
   transform-origin: center;
   animation: draw-rule 0.8s ease-out forwards;
@@ -301,7 +361,7 @@ body {
 .phase-divider-dot {
   width: 4px; height: 4px;
   border-radius: 50%;
-  background: var(--color-gold);
+  background: var(--gold);
   opacity: 0;
   animation: dot-appear 0.3s 0.4s ease-out forwards;
 }
@@ -313,8 +373,8 @@ body {
   animation: stat-flash 0.5s ease-out;
 }
 @keyframes stat-flash {
-  0%   { color: var(--color-green); transform: scale(1.1); }
-  100% { color: var(--color-gold);  transform: scale(1); }
+  0%   { color: var(--green); transform: scale(1.1); }
+  100% { color: var(--gold);  transform: scale(1); }
 }
 
 /* ── Archival Corner Brackets ───────────────────────────── */
@@ -326,7 +386,7 @@ body {
   content: '';
   position: absolute;
   width: 12px; height: 12px;
-  border-color: var(--color-gold);
+  border-color: var(--gold);
   border-style: solid;
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -345,7 +405,7 @@ body {
 /* ── CSS Custom Highlight API (entity matches) ────────── */
 ::highlight(entity-matches) {
   background-color: rgba(139, 94, 26, 0.22);
-  color: var(--color-text);
+  color: var(--text);
 }
 
 /* ── PDF Text Layer + Entity Highlights (DOM fallback) ─── */
@@ -389,7 +449,7 @@ body {
 /* ── CSS Custom Highlight API (narration entity matches) ── */
 ::highlight(narration-entity) {
   background-color: rgba(46, 110, 68, 0.28);
-  color: var(--color-text);
+  color: var(--text);
 }
 
 /* ── Narration highlight fallback (DOM mutation) ────────── */
@@ -465,7 +525,7 @@ body {
   display: inline-block;
   width: 2px;
   height: 1em;
-  background: var(--color-gold);
+  background: var(--gold);
   margin-left: 2px;
   vertical-align: text-bottom;
   animation: cursor-blink 0.8s step-end infinite;
@@ -476,7 +536,7 @@ body {
 
 /* ── Log source shimmer ─────────────────────────────────── */
 .log-source.evaluating {
-  background: linear-gradient(90deg, var(--color-bg3) 25%, var(--color-bg4) 50%, var(--color-bg3) 75%);
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
   background-size: 200% 100%;
   animation: skeleton-pulse 1.2s ease-in-out infinite;
 }

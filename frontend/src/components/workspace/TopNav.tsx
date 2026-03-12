@@ -6,6 +6,7 @@ import { useResearchStore } from '../../store/researchStore';
 import type { PhaseEntry } from '../../store/researchStore';
 import { Badge } from '../ui';
 import { useSettings } from '../../hooks/useSettings';
+import { useTheme } from '../../hooks/useTheme';
 
 const PHASE_NAMES: ReadonlyArray<{ phase: 1 | 2 | 3 | 4 | 5; label: string }> = [
   { phase: 1, label: 'Translation & Scan' },
@@ -52,6 +53,7 @@ function GearIcon() {
   );
 }
 
+
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -75,6 +77,7 @@ export function TopNav() {
   const phases = useResearchStore((s) => s.phases);
 
   const [settings, updateSetting] = useSettings();
+  const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
 
@@ -225,8 +228,26 @@ export function TopNav() {
         )}
       </div>
 
-      {/* Right: Settings + Status + elapsed time */}
+      {/* Right: Theme toggle + Settings + Status + elapsed time */}
       <div className="flex items-center gap-3">
+        {/* Single-click theme toggle */}
+        <button
+          type="button"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="flex items-center justify-center w-7 h-7 rounded text-[var(--muted)] hover:text-[var(--gold-d)] hover:bg-[var(--bg3)] transition-colors duration-150 cursor-pointer"
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </button>
         <div ref={settingsRef} className="relative">
           <button
             type="button"

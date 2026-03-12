@@ -6,7 +6,11 @@ import { useSessionStore } from './store/sessionStore';
 import { VoiceLayer } from './components/voice/VoiceLayer';
 import { IrisOverlay } from './components/player/IrisOverlay';
 import { TopNav } from './components/workspace/TopNav';
+import { useTheme } from './hooks/useTheme';
 
+const LandingPage = lazy(() =>
+  import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })),
+);
 const UploadPage = lazy(() =>
   import('./pages/UploadPage').then((m) => ({ default: m.UploadPage })),
 );
@@ -19,6 +23,11 @@ const PlayerPage = lazy(() =>
 const NotFoundPage = lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
 );
+
+function ThemeSync() {
+  useTheme();
+  return null;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2, staleTime: 5000 } },
@@ -44,7 +53,7 @@ function WorkspaceGuard() {
       <WorkspacePage />
     </Suspense>
   ) : (
-    <Navigate to="/" replace />
+    <Navigate to="/app" replace />
   );
 }
 
@@ -55,7 +64,7 @@ function PlayerGuard() {
       <PlayerPage />
     </Suspense>
   ) : (
-    <Navigate to="/workspace" replace />
+    <Navigate to="/app" replace />
   );
 }
 
@@ -74,11 +83,21 @@ function RootLayout() {
 }
 
 const router = createBrowserRouter([
+  // Landing page — standalone, no app chrome
+  {
+    path: '/',
+    element: (
+      <Suspense fallback={<PageFallback />}>
+        <LandingPage />
+      </Suspense>
+    ),
+  },
+  // App routes — with TopNav, VoiceLayer, IrisOverlay
   {
     element: <RootLayout />,
     children: [
       {
-        path: '/',
+        path: '/app',
         element: (
           <Suspense fallback={<PageFallback />}>
             <UploadPage />
@@ -102,9 +121,10 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeSync />
       {/* Film grain overlay — always on */}
       <div className="grain-overlay" aria-hidden="true" />
-      {/* Aurora blobs — shown on upload + workspace */}
+      {/* Aurora blobs — parchment screens; invisible on dark landing bg */}
       <div className="aurora-blob" aria-hidden="true" />
       <div className="aurora-blob" aria-hidden="true" />
       <div className="aurora-blob" aria-hidden="true" />
