@@ -354,7 +354,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         model: `models/${GEMINI_MODEL}`,
         generationConfig: {
           responseModalities: ['AUDIO'],
-          outputAudioTranscription: {},
+          output_audio_transcription: {},
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
@@ -396,8 +396,13 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
     try {
       msg = JSON.parse(raw);
     } catch {
-      console.error('[live-relay] Failed to parse Gemini message');
+      console.error('[live-relay] Failed to parse Gemini message:', raw.slice(0, 500));
       return;
+    }
+
+    // Log non-audio messages for debugging
+    if (!msg.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
+      console.log('[live-relay] Gemini msg:', JSON.stringify(msg).slice(0, 300));
     }
 
     // Setup complete acknowledgement
@@ -561,7 +566,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
   /** Close client when Gemini disconnects unexpectedly. */
   geminiWs.addEventListener('close', (event) => {
     console.log(
-      `[live-relay] Gemini WS closed session=${sessionId} code=${event.code}`
+      `[live-relay] Gemini WS closed session=${sessionId} code=${event.code} reason=${event.reason}`
     );
     if (clientWs.readyState === WebSocket.OPEN) {
       // Don't send error for normal closure
