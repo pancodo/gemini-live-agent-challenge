@@ -24,6 +24,7 @@ export function TimelineMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const pendingMoveEndRef = useRef<(() => void) | null>(null);
   const [hoveredPin, setHoveredPin] = useState<GeoEvent | null>(null);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
@@ -198,6 +199,12 @@ export function TimelineMap({
     const map = mapRef.current;
     if (!map) return;
 
+    // Cancel any pending moveend listener from a previous fly-to
+    if (pendingMoveEndRef.current) {
+      map.off('moveend', pendingMoveEndRef.current);
+      pendingMoveEndRef.current = null;
+    }
+
     // Clear everything immediately
     clearMarkers();
     clearRoutes();
@@ -206,6 +213,9 @@ export function TimelineMap({
 
     // Fly to new center — pins and routes appear only after landing
     const onMoveEnd = () => {
+      map.off('moveend', onMoveEnd);
+      pendingMoveEndRef.current = null;
+
       // Add pins with staggered animation
       for (let i = 0; i < geo.events.length; i++) {
         const event = geo.events[i];
@@ -220,10 +230,9 @@ export function TimelineMap({
       for (let i = 0; i < geo.routes.length; i++) {
         addRoute(geo.routes[i], i);
       }
-
-      map.off('moveend', onMoveEnd);
     };
 
+    pendingMoveEndRef.current = onMoveEnd;
     map.on('moveend', onMoveEnd);
 
     map.flyTo({
