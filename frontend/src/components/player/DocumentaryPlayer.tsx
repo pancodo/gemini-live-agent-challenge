@@ -12,7 +12,9 @@ import { PlayerSidebar } from './PlayerSidebar';
 import { ShareButton } from './ShareButton';
 import { HistorianAvatar } from '../voice/HistorianAvatar';
 import { useSessionStore } from '../../store/sessionStore';
+import { TimelineMap } from './TimelineMap';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
+import type { MapViewMode } from '../../types';
 
 /**
  * DocumentaryPlayer — Full-screen cinematic player.
@@ -43,6 +45,15 @@ export function DocumentaryPlayer() {
   const isIdle = usePlayerStore((s) => s.isIdle);
   const setIdle = usePlayerStore((s) => s.setIdle);
   const open = usePlayerStore((s) => s.open);
+
+  const mapViewMode = usePlayerStore((s) => s.mapViewMode);
+  const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
+
+  const cycleMapMode = useCallback(() => {
+    const modes: MapViewMode[] = ['ken-burns', 'split', 'map'];
+    const idx = modes.indexOf(mapViewMode);
+    setMapViewMode(modes[(idx + 1) % modes.length]);
+  }, [mapViewMode, setMapViewMode]);
 
   const segmentsRecord = useResearchStore((s) => s.segments);
 
@@ -180,6 +191,8 @@ export function DocumentaryPlayer() {
             document.documentElement.requestFullscreen();
           }
         }
+      } else if (e.key === 'm' || e.key === 'M') {
+        cycleMapMode();
       } else if (e.key === ' ') {
         e.preventDefault();
         if (voiceState === 'idle') {
@@ -191,7 +204,7 @@ export function DocumentaryPlayer() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate, voiceState, setVoiceState]);
+  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate, voiceState, setVoiceState, cycleMapMode]);
 
   // ── Click-outside to close shortcuts tooltip ────────────────
   useEffect(() => {
@@ -235,22 +248,45 @@ export function DocumentaryPlayer() {
         }
       `}</style>
 
-      {/* Layer 1: Ken Burns Stage */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentSegmentId ?? 'empty'}
-          initial={{ opacity: 0, scale: 1.03 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: 'easeInOut' }}
-          className="absolute inset-0"
-        >
-          <KenBurnsStage
-            segment={currentSegment}
-            onActiveImageChange={handleActiveImageChange}
-          />
-        </motion.div>
-      </AnimatePresence>
+      {/* Layer 1: Visual stage — Ken Burns / Map / Split */}
+      <div className="absolute inset-0 flex">
+        {/* Ken Burns panel */}
+        <AnimatePresence mode="wait">
+          {mapViewMode !== 'map' && (
+            <motion.div
+              key={`kb-${currentSegmentId ?? 'empty'}`}
+              initial={{ opacity: 0, scale: 1.03 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="relative h-full"
+              style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
+            >
+              <KenBurnsStage
+                segment={currentSegment}
+                onActiveImageChange={handleActiveImageChange}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Map panel */}
+        <AnimatePresence>
+          {mapViewMode !== 'ken-burns' && (
+            <motion.div
+              key="map-panel"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="relative h-full"
+              style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
+            >
+              <TimelineMap />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Layer 1.5: Conversation mode — Historian avatar overlay */}
       <AnimatePresence>
@@ -383,6 +419,46 @@ export function DocumentaryPlayer() {
               </span>
             )}
 
+            {/* Map view toggle */}
+            <button
+              onClick={cycleMapMode}
+              className="p-2 rounded transition-colors duration-200"
+              style={{
+                color: mapViewMode !== 'ken-burns'
+                  ? 'var(--glow-primary)'
+                  : 'rgba(232,221,208,0.6)',
+                background: mapViewMode !== 'ken-burns'
+                  ? 'rgba(196,149,106,0.15)'
+                  : 'transparent',
+                border: mapViewMode !== 'ken-burns'
+                  ? '1px solid rgba(196,149,106,0.3)'
+                  : '1px solid transparent',
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              aria-label={`Map view: ${mapViewMode}`}
+              title={`Map: ${mapViewMode === 'ken-burns' ? 'off' : mapViewMode} (M)`}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Globe/map icon */}
+                <circle cx="8" cy="8" r="6" />
+                <path d="M2 8h12" />
+                <path d="M8 2c-2 2-2 4 0 6s2 4 0 6" />
+              </svg>
+            </button>
+
             {/* Shortcuts hint */}
             <div className="relative">
               <button
@@ -423,6 +499,7 @@ export function DocumentaryPlayer() {
                 >
                   {'← →   Previous / Next chapter\n'}
                   {'Space  Toggle voice\n'}
+                  {'M      Cycle map view\n'}
                   {'F      Fullscreen\n'}
                   {'Esc    Back to workspace'}
                 </div>
