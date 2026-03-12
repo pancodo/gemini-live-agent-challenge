@@ -1,10 +1,8 @@
-"""FastAPI application entry point for historian_api.
-
-Deployed as a Cloud Run service. Mounts all route routers.
-"""
+"""FastAPI application entry point for historian_api."""
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +14,20 @@ from .routes import retrieve as retrieve_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AI Historian API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Warm up lazy singletons before first request."""
+    try:
+        retrieve_router._get_db()
+        retrieve_router._get_client()
+        logger.info("Startup: retrieve singletons warmed up")
+    except Exception as exc:
+        logger.warning("Startup warmup failed (non-fatal): %s", exc)
+    yield
+
+
+app = FastAPI(title="AI Historian API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
