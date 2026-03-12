@@ -198,37 +198,40 @@ export function TimelineMap({
     const map = mapRef.current;
     if (!map) return;
 
+    // Clear everything immediately
     clearMarkers();
     clearRoutes();
 
     if (!geo) return;
 
-    // Fly to new center
+    // Fly to new center — pins and routes appear only after landing
+    const onMoveEnd = () => {
+      // Add pins with staggered animation
+      for (let i = 0; i < geo.events.length; i++) {
+        const event = geo.events[i];
+        const el = createPinElement(event, i);
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([event.lng, event.lat])
+          .addTo(map);
+        markersRef.current.push(marker);
+      }
+
+      // Add routes
+      for (let i = 0; i < geo.routes.length; i++) {
+        addRoute(geo.routes[i], i);
+      }
+
+      map.off('moveend', onMoveEnd);
+    };
+
+    map.on('moveend', onMoveEnd);
+
     map.flyTo({
       center: [geo.center[1], geo.center[0]],
       zoom: geo.zoom,
       duration: 2000,
       essential: true,
     });
-
-    // Add pins with staggered animation
-    for (let i = 0; i < geo.events.length; i++) {
-      const event = geo.events[i];
-      const el = createPinElement(event, i);
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([event.lng, event.lat])
-        .addTo(map);
-      markersRef.current.push(marker);
-    }
-
-    // Add routes after map has settled
-    const onMoveEnd = () => {
-      for (let i = 0; i < geo.routes.length; i++) {
-        addRoute(geo.routes[i], i);
-      }
-      map.off('moveend', onMoveEnd);
-    };
-    map.on('moveend', onMoveEnd);
   }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute]);
 
   return (
