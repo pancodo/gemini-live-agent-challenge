@@ -29,6 +29,7 @@ export function TimelineMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
   const geoEpochRef = useRef(0);
+  const mapReadyRef = useRef(false);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const { geo } = useSegmentGeo(currentSegmentId);
@@ -58,12 +59,14 @@ export function TimelineMap({
       'bottom-right',
     );
 
+    map.on('load', () => { mapReadyRef.current = true; });
     mapRef.current = map;
 
     return () => {
       container.removeEventListener('wheel', preventBrowserZoom);
       map.remove();
       mapRef.current = null;
+      mapReadyRef.current = false;
     };
   }, []);
 
@@ -245,49 +248,59 @@ export function TimelineMap({
     const map = mapRef.current;
     if (!map) return;
 
-    if (pendingMoveEndRef.current) {
-      map.off('moveend', pendingMoveEndRef.current);
-      pendingMoveEndRef.current = null;
-    }
-
-    clearMarkers();
-    clearRoutes();
-    geoEpochRef.current += 1;
-
-    if (!geo) return;
-
-    const capturedEpoch = geoEpochRef.current;
-
-    const onMoveEnd = () => {
-      map.off('moveend', onMoveEnd);
-      pendingMoveEndRef.current = null;
-
-      // Guard against stale callback from a previous segment's fly-to
-      if (geoEpochRef.current !== capturedEpoch) return;
-
-      for (let i = 0; i < geo.events.length; i++) {
-        const event = geo.events[i];
-        const el = createPinElement(event, i);
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([event.lng, event.lat])
-          .addTo(map);
-        markersRef.current.push(marker);
+    const proceed = () => {
+      if (pendingMoveEndRef.current) {
+        map.off('moveend', pendingMoveEndRef.current);
+        pendingMoveEndRef.current = null;
       }
 
-      for (let i = 0; i < geo.routes.length; i++) {
-        addRoute(geo.routes[i], i);
-      }
+      clearMarkers();
+      clearRoutes();
+      geoEpochRef.current += 1;
+
+      if (!geo) return;
+
+      const capturedEpoch = geoEpochRef.current;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const onMoveEnd = () => {
+        map.off('moveend', onMoveEnd);
+        pendingMoveEndRef.current = null;
+
+        // Guard against stale callback from a previous segment's fly-to
+        if (geoEpochRef.current !== capturedEpoch) return;
+
+        for (let i = 0; i < geo.events.length; i++) {
+          const event = geo.events[i];
+          const el = createPinElement(event, reducedMotion ? 0 : i);
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([event.lng, event.lat])
+            .addTo(map);
+          markersRef.current.push(marker);
+        }
+
+        for (let i = 0; i < geo.routes.length; i++) {
+          addRoute(geo.routes[i], i);
+        }
+      };
+
+      pendingMoveEndRef.current = onMoveEnd;
+      map.on('moveend', onMoveEnd);
+
+      map.flyTo({
+        center: [geo.center[1], geo.center[0]],
+        zoom: geo.zoom,
+        duration: reducedMotion ? 0 : 2000,
+        essential: true,
+      });
     };
 
-    pendingMoveEndRef.current = onMoveEnd;
-    map.on('moveend', onMoveEnd);
-
-    map.flyTo({
-      center: [geo.center[1], geo.center[0]],
-      zoom: geo.zoom,
-      duration: 2000,
-      essential: true,
-    });
+    // Defer until map style is loaded (addSource/addLayer require it)
+    if (mapReadyRef.current) {
+      proceed();
+    } else {
+      map.once('load', proceed);
+    }
   }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute]);
 
   return (
