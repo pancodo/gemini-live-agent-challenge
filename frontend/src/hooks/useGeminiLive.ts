@@ -6,6 +6,8 @@ type RelayMessage =
   | { type: 'ready' }
   | { type: 'audio'; data: string }
   | { type: 'interrupted' }
+  | { type: 'turn_complete' }
+  | { type: 'caption'; text: string }
   | { type: 'resumption_token'; token: string }
   | { type: 'go_away' }
   | { type: 'transcript'; text: string }
@@ -18,11 +20,14 @@ export interface GeminiLiveConfig {
   resumptionToken: string | null;
   onAudioChunk: (pcm: ArrayBuffer) => void;
   onInterrupted: () => void;
+  onTurnComplete: () => void;
+  onCaption: (text: string) => void;
   onResumeToken: (token: string) => void;
 }
 
 export interface GeminiLiveReturn {
   sendPCM: (chunk: Int16Array) => void;
+  sendText: (text: string) => void;
   connect: () => void;
   disconnect: () => void;
   isConnected: boolean;
@@ -138,6 +143,14 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
           cfg.onInterrupted();
           break;
 
+        case 'turn_complete':
+          cfg.onTurnComplete();
+          break;
+
+        case 'caption':
+          cfg.onCaption(msg.text);
+          break;
+
         case 'resumption_token':
           cfg.onResumeToken(msg.token);
           break;
@@ -206,7 +219,6 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
   const sendPCM = useCallback((chunk: Int16Array) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !isReadyRef.current) {
-      // Silently drop — mic data before relay is ready is expected
       return;
     }
 
@@ -217,6 +229,15 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     ws.send(payload);
   }, []);
 
+  const sendText = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !isReadyRef.current) {
+      return;
+    }
+
+    ws.send(JSON.stringify({ type: 'text', text }));
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -224,5 +245,5 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     };
   }, [disconnect]);
 
-  return { sendPCM, connect, disconnect, isConnected, lastUserTranscript };
+  return { sendPCM, sendText, connect, disconnect, isConnected, lastUserTranscript };
 }
