@@ -26,7 +26,7 @@ export function VoiceLayer() {
   const { state, transition, handleInterrupt, reset } = useVoiceState();
   const playback = useAudioPlayback();
 
-  const { sendPCM, connect, disconnect, isConnected } = useGeminiLive({
+  const { sendPCM, sendText, connect, disconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
     onAudioChunk: (pcm: ArrayBuffer) => {
@@ -39,6 +39,15 @@ export function VoiceLayer() {
       playback.stop();
       const { resumeSegmentId, resumeOffset } = useVoiceStore.getState();
       handleInterrupt(resumeSegmentId ?? '', resumeOffset);
+    },
+    onTurnComplete: () => {
+      const currentState = useVoiceStore.getState().state;
+      if (currentState === 'historian_speaking') {
+        transition('idle');
+      }
+    },
+    onCaption: (text: string) => {
+      useVoiceStore.getState().setCaption(text);
     },
     onResumeToken: (token: string) => {
       setResumptionToken(token);
@@ -95,6 +104,28 @@ export function VoiceLayer() {
         break;
     }
   }, [connect, disconnect, capture, playback, transition, reset]);
+
+  /** Start voice session with an initial text prompt to the historian. */
+  const handleSpeak = useCallback(() => {
+    const currentState = useVoiceStore.getState().state;
+    if (currentState !== 'idle') return;
+
+    connect();
+    void capture.start();
+    transition('listening');
+
+    // Send an initial greeting after a brief delay to allow setup to complete
+    setTimeout(() => {
+      sendText('Hello! Please introduce yourself briefly and tell me about the document I uploaded.');
+    }, 1500);
+  }, [connect, capture, transition, sendText]);
+
+  // Register beginConsultation in store so HistorianPanel can invoke it
+  const setBeginConsultation = useVoiceStore((s) => s.setBeginConsultation);
+  useEffect(() => {
+    setBeginConsultation(handleSpeak);
+    return () => setBeginConsultation(null);
+  }, [handleSpeak, setBeginConsultation]);
 
   const playbackAnalyser = playback.getAnalyser();
   useAudioVisualSync(playbackAnalyser);
