@@ -120,12 +120,12 @@ export function VoiceLayer() {
     }, 1500);
   }, [connect, capture, transition, sendText]);
 
-  // Register beginConsultation in store so HistorianPanel can invoke it
-  const setBeginConsultation = useVoiceStore((s) => s.setBeginConsultation);
+  // Register beginConsultation in store so HistorianPanel can invoke it.
+  // Use setState directly to avoid subscribe-triggered re-render loops.
   useEffect(() => {
-    setBeginConsultation(handleSpeak);
-    return () => setBeginConsultation(null);
-  }, [handleSpeak, setBeginConsultation]);
+    useVoiceStore.setState({ beginConsultation: handleSpeak });
+    return () => useVoiceStore.setState({ beginConsultation: null });
+  }, [handleSpeak]);
 
   const playbackAnalyser = playback.getAnalyser();
   useAudioVisualSync(playbackAnalyser);
