@@ -28,6 +28,9 @@ from ..models import RetrieveRequest, RetrieveResponse, RetrievedChunk
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+_MIN_RELEVANCE_SCORE = 0.5
+"""Minimum cosine similarity score to include a chunk. Filters noise."""
+
 # ---------------------------------------------------------------------------
 # Lazy singletons (same pattern as session.py and pipeline.py)
 # ---------------------------------------------------------------------------
@@ -90,7 +93,7 @@ async def retrieve_chunks(
             vector_field="embedding",
             query_vector=Vector(query_vec),
             distance_measure=DistanceMeasure.COSINE,
-            limit=body.top_k,
+            limit=min(body.top_k, 10),  # defense-in-depth clamp
             distance_result_field="distance",
         )
 
@@ -98,12 +101,15 @@ async def retrieve_chunks(
         chunks: list[RetrievedChunk] = []
         async for doc in vector_query.stream():
             d = doc.to_dict()
+            score = 1.0 - float(d.get("distance", 0.5))
+            if score < _MIN_RELEVANCE_SCORE:
+                continue
             chunks.append(
                 RetrievedChunk(
                     chunk_id=doc.id,
                     text=d.get("raw_text", ""),
                     summary=d.get("summary"),
-                    score=1.0 - float(d.get("distance", 0.5)),
+                    score=score,
                     page_start=d.get("page_start", 0),
                     page_end=d.get("page_end", 0),
                     heading=d.get("heading"),
