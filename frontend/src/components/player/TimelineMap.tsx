@@ -161,13 +161,25 @@ export function TimelineMap({
       `;
       el.appendChild(pulse);
 
-      el.addEventListener('mouseenter', () => {
+      // Invisible hit area so hover doesn't flicker from scale transform
+      const hitArea = document.createElement('div');
+      hitArea.style.cssText = `
+        position: absolute;
+        top: 50%; left: 50%;
+        width: ${size * 3}px; height: ${size * 3}px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        pointer-events: auto;
+      `;
+      el.appendChild(hitArea);
+
+      hitArea.addEventListener('mouseenter', () => {
         showPopup(event);
-        el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.6)`;
+        el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.4)`;
         el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
       });
 
-      el.addEventListener('mouseleave', () => {
+      hitArea.addEventListener('mouseleave', () => {
         popupRef.current?.remove();
         popupRef.current = null;
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1)`;
