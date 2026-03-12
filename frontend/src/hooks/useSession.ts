@@ -12,7 +12,7 @@ export function useSession(sessionId: string | null) {
     queryFn: () => getSessionStatus(sessionId!),
     // Always fetch when sessionId exists — needed for session recovery after page refresh.
     // Poll continuously while pipeline is running; single fetch otherwise.
-    enabled: !!sessionId,
+    enabled: !!sessionId && !sessionId.startsWith('dev-'),
     refetchInterval: status === 'processing' || status === 'uploading' ? 3000 : false,
   });
 
