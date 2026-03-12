@@ -2,11 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 
 const STORAGE_KEY = 'ai-historian-settings';
 
+export type Theme = 'light' | 'dark';
+
 interface Settings {
   reducedMotion: boolean;
   autoWatch: boolean;
   voiceEnabled: boolean;
   showCaptions: boolean;
+  theme: Theme;
+}
+
+function getSystemTheme(): Theme {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -14,20 +21,23 @@ const DEFAULT_SETTINGS: Settings = {
   autoWatch: false,
   voiceEnabled: true,
   showCaptions: true,
+  theme: 'light', // overridden at runtime by getSystemTheme() when no preference is saved
 };
 
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    if (!raw) return { ...DEFAULT_SETTINGS, theme: getSystemTheme() };
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return DEFAULT_SETTINGS;
     const obj = parsed as Record<string, unknown>;
+    const theme = obj['theme'];
     return {
       reducedMotion: typeof obj['reducedMotion'] === 'boolean' ? obj['reducedMotion'] : DEFAULT_SETTINGS.reducedMotion,
       autoWatch: typeof obj['autoWatch'] === 'boolean' ? obj['autoWatch'] : DEFAULT_SETTINGS.autoWatch,
       voiceEnabled: typeof obj['voiceEnabled'] === 'boolean' ? obj['voiceEnabled'] : DEFAULT_SETTINGS.voiceEnabled,
       showCaptions: typeof obj['showCaptions'] === 'boolean' ? obj['showCaptions'] : DEFAULT_SETTINGS.showCaptions,
+      theme: (theme === 'light' || theme === 'dark') ? theme : getSystemTheme(),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -36,10 +46,10 @@ function loadSettings(): Settings {
 
 type SettingsKey = keyof Settings;
 
-export function useSettings(): [Settings, (key: SettingsKey, value: boolean) => void] {
+export function useSettings(): [Settings, <K extends SettingsKey>(key: K, value: Settings[K]) => void] {
   const [settings, setSettings] = useState<Settings>(loadSettings);
 
-  const updateSetting = useCallback((key: SettingsKey, value: boolean) => {
+  const updateSetting = useCallback(<K extends SettingsKey>(key: K, value: Settings[K]) => {
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
