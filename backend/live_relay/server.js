@@ -363,12 +363,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
   /** Accumulates incremental input transcription fragments into full sentences. */
   let pendingTranscript = '';
 
-  // ── 3. Gemini WS opened: send BidiGenerateContentSetup ───────
-  geminiWs.addEventListener('open', () => {
-    console.log(`[live-relay] Gemini WS connected for session=${sessionId}`);
-
-    /** @type {Record<string, unknown>} */
-    const setupMessage = {
+  /** Build a BidiGenerateContentSetup message, optionally with a resumption token. */
+  function buildSetupMessage(token) {
+    const msg = {
       setup: {
         model: `models/${GEMINI_MODEL}`,
         generationConfig: {
@@ -401,148 +398,222 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         },
       },
     };
+    if (token) {
+      msg.setup.sessionResumption = { handle: token };
+    }
+    return msg;
+  }
 
-    // If reconnecting with a resumption token, attach it
-    if (resumptionToken) {
-      setupMessage.setup.sessionResumption = {
-        handle: resumptionToken,
-      };
+  /** Timer ID for setup timeout — cleared on setupComplete. */
+  let setupTimeoutId = null;
+
+  /**
+   * Open a fresh Gemini connection without the resumption token.
+   * Called when the token is expired or rejected.
+   */
+  function retryWithoutToken() {
+    console.log(`[live-relay] Resumption token expired, retrying without token for session=${sessionId}`);
+    // Close the failed connection
+    if (geminiWs && geminiWs.readyState !== WebSocket.CLOSED) {
+      geminiWs.close(1000, 'token expired retry');
     }
 
-    geminiWs.send(JSON.stringify(setupMessage));
-  });
-
-  // ── 4. Handle messages FROM Gemini → relay to client ──────────
-  geminiWs.addEventListener('message', (event) => {
-    /** @type {string} */
-    const raw = typeof event.data === 'string' ? event.data : event.data.toString();
-
-    let msg;
     try {
-      msg = JSON.parse(raw);
-    } catch {
-      console.error('[live-relay] Failed to parse Gemini message:', raw.slice(0, 500));
+      geminiWs = new WebSocket(GEMINI_WS_URL);
+    } catch (err) {
+      console.error(`[live-relay] Failed to create fallback Gemini WebSocket:`, err);
+      clientWs.send(JSON.stringify({ type: 'error', message: 'Failed to reconnect to Gemini' }));
       return;
     }
 
-    // Log non-audio messages for debugging
-    if (!msg.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
-      console.log('[live-relay] Gemini msg:', JSON.stringify(msg).slice(0, 300));
-    }
+    geminiWs.addEventListener('open', () => {
+      console.log(`[live-relay] Fallback Gemini WS connected for session=${sessionId}`);
+      geminiWs.send(JSON.stringify(buildSetupMessage(null)));
+    });
 
-    // Setup complete acknowledgement
-    if (msg.setupComplete) {
-      setupComplete = true;
-      clientWs.send(JSON.stringify({ type: 'ready' }));
-      return;
-    }
+    // Re-attach the same message and lifecycle handlers
+    attachGeminiHandlers(geminiWs);
 
-    // Session resumption token — persist to Firestore + forward to client
-    if (msg.sessionResumptionUpdate?.handle) {
-      const handle = msg.sessionResumptionUpdate.handle;
-      clientWs.send(
-        JSON.stringify({
-          type: 'resumption_token',
-          token: handle,
-        })
-      );
-      saveResumptionToken(sessionId, handle).catch((err) =>
-        console.warn(`[live-relay] Failed to persist resumption token:`, err.message),
-      );
-    }
+    clientWs.send(JSON.stringify({ type: 'resumption_expired' }));
+  }
 
-    // Go away signal
-    if (msg.goAway) {
-      clientWs.send(JSON.stringify({ type: 'go_away' }));
-      return;
-    }
+  /**
+   * Attach message, close, and error handlers to a Gemini WebSocket.
+   * Extracted so both the initial and fallback connections share the same logic.
+   */
+  function attachGeminiHandlers(ws) {
+    ws.addEventListener('message', (event) => {
+      /** @type {string} */
+      const raw = typeof event.data === 'string' ? event.data : event.data.toString();
 
-    // Server content (audio or interruption)
-    if (msg.serverContent) {
-      // Interruption
-      if (msg.serverContent.interrupted) {
-        clientWs.send(JSON.stringify({ type: 'interrupted' }));
+      let msg;
+      try {
+        msg = JSON.parse(raw);
+      } catch {
+        console.error('[live-relay] Failed to parse Gemini message:', raw.slice(0, 500));
         return;
       }
 
-      // Turn complete — historian finished speaking
-      if (msg.serverContent.turnComplete) {
-        pendingTranscript = '';
-        clientWs.send(JSON.stringify({ type: 'turn_complete' }));
+      // Log non-audio messages for debugging
+      if (!msg.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
+        console.log('[live-relay] Gemini msg:', JSON.stringify(msg).slice(0, 300));
       }
 
-      // Audio parts
-      const parts = msg.serverContent.modelTurn?.parts;
-      if (Array.isArray(parts)) {
-        for (const part of parts) {
-          if (part.inlineData?.data) {
-            clientWs.send(
-              JSON.stringify({
-                type: 'audio',
-                data: part.inlineData.data,
-              })
-            );
-          }
-        }
+      // Setup complete acknowledgement
+      if (msg.setupComplete) {
+        setupComplete = true;
+        if (setupTimeoutId) { clearTimeout(setupTimeoutId); setupTimeoutId = null; }
+        clientWs.send(JSON.stringify({ type: 'ready' }));
+        return;
       }
 
-      // Output transcript (historian's own speech -> text captions)
-      if (msg.serverContent?.outputTranscription?.text) {
+      // Session resumption token — persist to Firestore + forward to client
+      if (msg.sessionResumptionUpdate?.handle) {
+        const handle = msg.sessionResumptionUpdate.handle;
         clientWs.send(
           JSON.stringify({
-            type: 'caption',
-            text: msg.serverContent.outputTranscription.text,
+            type: 'resumption_token',
+            token: handle,
           })
+        );
+        saveResumptionToken(sessionId, handle).catch((err) =>
+          console.warn(`[live-relay] Failed to persist resumption token:`, err.message),
         );
       }
 
-      // Input transcript (user speech -> text)
-      // Gemini sends incremental fragments; accumulate into a running sentence.
-      if (msg.serverContent?.inputTranscription?.text) {
-        const fragment = msg.serverContent.inputTranscription.text;
+      // Go away signal
+      if (msg.goAway) {
+        clientWs.send(JSON.stringify({ type: 'go_away' }));
+        return;
+      }
 
-        // Skip noise markers
-        if (fragment.trim() === '<noise>' || fragment.trim().length < 1) {
+      // Server content (audio or interruption)
+      if (msg.serverContent) {
+        // Interruption
+        if (msg.serverContent.interrupted) {
+          clientWs.send(JSON.stringify({ type: 'interrupted' }));
           return;
         }
 
-        pendingTranscript += fragment;
-        const transcript = pendingTranscript.trim();
-
-        if (!transcript || transcript.length < 2) return;
-
-        // Forward accumulated transcript to the frontend.
-        clientWs.send(JSON.stringify({ type: 'transcript', text: transcript }));
-
-        // RAG injection: for substantive questions (>15 chars), retrieve relevant
-        // document passages and inject them upstream before the historian responds.
-        if (transcript.length > 15 && geminiWs.readyState === WebSocket.OPEN) {
-          // Debounce: Gemini Live streams partial transcripts; only fire on the final one
-          const existing = transcriptDebounceTimers.get(sessionId);
-          if (existing) clearTimeout(existing);
-          const timer = setTimeout(() => {
-            transcriptDebounceTimers.delete(sessionId);
-            retrieveContext(sessionId, transcript).then(contextText => {
-              if (!contextText || geminiWs.readyState !== WebSocket.OPEN) return;
-              geminiWs.send(JSON.stringify({
-                clientContent: {
-                  turns: [{
-                    role: 'user',
-                    parts: [{ text: `[System: Retrieved document context]\n${contextText}` }],
-                  }],
-                  turnComplete: false,
-                },
-              }));
-            }).catch(() => {});
-          }, 300);
-          transcriptDebounceTimers.set(sessionId, timer);
+        // Turn complete — historian finished speaking
+        if (msg.serverContent.turnComplete) {
+          pendingTranscript = '';
+          clientWs.send(JSON.stringify({ type: 'turn_complete' }));
         }
 
-        // Fire-and-forget live illustration
-        maybeGenerateIllustration(sessionId, transcript, clientWs);
+        // Audio parts
+        const parts = msg.serverContent.modelTurn?.parts;
+        if (Array.isArray(parts)) {
+          for (const part of parts) {
+            if (part.inlineData?.data) {
+              clientWs.send(
+                JSON.stringify({
+                  type: 'audio',
+                  data: part.inlineData.data,
+                })
+              );
+            }
+          }
+        }
+
+        // Output transcript (historian's own speech -> text captions)
+        if (msg.serverContent?.outputTranscription?.text) {
+          clientWs.send(
+            JSON.stringify({
+              type: 'caption',
+              text: msg.serverContent.outputTranscription.text,
+            })
+          );
+        }
+
+        // Input transcript (user speech -> text)
+        // Gemini sends incremental fragments; accumulate into a running sentence.
+        if (msg.serverContent?.inputTranscription?.text) {
+          const fragment = msg.serverContent.inputTranscription.text;
+
+          // Skip noise markers
+          if (fragment.trim() === '<noise>' || fragment.trim().length < 1) {
+            return;
+          }
+
+          pendingTranscript += fragment;
+          const transcript = pendingTranscript.trim();
+
+          if (!transcript || transcript.length < 2) return;
+
+          // Forward accumulated transcript to the frontend.
+          clientWs.send(JSON.stringify({ type: 'transcript', text: transcript }));
+
+          // RAG injection: for substantive questions (>15 chars), retrieve relevant
+          // document passages and inject them upstream before the historian responds.
+          if (transcript.length > 15 && geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+            // Debounce: Gemini Live streams partial transcripts; only fire on the final one
+            const existing = transcriptDebounceTimers.get(sessionId);
+            if (existing) clearTimeout(existing);
+            const timer = setTimeout(() => {
+              transcriptDebounceTimers.delete(sessionId);
+              retrieveContext(sessionId, transcript).then(contextText => {
+                if (!contextText || !geminiWs || geminiWs.readyState !== WebSocket.OPEN) return;
+                geminiWs.send(JSON.stringify({
+                  clientContent: {
+                    turns: [{
+                      role: 'user',
+                      parts: [{ text: `[System: Retrieved document context]\n${contextText}` }],
+                    }],
+                    turnComplete: false,
+                  },
+                }));
+              }).catch(() => {});
+            }, 300);
+            transcriptDebounceTimers.set(sessionId, timer);
+          }
+
+          // Fire-and-forget live illustration
+          maybeGenerateIllustration(sessionId, transcript, clientWs);
+        }
       }
+    });
+
+    ws.addEventListener('close', (event) => {
+      console.log(
+        `[live-relay] Gemini WS closed session=${sessionId} code=${event.code} reason=${event.reason}`
+      );
+      if (clientWs.readyState === WebSocket.OPEN) {
+        // Don't send error for normal closure or token-expired retry
+        if (event.code !== 1000) {
+          clientWs.send(
+            JSON.stringify({ type: 'error', message: `Gemini connection closed (${event.code})` })
+          );
+        }
+      }
+    });
+
+    ws.addEventListener('error', (err) => {
+      console.error(`[live-relay] Gemini WS error session=${sessionId}:`, err.message || err);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({ type: 'error', message: 'Upstream connection error' }));
+      }
+    });
+  }
+
+  // ── 3. Gemini WS opened: send BidiGenerateContentSetup ───────
+  geminiWs.addEventListener('open', () => {
+    console.log(`[live-relay] Gemini WS connected for session=${sessionId}`);
+    geminiWs.send(JSON.stringify(buildSetupMessage(resumptionToken)));
+
+    // If we sent a resumption token, set a timeout — if setupComplete doesn't
+    // arrive within 5s, the token is likely expired. Retry without it.
+    if (resumptionToken) {
+      setupTimeoutId = setTimeout(() => {
+        if (!setupComplete) {
+          retryWithoutToken();
+        }
+      }, 5000);
     }
   });
+
+  // Attach message, close, error handlers to the initial Gemini connection
+  attachGeminiHandlers(geminiWs);
 
   // ── 5. Handle messages FROM client → relay to Gemini ──────────
   clientWs.addEventListener('message', (event) => {
@@ -596,34 +667,13 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
     console.log(
       `[live-relay] Client disconnected session=${sessionId} code=${event.code}`
     );
+    if (setupTimeoutId) { clearTimeout(setupTimeoutId); setupTimeoutId = null; }
     if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
       geminiWs.close(1000, 'client disconnected');
     }
     const pendingTimer = transcriptDebounceTimers.get(sessionId);
     if (pendingTimer) { clearTimeout(pendingTimer); transcriptDebounceTimers.delete(sessionId); }
     lastIllustrationTime.delete(sessionId);
-  });
-
-  /** Close client when Gemini disconnects unexpectedly. */
-  geminiWs.addEventListener('close', (event) => {
-    console.log(
-      `[live-relay] Gemini WS closed session=${sessionId} code=${event.code} reason=${event.reason}`
-    );
-    if (clientWs.readyState === WebSocket.OPEN) {
-      // Don't send error for normal closure
-      if (event.code !== 1000) {
-        clientWs.send(
-          JSON.stringify({ type: 'error', message: `Gemini connection closed (${event.code})` })
-        );
-      }
-    }
-  });
-
-  geminiWs.addEventListener('error', (err) => {
-    console.error(`[live-relay] Gemini WS error session=${sessionId}:`, err.message || err);
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(JSON.stringify({ type: 'error', message: 'Upstream connection error' }));
-    }
   });
 
   clientWs.addEventListener('error', (err) => {
