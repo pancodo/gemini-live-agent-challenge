@@ -1,6 +1,7 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useVoiceStore } from '../../store/voiceStore';
+import { HistorianAvatar } from '../voice/HistorianAvatar';
 import type { VoiceState } from '../../types';
 
 // ── Props ────────────────────────────────────────────────────────
@@ -102,8 +103,8 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
           r="3"
           fill={active ? 'var(--gold)' : 'var(--muted)'}
           fillOpacity={active ? 0.9 : 0.4}
-          animate={active && !reducedMotion ? { r: [3, 3.8, 3], fillOpacity: [0.9, 0.5, 0.9] } : {}}
-          transition={active ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : {}}
+          animate={active && !reducedMotion ? { r: [3, 3.8, 3], fillOpacity: [0.9, 0.5, 0.9] } : { r: 3, fillOpacity: active ? 0.9 : 0.4 }}
+          transition={active ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
         />
 
         {/* Cardinal arrowheads */}
@@ -157,6 +158,31 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Avatar with Emblem Fallback ───────────────────────────────────
+
+function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; voiceState: VoiceState }) {
+  const [avatarReady, setAvatarReady] = useState(false);
+  const showEmblem = !active || !avatarReady;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
+      {/* Live2D Avatar — loads lazily when voice becomes active */}
+      <HistorianAvatar
+        size={160}
+        active={active}
+        onLoad={() => setAvatarReady(true)}
+      />
+
+      {/* Emblem fallback — shows when avatar isn't loaded yet */}
+      {showEmblem && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 1 }}>
+          <HistorianEmblem active={active} voiceState={voiceState} />
+        </div>
+      )}
     </div>
   );
 }
@@ -316,8 +342,8 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
           </div>
         </div>
 
-        {/* Emblem */}
-        <HistorianEmblem active={active} voiceState={voiceState} />
+        {/* Avatar / Emblem */}
+        <HistorianAvatarWithFallback active={active} voiceState={voiceState} />
 
         {/* Voice status message / live caption */}
         <motion.p
