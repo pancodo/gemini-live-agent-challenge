@@ -450,26 +450,37 @@ async def _write_chunks_to_firestore(
     db: firestore.AsyncClient,
     chunks: list[ChunkRecord],
 ) -> None:
-    """Persist all chunks to Firestore in a single batched write.
-
-    Each chunk is stored at
-    ``/sessions/{session_id}/chunks/{chunk_id}``.
-
-    Args:
-        db: Async Firestore client.
-        chunks: Fully-populated chunk records (with summaries).
-    """
-    batch = db.batch()
-    for chunk in chunks:
-        ref = (
-            db.collection("sessions")
-            .document(chunk.session_id)
-            .collection("chunks")
-            .document(chunk.chunk_id)
-        )
-        batch.set(ref, chunk.model_dump())
-    await batch.commit()
-    logger.info("Wrote %d chunks to Firestore", len(chunks))
+    """Persist chunks to Firestore in batches of 500 (Firestore limit)."""
+    batches = list(_chunked(chunks, 500))
+    if not batches:
+        return
+    if len(batches) == 1:
+        batch = db.batch()
+        for chunk in batches[0]:
+            ref = (
+                db.collection("sessions")
+                .document(chunk.session_id)
+                .collection("chunks")
+                .document(chunk.chunk_id)
+            )
+            batch.set(ref, chunk.model_dump())
+        await batch.commit()
+        logger.info("Wrote %d chunks to Firestore (1 batch)", len(chunks))
+    else:
+        t0 = time.monotonic()
+        for i, batch_chunks in enumerate(batches, 1):
+            batch = db.batch()
+            for chunk in batch_chunks:
+                ref = (
+                    db.collection("sessions")
+                    .document(chunk.session_id)
+                    .collection("chunks")
+                    .document(chunk.chunk_id)
+                )
+                batch.set(ref, chunk.model_dump())
+            await batch.commit()
+            logger.info("Chunk batch %d/%d committed (%d ops)", i, len(batches), len(batch_chunks))
+        logger.info("Wrote %d chunks in %d batches (%.2fs)", len(chunks), len(batches), time.monotonic() - t0)
 
 
 async def _write_scene_briefs_to_firestore(
@@ -562,11 +573,7 @@ async def _write_embeddings_to_firestore(
     db: firestore.AsyncClient,
     chunks: list[ChunkRecord],
 ) -> None:
-    """Write the ``embedding`` VectorValue field to existing chunk documents.
-
-    Uses ``batch.update()`` (not set) so it merges with the already-written
-    chunk fields rather than overwriting them.
-    """
+    """Write Vector embeddings to Firestore in batches of 500."""
     from google.cloud.firestore_v1.vector import Vector  # type: ignore[import]
 
     to_write = [c for c in chunks if c.embedding is not None]
@@ -574,17 +581,35 @@ async def _write_embeddings_to_firestore(
         logger.warning("No embeddings to write — all chunks failed embedding step")
         return
 
-    batch = db.batch()
-    for chunk in to_write:
-        ref = (
-            db.collection("sessions")
-            .document(chunk.session_id)
-            .collection("chunks")
-            .document(chunk.chunk_id)
-        )
-        batch.update(ref, {"embedding": Vector(chunk.embedding)})
-    await batch.commit()
-    logger.info("Wrote embeddings for %d/%d chunks", len(to_write), len(chunks))
+    batches = list(_chunked(to_write, 500))
+    if len(batches) == 1:
+        batch = db.batch()
+        for chunk in batches[0]:
+            ref = (
+                db.collection("sessions")
+                .document(chunk.session_id)
+                .collection("chunks")
+                .document(chunk.chunk_id)
+            )
+            batch.update(ref, {"embedding": Vector(chunk.embedding)})
+        await batch.commit()
+        logger.info("Wrote embeddings for %d/%d chunks (1 batch)", len(to_write), len(chunks))
+    else:
+        t0 = time.monotonic()
+        for i, batch_chunks in enumerate(batches, 1):
+            batch = db.batch()
+            for chunk in batch_chunks:
+                ref = (
+                    db.collection("sessions")
+                    .document(chunk.session_id)
+                    .collection("chunks")
+                    .document(chunk.chunk_id)
+                )
+                batch.update(ref, {"embedding": Vector(chunk.embedding)})
+            await batch.commit()
+            logger.info("Embedding batch %d/%d committed (%d ops)", i, len(batches), len(batch_chunks))
+        logger.info("Wrote embeddings for %d/%d chunks in %d batches (%.2fs)",
+                    len(to_write), len(chunks), len(batches), time.monotonic() - t0)
 
 
 async def _embed_and_write_background(
