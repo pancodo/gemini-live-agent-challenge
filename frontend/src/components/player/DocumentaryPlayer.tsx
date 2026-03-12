@@ -186,6 +186,9 @@ export function DocumentaryPlayer() {
   // ── Keyboard navigation ──────────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+
       if (e.key === 'ArrowLeft' && hasPrev) {
         navigateSegment('prev');
       } else if (e.key === 'ArrowRight' && hasNext) {
