@@ -398,9 +398,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         },
       },
     };
-    if (token) {
-      msg.setup.sessionResumption = { handle: token };
-    }
+    // Always request resumption support so Gemini sends tokens.
+    // When reconnecting, include the handle to resume the session.
+    msg.setup.sessionResumption = token ? { handle: token } : {};
     return msg;
   }
 
