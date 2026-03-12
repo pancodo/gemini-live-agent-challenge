@@ -85,8 +85,8 @@ const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
     },
     geo: {
       segmentId: 'seg-3',
-      center: [20.0, -30.0],
-      zoom: 2,
+      center: [25.0, 10.0],
+      zoom: 1.8,
       events: [
         { name: 'Lisbon', lat: 38.7223, lng: -9.1393, type: 'city', era: '1498', description: 'Vasco da Gama sailed from here' },
         { name: 'Seville', lat: 37.3891, lng: -5.9845, type: 'city', era: '1492', description: "Columbus's port of departure" },
