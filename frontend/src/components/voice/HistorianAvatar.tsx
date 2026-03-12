@@ -3,8 +3,18 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useLive2DModel } from '../../hooks/useLive2DModel';
 import { useLipSync } from '../../hooks/useLipSync';
 import { useVoiceStore } from '../../store/voiceStore';
+import type { VoiceState } from '../../types';
 
 const MODEL_PATH = '/models/aldric/chitose.model3.json';
+
+/** Map voice states to Chitose expression names */
+const EXPRESSION_MAP: Partial<Record<VoiceState, string>> = {
+  idle: 'Normal.exp3.json',
+  listening: 'Smile.exp3.json',
+  historian_speaking: 'Normal.exp3.json',
+  interrupted: 'Surprised.exp3.json',
+  reconnecting: 'Sad.exp3.json',
+};
 
 interface HistorianAvatarProps {
   /** Canvas size in CSS pixels (square) */
@@ -26,6 +36,7 @@ interface HistorianAvatarProps {
 export function HistorianAvatar({ size, className, active = false, onLoad }: HistorianAvatarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const analyserNode = useVoiceStore((s) => s.analyserNode);
+  const voiceState = useVoiceStore((s) => s.state);
   const reducedMotion = useReducedMotion();
 
   const { model, isLoaded, error } = useLive2DModel({
@@ -40,6 +51,22 @@ export function HistorianAvatar({ size, className, active = false, onLoad }: His
     model,
     analyserNode,
   });
+
+  // Start idle motion when model loads — library auto-loops after first trigger
+  useEffect(() => {
+    if (!model || !isLoaded) return;
+    try { model.motion('Idle', 0); } catch { /* motion not ready */ }
+  }, [model, isLoaded]);
+
+  // Map voice state to facial expressions
+  useEffect(() => {
+    if (!model || !isLoaded) return;
+    if (!model.internalModel?.motionManager?.expressionManager) return;
+    const expr = EXPRESSION_MAP[voiceState];
+    if (expr) {
+      try { model.expression(expr); } catch { /* expression not ready */ }
+    }
+  }, [model, isLoaded, voiceState]);
 
   // Notify parent when model loads successfully
   useEffect(() => {
