@@ -360,14 +360,19 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
                 voiceName: 'Puck',
               },
             },
+            languageCode: 'en-US',
           },
         },
         systemInstruction: {
-          parts: [{ text: systemText }],
+          parts: [{ text: `${systemText}\n\nIMPORTANT: The user will speak in English only. All transcription and responses must be in English. If you detect non-English speech or noise, treat it as background noise and do not respond. RESPOND IN ENGLISH AT ALL TIMES.` }],
         },
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
+            startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+            endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+            prefixPaddingMs: 40,
+            silenceDurationMs: 500,
           },
         },
         inputAudioTranscription: {},
