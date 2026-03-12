@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../store/playerStore';
+import { useVoiceStore } from '../store/voiceStore';
 
 // ── Wire protocol types ────────────────────────────────────────
 type RelayMessage =
@@ -162,6 +163,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
 
         case 'transcript':
           setLastUserTranscript(msg.text);
+          useVoiceStore.getState().setUserTranscript(msg.text);
           break;
 
         case 'live_illustration': {
