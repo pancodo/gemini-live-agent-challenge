@@ -27,7 +27,6 @@ function TimelineMapInner({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const pinTimeoutIds = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const popupRef = useRef<maplibregl.Popup | null>(null);
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
   const geoEpochRef = useRef(0);
   const mapReadyRef = useRef(false);
@@ -74,10 +73,11 @@ function TimelineMapInner({
   const clearMarkers = useCallback(() => {
     for (const id of pinTimeoutIds.current) clearTimeout(id);
     pinTimeoutIds.current = [];
-    for (const m of markersRef.current) m.remove();
+    for (const m of markersRef.current) {
+      m.getPopup()?.remove();
+      m.remove();
+    }
     markersRef.current = [];
-    popupRef.current?.remove();
-    popupRef.current = null;
   }, []);
 
   const clearRoutes = useCallback(() => {
@@ -97,32 +97,16 @@ function TimelineMapInner({
     }
   }, []);
 
-  // ── Show popup at pin location ────────────────────────────
-  const showPopup = useCallback((event: GeoEvent) => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    popupRef.current?.remove();
-
+  /** Build popup HTML for a geo event */
+  const buildPopupHtml = useCallback((event: GeoEvent) => {
     const era = event.era ? `<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px">${escapeHtml(event.era)}</span>` : '';
     const desc = event.description ? `<div style="font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px">${escapeHtml(event.description)}</div>` : '';
-
-    const popup = new maplibregl.Popup({
-      closeButton: false,
-      closeOnClick: true,
-      offset: 14,
-      className: 'timeline-map-popup',
-    })
-      .setLngLat([event.lng, event.lat])
-      .setHTML(`
-        <div style="font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em">
-          ${escapeHtml(event.name)}${era}
-        </div>
-        ${desc}
-      `)
-      .addTo(map);
-
-    popupRef.current = popup;
+    return `
+      <div style="font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em">
+        ${escapeHtml(event.name)}${era}
+      </div>
+      ${desc}
+    `;
   }, []);
 
   // ── Create a pin DOM element ──────────────────────────────
@@ -190,15 +174,21 @@ function TimelineMapInner({
       `;
       el.appendChild(hitArea);
 
+      // Store marker ref on the element so hover can toggle its popup
       hitArea.addEventListener('mouseenter', () => {
-        showPopup(event);
+        const marker = (el as HTMLElement & { _marker?: maplibregl.Marker })._marker;
+        if (marker && !marker.getPopup()?.isOpen()) {
+          marker.togglePopup();
+        }
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.4)`;
         el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
       });
 
       hitArea.addEventListener('mouseleave', () => {
-        popupRef.current?.remove();
-        popupRef.current = null;
+        const marker = (el as HTMLElement & { _marker?: maplibregl.Marker })._marker;
+        if (marker?.getPopup()?.isOpen()) {
+          marker.togglePopup();
+        }
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1)`;
         el.style.boxShadow = `0 0 16px ${color}, 0 0 32px ${color}80`;
       });
@@ -210,7 +200,7 @@ function TimelineMapInner({
 
       return el;
     },
-    [onPinClick, showPopup],
+    [onPinClick],
   );
 
   const addRoute = useCallback((route: GeoRoute, index: number) => {
@@ -280,9 +270,21 @@ function TimelineMapInner({
         for (let i = 0; i < geo.events.length; i++) {
           const event = geo.events[i];
           const el = createPinElement(event, reducedMotion ? 0 : i);
+
+          const popup = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+            className: 'timeline-map-popup',
+          }).setHTML(buildPopupHtml(event));
+
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat([event.lng, event.lat])
+            .setPopup(popup)
             .addTo(map);
+
+          // Store marker ref on element so hover handlers can access it
+          (el as HTMLElement & { _marker?: maplibregl.Marker })._marker = marker;
           markersRef.current.push(marker);
         }
 
@@ -308,7 +310,7 @@ function TimelineMapInner({
     } else {
       map.once('load', proceed);
     }
-  }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute]);
+  }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute, buildPopupHtml]);
 
   return (
     <div className="relative w-full h-full">
