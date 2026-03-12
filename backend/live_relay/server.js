@@ -344,6 +344,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
   /** Whether we have received setupComplete from Gemini. */
   let setupComplete = false;
 
+  /** Accumulates incremental input transcription fragments into full sentences. */
+  let pendingTranscript = '';
+
   // ── 3. Gemini WS opened: send BidiGenerateContentSetup ───────
   geminiWs.addEventListener('open', () => {
     console.log(`[live-relay] Gemini WS connected for session=${sessionId}`);
@@ -376,6 +379,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
           },
         },
         inputAudioTranscription: {},
+        outputAudioTranscription: {},
         contextWindowCompression: {
           slidingWindow: {},
         },
@@ -443,6 +447,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
 
       // Turn complete — historian finished speaking
       if (msg.serverContent.turnComplete) {
+        pendingTranscript = '';
         clientWs.send(JSON.stringify({ type: 'turn_complete' }));
       }
 
@@ -472,15 +477,21 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       }
 
       // Input transcript (user speech -> text)
+      // Gemini sends incremental fragments; accumulate into a running sentence.
       if (msg.serverContent?.inputTranscription?.text) {
-        const transcript = msg.serverContent.inputTranscription.text.trim();
+        const fragment = msg.serverContent.inputTranscription.text;
 
-        // Skip noise markers and single-char garbage from VAD
-        if (!transcript || transcript === '<noise>' || transcript.length < 2) {
+        // Skip noise markers
+        if (fragment.trim() === '<noise>' || fragment.trim().length < 1) {
           return;
         }
 
-        // Forward transcript to the frontend (branch detection, captions).
+        pendingTranscript += fragment;
+        const transcript = pendingTranscript.trim();
+
+        if (!transcript || transcript.length < 2) return;
+
+        // Forward accumulated transcript to the frontend.
         clientWs.send(JSON.stringify({ type: 'transcript', text: transcript }));
 
         // RAG injection: for substantive questions (>15 chars), retrieve relevant
