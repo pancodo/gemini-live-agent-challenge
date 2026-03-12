@@ -239,6 +239,12 @@ function DevSeedBar() {
       >
         Dev → Player
       </button>
+      <button
+        onClick={() => navigate('/test-map')}
+        className="px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.1em] bg-[var(--bg4)] border border-[var(--teal)]/40 text-[var(--teal)] rounded hover:bg-[var(--teal)]/10 transition-colors"
+      >
+        Dev → Map
+      </button>
     </div>
   );
 }
