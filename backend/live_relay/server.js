@@ -322,10 +322,10 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       `[live-relay] System instruction ready (${systemText.length} chars) for session=${sessionId}`
     );
   } catch (err) {
-    console.error(`[live-relay] Failed to fetch context for session=${sessionId}:`, err);
-    clientWs.send(JSON.stringify({ type: 'error', message: 'Failed to load documentary context' }));
-    clientWs.close(1011, 'context fetch failed');
-    return;
+    console.warn(`[live-relay] Failed to fetch context for session=${sessionId}, using fallback:`, err.message);
+    // Fallback: use default persona prompt without documentary context
+    const fallbackPersona = PERSONA_PROMPTS.professor || '';
+    systemText = fallbackPersona || 'You are a knowledgeable historian. Greet the user and offer to discuss any historical topic.';
   }
 
   // ── 2. Open upstream Gemini WebSocket ─────────────────────────
@@ -344,6 +344,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
   /** Whether we have received setupComplete from Gemini. */
   let setupComplete = false;
 
+  /** Accumulates incremental input transcription fragments into full sentences. */
+  let pendingTranscript = '';
+
   // ── 3. Gemini WS opened: send BidiGenerateContentSetup ───────
   geminiWs.addEventListener('open', () => {
     console.log(`[live-relay] Gemini WS connected for session=${sessionId}`);
@@ -354,23 +357,29 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         model: `models/${GEMINI_MODEL}`,
         generationConfig: {
           responseModalities: ['AUDIO'],
-          outputAudioTranscription: {},
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
                 voiceName: 'Puck',
               },
             },
+            languageCode: 'en-US',
           },
         },
         systemInstruction: {
-          parts: [{ text: systemText }],
+          parts: [{ text: `${systemText}\n\nIMPORTANT: The user will speak in English only. All transcription and responses must be in English. If you detect non-English speech or noise, treat it as background noise and do not respond. RESPOND IN ENGLISH AT ALL TIMES.` }],
         },
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
+            startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+            endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+            prefixPaddingMs: 40,
+            silenceDurationMs: 500,
           },
         },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
         contextWindowCompression: {
           slidingWindow: {},
         },
@@ -396,8 +405,13 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
     try {
       msg = JSON.parse(raw);
     } catch {
-      console.error('[live-relay] Failed to parse Gemini message');
+      console.error('[live-relay] Failed to parse Gemini message:', raw.slice(0, 500));
       return;
+    }
+
+    // Log non-audio messages for debugging
+    if (!msg.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
+      console.log('[live-relay] Gemini msg:', JSON.stringify(msg).slice(0, 300));
     }
 
     // Setup complete acknowledgement
@@ -431,6 +445,12 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         return;
       }
 
+      // Turn complete — historian finished speaking
+      if (msg.serverContent.turnComplete) {
+        pendingTranscript = '';
+        clientWs.send(JSON.stringify({ type: 'turn_complete' }));
+      }
+
       // Audio parts
       const parts = msg.serverContent.modelTurn?.parts;
       if (Array.isArray(parts)) {
@@ -457,10 +477,21 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       }
 
       // Input transcript (user speech -> text)
-      if (msg.serverContent?.inputTranscript?.text) {
-        const transcript = msg.serverContent.inputTranscript.text;
+      // Gemini sends incremental fragments; accumulate into a running sentence.
+      if (msg.serverContent?.inputTranscription?.text) {
+        const fragment = msg.serverContent.inputTranscription.text;
 
-        // Always forward transcript to the frontend (branch detection, captions).
+        // Skip noise markers
+        if (fragment.trim() === '<noise>' || fragment.trim().length < 1) {
+          return;
+        }
+
+        pendingTranscript += fragment;
+        const transcript = pendingTranscript.trim();
+
+        if (!transcript || transcript.length < 2) return;
+
+        // Forward accumulated transcript to the frontend.
         clientWs.send(JSON.stringify({ type: 'transcript', text: transcript }));
 
         // RAG injection: for substantive questions (>15 chars), retrieve relevant
@@ -520,6 +551,21 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
           },
         })
       );
+    } else if (msg.type === 'text' && msg.text) {
+      // Forward text message to Gemini as clientContent
+      geminiWs.send(
+        JSON.stringify({
+          clientContent: {
+            turns: [
+              {
+                role: 'user',
+                parts: [{ text: msg.text }],
+              },
+            ],
+            turnComplete: true,
+          },
+        })
+      );
     }
   });
 
@@ -541,7 +587,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
   /** Close client when Gemini disconnects unexpectedly. */
   geminiWs.addEventListener('close', (event) => {
     console.log(
-      `[live-relay] Gemini WS closed session=${sessionId} code=${event.code}`
+      `[live-relay] Gemini WS closed session=${sessionId} code=${event.code} reason=${event.reason}`
     );
     if (clientWs.readyState === WebSocket.OPEN) {
       // Don't send error for normal closure

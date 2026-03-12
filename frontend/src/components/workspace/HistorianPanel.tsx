@@ -241,6 +241,9 @@ function ConsultButton({ onClick }: { onClick?: () => void }) {
 
 export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
   const voiceState = useVoiceStore((s) => s.state);
+  const beginConsultation = useVoiceStore((s) => s.beginConsultation);
+  const caption = useVoiceStore((s) => s.caption);
+  const userTranscript = useVoiceStore((s) => s.userTranscript);
   const reducedMotion = useReducedMotion();
   const active = isVoiceActive(voiceState);
   const isIdle = voiceState === 'idle';
@@ -315,16 +318,20 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
         {/* Emblem */}
         <HistorianEmblem active={active} voiceState={voiceState} />
 
-        {/* Voice status message */}
+        {/* Voice status message / live caption */}
         <motion.p
-          key={voiceState}
+          key={voiceState === 'historian_speaking' && caption ? caption.slice(-60) : voiceState}
           initial={reducedMotion ? false : { opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="font-serif text-[14px] italic leading-relaxed text-center"
+          className="font-serif text-[14px] italic leading-relaxed text-center max-h-[4.5em] overflow-hidden"
           style={{ color: active ? 'var(--text)' : 'var(--muted)' }}
         >
-          &ldquo;{VOICE_MESSAGES[voiceState]}&rdquo;
+          &ldquo;{voiceState === 'historian_speaking' && caption
+            ? caption
+            : voiceState === 'listening' && userTranscript
+              ? userTranscript
+              : VOICE_MESSAGES[voiceState]}&rdquo;
         </motion.p>
 
         {/* CTA button — only in standby */}
@@ -338,7 +345,7 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
             >
-              <ConsultButton onClick={onSpeak} />
+              <ConsultButton onClick={onSpeak ?? beginConsultation ?? undefined} />
               <p className="text-center font-sans text-[9px] uppercase tracking-[0.15em] mt-2" style={{ color: 'var(--muted)', opacity: 0.6 }}>
                 Voice interaction &middot; Speak freely
               </p>

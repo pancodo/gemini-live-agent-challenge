@@ -26,12 +26,13 @@ export function VoiceLayer() {
   const { state, transition, handleInterrupt, reset } = useVoiceState();
   const playback = useAudioPlayback();
 
-  const { sendPCM, connect, disconnect, isConnected } = useGeminiLive({
+  const { sendPCM, sendText, connect, disconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
     onAudioChunk: (pcm: ArrayBuffer) => {
       playback.enqueue(pcm);
       if (useVoiceStore.getState().state !== 'historian_speaking') {
+        useVoiceStore.getState().setUserTranscript(null);
         transition('historian_speaking');
       }
     },
@@ -39,6 +40,15 @@ export function VoiceLayer() {
       playback.stop();
       const { resumeSegmentId, resumeOffset } = useVoiceStore.getState();
       handleInterrupt(resumeSegmentId ?? '', resumeOffset);
+    },
+    onTurnComplete: () => {
+      const currentState = useVoiceStore.getState().state;
+      if (currentState === 'historian_speaking') {
+        transition('idle');
+      }
+    },
+    onCaption: (text: string) => {
+      useVoiceStore.getState().setCaption(text);
     },
     onResumeToken: (token: string) => {
       setResumptionToken(token);
@@ -95,6 +105,30 @@ export function VoiceLayer() {
         break;
     }
   }, [connect, disconnect, capture, playback, transition, reset]);
+
+  // Stable ref for beginConsultation to avoid re-render loops.
+  // The ref always points at the latest closure so callers get fresh state.
+  const speakRef = useRef(() => {});
+  speakRef.current = () => {
+    const currentState = useVoiceStore.getState().state;
+    if (currentState !== 'idle') return;
+
+    connect();
+    void capture.start();
+    transition('listening');
+
+    // Send an initial greeting after a brief delay to allow setup to complete
+    setTimeout(() => {
+      sendText('Hello! Please introduce yourself briefly and tell me about the document I uploaded.');
+    }, 1500);
+  };
+
+  // Register once on mount, clean up on unmount. The stable lambda
+  // delegates to speakRef.current so it always calls the latest closure.
+  useEffect(() => {
+    useVoiceStore.setState({ beginConsultation: () => speakRef.current() });
+    return () => useVoiceStore.setState({ beginConsultation: null });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playbackAnalyser = playback.getAnalyser();
   useAudioVisualSync(playbackAnalyser);

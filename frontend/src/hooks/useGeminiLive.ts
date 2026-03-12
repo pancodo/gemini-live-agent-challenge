@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../store/playerStore';
+import { useVoiceStore } from '../store/voiceStore';
 
 // ── Wire protocol types ────────────────────────────────────────
 type RelayMessage =
   | { type: 'ready' }
   | { type: 'audio'; data: string }
   | { type: 'interrupted' }
+  | { type: 'turn_complete' }
+  | { type: 'caption'; text: string }
   | { type: 'resumption_token'; token: string }
   | { type: 'go_away' }
   | { type: 'transcript'; text: string }
@@ -18,11 +21,14 @@ export interface GeminiLiveConfig {
   resumptionToken: string | null;
   onAudioChunk: (pcm: ArrayBuffer) => void;
   onInterrupted: () => void;
+  onTurnComplete: () => void;
+  onCaption: (text: string) => void;
   onResumeToken: (token: string) => void;
 }
 
 export interface GeminiLiveReturn {
   sendPCM: (chunk: Int16Array) => void;
+  sendText: (text: string) => void;
   connect: () => void;
   disconnect: () => void;
   isConnected: boolean;
@@ -138,6 +144,14 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
           cfg.onInterrupted();
           break;
 
+        case 'turn_complete':
+          cfg.onTurnComplete();
+          break;
+
+        case 'caption':
+          cfg.onCaption(msg.text);
+          break;
+
         case 'resumption_token':
           cfg.onResumeToken(msg.token);
           break;
@@ -149,6 +163,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
 
         case 'transcript':
           setLastUserTranscript(msg.text);
+          useVoiceStore.getState().setUserTranscript(msg.text);
           break;
 
         case 'live_illustration': {
@@ -168,9 +183,14 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
       }
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (event: CloseEvent) => {
       setIsConnected(false);
       isReadyRef.current = false;
+
+      // Auto-reconnect on unexpected closure (not user-initiated 1000)
+      if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnect();
+      }
     });
 
     ws.addEventListener('error', (event) => {
@@ -188,6 +208,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     }
 
     reconnectAttemptsRef.current += 1;
+    const attempt = reconnectAttemptsRef.current;
 
     // Clean up the old socket before reconnecting
     const ws = wsRef.current;
@@ -197,16 +218,19 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     wsRef.current = null;
     isReadyRef.current = false;
 
+    // Exponential backoff: 500ms, 1500ms, 4500ms
+    const delay = RECONNECT_DELAY_MS * Math.pow(3, attempt - 1);
+    console.log(`[useGeminiLive] Reconnecting in ${delay}ms (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})`);
+
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       connect();
-    }, RECONNECT_DELAY_MS);
+    }, delay);
   }, [connect]);
 
   const sendPCM = useCallback((chunk: Int16Array) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !isReadyRef.current) {
-      // Silently drop — mic data before relay is ready is expected
       return;
     }
 
@@ -217,6 +241,15 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     ws.send(payload);
   }, []);
 
+  const sendText = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !isReadyRef.current) {
+      return;
+    }
+
+    ws.send(JSON.stringify({ type: 'text', text }));
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -224,5 +257,5 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     };
   }, [disconnect]);
 
-  return { sendPCM, connect, disconnect, isConnected, lastUserTranscript };
+  return { sendPCM, sendText, connect, disconnect, isConnected, lastUserTranscript };
 }
