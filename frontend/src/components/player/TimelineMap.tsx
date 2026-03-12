@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { Component, useEffect, useRef, useCallback } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { usePlayerStore } from '../../store/playerStore';
@@ -17,7 +18,7 @@ function escapeHtml(str: string): string {
   return el.innerHTML;
 }
 
-export function TimelineMap({
+function TimelineMapInner({
   onPinClick,
 }: {
   onPinClick?: (locationName: string) => void;
@@ -357,5 +358,43 @@ export function TimelineMap({
         }}
       />
     </div>
+  );
+}
+
+/** Error boundary so a MapLibre crash doesn't take down the entire player */
+class TimelineMapBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[TimelineMap] crashed:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="w-full h-full flex items-center justify-center"
+          style={{ background: '#0d0b09', color: 'rgba(232,221,208,0.4)', fontFamily: 'var(--font-sans)', fontSize: 12 }}
+        >
+          Map unavailable
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export function TimelineMap(props: { onPinClick?: (locationName: string) => void }) {
+  return (
+    <TimelineMapBoundary>
+      <TimelineMapInner {...props} />
+    </TimelineMapBoundary>
   );
 }
