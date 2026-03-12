@@ -1,7 +1,7 @@
 """Pydantic v2 request/response models for historian_api."""
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CreateSessionResponse(BaseModel):
@@ -99,7 +99,7 @@ class GroundingSourcesResponse(BaseModel):
 
 class RetrieveRequest(BaseModel):
     query: str
-    top_k: int = 4
+    top_k: int = Field(default=4, ge=1, le=10)
 
 
 class RetrievedChunk(BaseModel):
