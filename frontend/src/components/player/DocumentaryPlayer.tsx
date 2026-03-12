@@ -14,6 +14,7 @@ import { HistorianAvatar } from '../voice/HistorianAvatar';
 import { useSessionStore } from '../../store/sessionStore';
 import { TimelineMap } from './TimelineMap';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
+import { toast } from 'sonner';
 import type { MapViewMode } from '../../types';
 
 /**
@@ -54,6 +55,10 @@ export function DocumentaryPlayer() {
     const send = useVoiceStore.getState().sendTextToHistorian;
     if (send) {
       send(`Tell me more about ${locationName} and its historical significance.`);
+    } else {
+      toast('Connect voice to ask about locations', {
+        description: `Press Space or tap the voice button to ask about ${locationName}.`,
+      });
     }
   }, []);
 
