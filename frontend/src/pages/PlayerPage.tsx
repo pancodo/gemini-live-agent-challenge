@@ -2,7 +2,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { useSessionStore } from '../store/sessionStore';
+import { useResearchStore } from '../store/researchStore';
 import { DocumentaryPlayer } from '../components/player';
+import { getSegments } from '../services/api';
 
 export function PlayerPage() {
   const { segmentId } = useParams<{ segmentId: string }>();
@@ -19,6 +21,20 @@ export function PlayerPage() {
       open(segmentId);
     }
   }, [sessionId, segmentId, open, navigate]);
+
+  // If research store was wiped when WorkspacePage unmounted, re-fetch segments.
+  // Also re-fetch when the specific segment being opened is not in the store yet.
+  useEffect(() => {
+    if (!sessionId) return;
+    const { segments, setSegment } = useResearchStore.getState();
+    const storeEmpty = Object.keys(segments).length === 0;
+    const segmentMissing = segmentId != null && segments[segmentId] == null;
+    if (storeEmpty || segmentMissing) {
+      getSegments(sessionId)
+        .then((segs) => { for (const seg of segs) setSegment(seg.id, seg); })
+        .catch(() => {/* non-fatal */});
+    }
+  }, [sessionId, segmentId]);
 
   return <DocumentaryPlayer />;
 }
