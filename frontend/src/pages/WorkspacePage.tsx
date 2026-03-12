@@ -18,7 +18,7 @@ function ReadyBanner() {
   const triggerIris = usePlayerStore((s) => s.triggerIris);
 
   const readySegments = useMemo(
-    () => Object.values(segments).filter((s) => s.status === 'ready' || s.status === 'complete'),
+    () => Object.values(segments).filter((s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready'),
     [segments],
   );
 
@@ -97,7 +97,7 @@ export function WorkspacePage() {
   useEffect(() => {
     if (playerPrefetched.current) return;
     const hasReady = Object.values(segments).some(
-      (s) => s.status === 'ready' || s.status === 'complete',
+      (s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready',
     );
     if (hasReady) {
       playerPrefetched.current = true;
@@ -128,7 +128,7 @@ export function WorkspacePage() {
     if (status !== 'ready' && status !== 'playing') return;
 
     const readySegment = Object.values(segments).find(
-      (s) => s.status === 'ready' || s.status === 'complete',
+      (s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready',
     );
     if (!readySegment) return;
 
