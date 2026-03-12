@@ -342,7 +342,12 @@ export function TimelineMap({
         }
       `}</style>
 
-      <div ref={containerRef} className="w-full h-full" />
+      <div
+        ref={containerRef}
+        className="w-full h-full"
+        role="img"
+        aria-label="Historical timeline map showing locations and routes for the current segment"
+      />
 
       {/* Vignette overlay */}
       <div
