@@ -25,7 +25,12 @@
 const http = require('node:http');
 const { URL } = require('node:url');
 const { WebSocket, WebSocketServer } = require('ws');
-const { fetchDocumentaryContext, getFirestore } = require('./firestore-context');
+const {
+  fetchDocumentaryContext,
+  getFirestore,
+  saveResumptionToken,
+  loadResumptionToken,
+} = require('./firestore-context');
 const { buildSystemInstruction } = require('./prompt-builder');
 const { PERSONA_PROMPTS } = require('./personas');
 
@@ -309,7 +314,18 @@ httpServer.on('upgrade', (req, socket, head) => {
  * @param {URLSearchParams} params
  */
 wss.on('connection', async (clientWs, _req, sessionId, params) => {
-  const resumptionToken = params.get('token') || null;
+  // Prefer token from query param; fall back to Firestore for page-refresh recovery
+  let resumptionToken = params.get('token') || null;
+  if (!resumptionToken) {
+    try {
+      resumptionToken = await loadResumptionToken(sessionId);
+      if (resumptionToken) {
+        console.log(`[live-relay] Loaded resumption token from Firestore for session=${sessionId}`);
+      }
+    } catch (err) {
+      console.warn(`[live-relay] Failed to load resumption token from Firestore:`, err.message);
+    }
+  }
 
   console.log(`[live-relay] New connection for session=${sessionId}`);
 
@@ -421,13 +437,17 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       return;
     }
 
-    // Session resumption token
+    // Session resumption token — persist to Firestore + forward to client
     if (msg.sessionResumptionUpdate?.handle) {
+      const handle = msg.sessionResumptionUpdate.handle;
       clientWs.send(
         JSON.stringify({
           type: 'resumption_token',
-          token: msg.sessionResumptionUpdate.handle,
+          token: handle,
         })
+      );
+      saveResumptionToken(sessionId, handle).catch((err) =>
+        console.warn(`[live-relay] Failed to persist resumption token:`, err.message),
       );
     }
 
