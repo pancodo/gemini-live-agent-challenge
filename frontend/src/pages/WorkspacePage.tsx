@@ -89,10 +89,8 @@ export function WorkspacePage() {
   useSession(sessionId);
   useSSE(sessionId);
 
-  // Reset research store when leaving the workspace to free memory
-  useEffect(() => {
-    return () => useResearchStore.getState().reset();
-  }, []);
+  // Do not reset the research store on unmount — the player route
+  // reads segments from this store immediately after navigation.
 
   // Prefetch player chunk when first segment becomes ready
   const playerPrefetched = useRef(false);

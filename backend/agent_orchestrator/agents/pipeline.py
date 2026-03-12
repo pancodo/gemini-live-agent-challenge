@@ -59,6 +59,7 @@ from .fact_validator_agent import build_fact_validator_agent
 from .narrative_visual_planner import build_narrative_visual_planner
 from .rate_limiter import GlobalRateLimiter
 from .scene_research_agent import build_scene_research_orchestrator
+from .narrative_director_agent import build_narrative_director_agent
 from .script_agent_orchestrator import build_script_agent_orchestrator
 from .sse_helpers import SSEEmitter
 from .visual_director_orchestrator import build_visual_director_orchestrator
@@ -367,13 +368,14 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 #   7: visual_director_orch     (Phase V / 6)
 
 _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
-    (1, [0]),       # Phase I:     document_analyzer
-    (2, [1, 2]),    # Phase II:    scene_research + aggregator
-    (3, [3]),       # Phase III:   script_orch
-    (3.5, [4]),     # Phase III.5: fact_validator
-    (4, [5]),       # Phase 4.0:   narrative_visual_planner
-    (5, [6]),       # Phase IV:    visual_research_orch
-    (6, [7]),       # Phase V:     visual_director_orch
+    (1,   [0]),     # Phase I:     document_analyzer
+    (2,   [1, 2]),  # Phase II:    scene_research + aggregator
+    (3,   [3]),     # Phase III:   script_orch
+    (3.1, [4]),     # Phase 3.1:   narrative_director (Gemini TEXT+IMAGE interleaved)
+    (3.5, [5]),     # Phase III.5: fact_validator
+    (4,   [6]),     # Phase 4.0:   narrative_visual_planner
+    (5,   [7]),     # Phase IV:    visual_research_orch
+    (6,   [8]),     # Phase V:     visual_director_orch
 ]
 
 
@@ -497,6 +499,9 @@ def build_new_pipeline(
     - Phase I    (DocumentAnalyzerAgent):     OCR -> chunks -> summaries -> scene_briefs
     - Phase II   (SceneResearchOrchestrator): per-scene google_search corroboration
     - Phase III  (ScriptAgentOrchestrator):   script generation + Firestore + SSE
+    - Phase 3.1  (NarrativeDirectorAgent):    Gemini native interleaved output —
+      response_modalities=["TEXT","IMAGE"] generates storyboard frames alongside
+      narration direction in ONE Gemini call. GCS URIs stored in storyboard_images.
     - Phase III.5 (FactValidatorAgent):       hallucination firewall -- cross-references
       narration claims against research evidence before visual production.
     - Phase 4.0  (NarrativeVisualPlanner):    single Gemini Pro call producing a
@@ -532,6 +537,7 @@ def build_new_pipeline(
     )
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     script_orch = build_script_agent_orchestrator(emitter=emitter)
+    narrative_director = build_narrative_director_agent(emitter=emitter)
     fact_validator = build_fact_validator_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
     visual_research_orch = build_visual_research_orchestrator(
@@ -559,9 +565,10 @@ def build_new_pipeline(
             scene_research,                  # [1] Phase II
             _make_aggregator_agent(),        # [2] Phase II (aggregator)
             script_orch,                     # [3] Phase III
-            fact_validator,                  # [4] Phase III.5
-            narrative_visual_planner_orch,   # [5] Phase 4.0
-            visual_research_orch,            # [6] Phase IV
-            visual_director_orch,            # [7] Phase V
+            narrative_director,              # [4] Phase 3.1 — Gemini TEXT+IMAGE interleaved
+            fact_validator,                  # [5] Phase III.5
+            narrative_visual_planner_orch,   # [6] Phase 4.0
+            visual_research_orch,            # [7] Phase IV
+            visual_director_orch,            # [8] Phase V
         ],
     )

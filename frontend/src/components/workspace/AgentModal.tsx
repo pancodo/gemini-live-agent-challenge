@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -218,6 +218,37 @@ function FilterPills({ active, onChange, accepted, rejected }: {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Download Icon Button (appears on image hover)
+// ─────────────────────────────────────────────────────────────
+
+function ImageDownloadButton({ imageUrl, filename }: { imageUrl: string; filename: string }) {
+  const handleDownload = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      aria-label="Download image"
+      className="absolute bottom-2 right-2 z-20 flex items-center justify-center w-7 h-7 rounded-lg bg-black/60 backdrop-blur-sm text-white/80 hover:bg-black/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-auto"
+    >
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M6.5 1v7M3.5 5.5l3 3 3-3M2 10h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // OG Image Zone
 // ─────────────────────────────────────────────────────────────
 
@@ -234,7 +265,7 @@ function OgImageZone({ imageUrl, hostname, isLoading }: {
   const showFallback = !isLoading && (!showImage || imgError);
 
   return (
-    <div className="relative w-full h-[140px] overflow-hidden bg-[var(--bg3)] rounded-t-xl">
+    <div className="group relative w-full h-[140px] overflow-hidden bg-[var(--bg3)] rounded-t-xl">
       {showSkeleton && <div className="absolute inset-0 log-source evaluating" />}
       {showImage && (
         <img
@@ -256,6 +287,9 @@ function OgImageZone({ imageUrl, hostname, isLoading }: {
         </div>
       )}
       <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.22) 100%)' }} />
+      {showImage && imageLoaded && (
+        <ImageDownloadButton imageUrl={imageUrl} filename={`${hostname}-source.jpg`} />
+      )}
     </div>
   );
 }
@@ -543,20 +577,6 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                   transition={{ type: 'spring', stiffness: 300, damping: 32, mass: 0.9 }}
                   className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-[520px] max-w-[95vw] bg-[var(--bg2)] border-l border-[var(--bg4)] shadow-2xl overflow-hidden"
                 >
-                  {/* ── Compact sticky header (appears on scroll) ── */}
-                  <AnimatePresence>
-                    {isCompact && (
-                      <CompactHeader
-                        query={agent?.query ?? ''}
-                        status={agent?.status ?? 'queued'}
-                        isLive={isLive}
-                        activeTab={activeTab}
-                        onTabChange={setActiveTab}
-                        counts={{ sources: evaluatedSources.length, facts: facts.length, log: logs.length }}
-                      />
-                    )}
-                  </AnimatePresence>
-
                   {/* ── Header ── */}
                   <div className="flex flex-col gap-3 px-5 pt-5 pb-3 shrink-0">
                     <div className="flex items-start gap-3">
@@ -597,9 +617,6 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                   {/* Live scanning bar */}
                   <LiveBar isLive={isLive} />
 
-                  {/* Sentinel for sticky header IntersectionObserver */}
-                  <div ref={sentinelRef} className="h-px shrink-0" />
-
                   {/* ── Tab Bar ── */}
                   <div className="px-5 shrink-0">
                     <TabBar
@@ -611,6 +628,22 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
 
                   {/* ── Scrollable Content ── */}
                   <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--bg4) transparent' }}>
+                    {/* ── Compact sticky header (appears on scroll, inside scroll container) ── */}
+                    <AnimatePresence>
+                      {isCompact && (
+                        <CompactHeader
+                          query={agent?.query ?? ''}
+                          status={agent?.status ?? 'queued'}
+                          isLive={isLive}
+                          activeTab={activeTab}
+                          onTabChange={setActiveTab}
+                          counts={{ sources: evaluatedSources.length, facts: facts.length, log: logs.length }}
+                        />
+                      )}
+                    </AnimatePresence>
+
+                    {/* Sentinel for sticky header IntersectionObserver */}
+                    <div ref={sentinelRef} className="h-px" />
                     <div className="px-5 py-4">
                       <VisuallyHidden>
                         <Dialog.Description>

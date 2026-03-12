@@ -84,12 +84,13 @@ export function SourcePanel({ sources }: SourcePanelProps) {
         </button>
       </Collapsible.Trigger>
 
-      <Collapsible.Content>
+      <Collapsible.Content style={{ overflow: 'hidden' }}>
         <motion.ul
           initial="hidden"
           animate="visible"
           variants={listVariants}
           className="space-y-1"
+          style={{ overflow: 'hidden' }}
         >
           {visible.map((src) => {
             const hostname = extractHostname(src.url);

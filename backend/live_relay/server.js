@@ -293,6 +293,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         model: `models/${GEMINI_MODEL}`,
         generationConfig: {
           responseModalities: ['AUDIO'],
+          outputAudioTranscription: {},
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
@@ -382,6 +383,16 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
             );
           }
         }
+      }
+
+      // Output transcript (historian's own speech -> text captions)
+      if (msg.serverContent?.outputTranscription?.text) {
+        clientWs.send(
+          JSON.stringify({
+            type: 'caption',
+            text: msg.serverContent.outputTranscription.text,
+          })
+        );
       }
 
       // Input transcript (user speech -> text)

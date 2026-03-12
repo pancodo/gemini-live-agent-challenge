@@ -347,8 +347,23 @@ body {
   align-items: center;
   gap: 10px;
   margin: 20px 0;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  outline-offset: 2px;
 }
-.phase-divider::before,
+.phase-divider::before {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
+  transform: scaleX(0);
+  transform-origin: center;
+  animation: draw-rule 0.8s ease-out forwards;
+  transition: opacity 0.2s ease;
+}
+/* Trailing rule: sits to the right of the chevron */
 .phase-divider::after {
   content: '';
   flex: 1;
@@ -357,13 +372,30 @@ body {
   transform: scaleX(0);
   transform-origin: center;
   animation: draw-rule 0.8s ease-out forwards;
+  transition: opacity 0.2s ease;
+}
+.phase-divider:hover::before,
+.phase-divider:hover::after {
+  opacity: 0.6;
 }
 .phase-divider-dot {
   width: 4px; height: 4px;
   border-radius: 50%;
   background: var(--gold);
   opacity: 0;
+  flex-shrink: 0;
   animation: dot-appear 0.3s 0.4s ease-out forwards;
+}
+/* Chevron sits to the right of the label text — ensure it renders after the label
+   and before the trailing ::after rule. The chevron SVG in the markup carries
+   `ml-1 shrink-0` utility classes; these CSS rules reinforce correct behaviour. */
+.phase-divider > svg:last-child {
+  flex-shrink: 0;
+  color: var(--gold);
+  transition: color 0.15s ease;
+}
+.phase-divider:hover > svg:last-child {
+  color: var(--gold-d);
 }
 @keyframes draw-rule { to { transform: scaleX(1); } }
 @keyframes dot-appear { to { opacity: 1; } }
@@ -590,12 +622,11 @@ body {
   font-optical-sizing: auto;
 }
 
-/* ── Documentary Player (always dark) ─────────────────── */
+/* ── Documentary Player ────────────────────────────────── */
 .player-root {
-  background: var(--color-bg-deep);
-  color: #e8ddd0;
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-serif);
-  color-scheme: only dark;
 }
 
 /* ── Ambient Color Glow (YouTube ambient mode) ─────────── */
