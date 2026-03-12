@@ -91,6 +91,18 @@ export function useSSE(sessionId: string | null): void {
           addPhaseMessage(event.phase, event.label, event.message);
           break;
 
+        case 'live_illustration': {
+          if ('segmentId' in event && 'imageUrl' in event) {
+            const existingSegment = useResearchStore.getState().segments[event.segmentId];
+            if (existingSegment) {
+              setSegment(event.segmentId, {
+                imageUrls: [...existingSegment.imageUrls, event.imageUrl],
+              });
+            }
+          }
+          break;
+        }
+
         case 'error':
           // If error targets a specific agent, mark it as errored with message
           if (event.agentId) {
