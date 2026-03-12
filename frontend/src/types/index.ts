@@ -63,7 +63,7 @@ export interface AgentState {
 }
 
 // ── Segments ─────────────────────────────────────────────────
-export type SegmentStatus = 'generating' | 'ready' | 'complete' | 'pending';
+export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending';
 
 export interface Segment {
   id: string;
@@ -92,6 +92,7 @@ export type SSEEventType =
   | 'segment_update'
   | 'pipeline_phase'
   | 'stats_update'
+  | 'live_illustration'
   | 'error';
 
 export interface AgentStatusEvent {
@@ -117,16 +118,16 @@ export interface SegmentUpdateEvent {
 
 export interface PipelinePhaseEvent {
   type: 'pipeline_phase';
-  phase: 1 | 2 | 3 | 4;
+  phase: 1 | 2 | 3 | 4 | 5;
   label: string;
   message: string;
 }
 
 export interface StatsUpdateEvent {
   type: 'stats_update';
-  sourcesFound: number;
-  factsVerified: number;
-  segmentsReady: number;
+  sourcesFound?: number;
+  factsVerified?: number;
+  segmentsReady?: number;
 }
 
 export interface AgentSourceEvaluationEvent {
@@ -141,12 +142,27 @@ export interface ErrorEvent {
   agentId?: string;
 }
 
+export interface LiveIllustration {
+  imageUrl: string;
+  caption: string;
+  receivedAt: number;
+}
+
+export interface LiveIllustrationEvent {
+  type: 'live_illustration';
+  segmentId: string;
+  imageUrl: string;
+  caption: string;
+  query: string;
+}
+
 export type SSEEvent =
   | AgentStatusEvent
   | AgentSourceEvaluationEvent
   | SegmentUpdateEvent
   | PipelinePhaseEvent
   | StatsUpdateEvent
+  | LiveIllustrationEvent
   | ErrorEvent;
 
 // ── Documentary Branching ─────────────────────────────────────

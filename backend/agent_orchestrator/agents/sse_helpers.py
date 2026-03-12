@@ -138,40 +138,25 @@ def build_pipeline_phase_event(
     }
 
 
-def build_branch_triggered_event(
+def build_stats_update_event(
     *,
-    question: str,
-    session_id: str,
+    sources_found: int | None = None,
+    facts_verified: int | None = None,
+    segments_ready: int | None = None,
 ) -> dict[str, Any]:
-    """Build a branch_triggered SSE event payload.
+    """Build a stats_update SSE event payload.
 
-    Emitted by the live-relay when it detects that the user's question
-    should spawn a new branch mini-pipeline.
+    Matches the StatsUpdateEvent TypeScript interface. All fields are
+    optional so callers only set the counters they update.
     """
-    return {
-        "type": "branch_triggered",
-        "question": question,
-        "sessionId": session_id,
-    }
-
-
-def build_branch_segment_ready_event(
-    *,
-    segment_id: str,
-    parent_segment_id: str,
-    trigger_question: str,
-) -> dict[str, Any]:
-    """Build a branch_segment_ready SSE event payload.
-
-    Emitted by the branch pipeline once the new branched segment has been
-    written to Firestore and is ready to play.
-    """
-    return {
-        "type": "branch_segment_ready",
-        "segmentId": segment_id,
-        "parentSegmentId": parent_segment_id,
-        "triggerQuestion": trigger_question,
-    }
+    event: dict[str, Any] = {"type": "stats_update"}
+    if sources_found is not None:
+        event["sourcesFound"] = sources_found
+    if facts_verified is not None:
+        event["factsVerified"] = facts_verified
+    if segments_ready is not None:
+        event["segmentsReady"] = segments_ready
+    return event
 
 
 def build_segment_update_event(
@@ -216,7 +201,7 @@ def build_segment_update_event(
     if mood is not None:
         event["mood"] = mood
     if narration_script is not None:
-        event["narrationScript"] = narration_script
+        event["script"] = narration_script
     if image_urls is not None:
         event["imageUrls"] = image_urls
     if video_url is not None:
@@ -261,4 +246,25 @@ def build_branch_segment_ready_event(
         "parentSegmentId": parent_segment_id,
         "question": question,
         "title": title,
+    }
+
+
+def build_live_illustration_event(
+    *,
+    segment_id: str,
+    image_url: str,
+    caption: str,
+    query: str,
+) -> dict[str, Any]:
+    """Build a live_illustration SSE event payload.
+
+    Emitted when a live illustration is generated during documentary playback
+    in response to a user question via the Gemini interleaved output API.
+    """
+    return {
+        "type": "live_illustration",
+        "segmentId": segment_id,
+        "imageUrl": image_url,
+        "caption": caption,
+        "query": query,
     }

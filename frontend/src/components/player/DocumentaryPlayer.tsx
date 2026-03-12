@@ -11,7 +11,7 @@ import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
 import { ShareButton } from './ShareButton';
 import { useSessionStore } from '../../store/sessionStore';
-import { downloadImage, downloadImages } from '../../utils/downloadImage';
+import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
 
 /**
  * DocumentaryPlayer — Full-screen cinematic player.
@@ -37,6 +37,7 @@ export function DocumentaryPlayer() {
   const setVoiceState = useVoiceStore((s) => s.setState);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
+  const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const isIdle = usePlayerStore((s) => s.isIdle);
   const setIdle = usePlayerStore((s) => s.setIdle);
   const open = usePlayerStore((s) => s.open);
@@ -141,6 +142,15 @@ export function DocumentaryPlayer() {
       void downloadImages(urls, `ai-historian-${slug}`, 500);
     });
   }, [currentSegment?.imageUrls, currentSegment?.title]);
+
+  const handleDownloadVideo = useCallback(() => {
+    const videoUrl = currentSegment?.videoUrl;
+    if (!videoUrl) return;
+    const slug = currentSegment.title
+      ? currentSegment.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 40)
+      : 'scene';
+    void downloadVideo(videoUrl, `ai-historian-${slug}-video.mp4`);
+  }, [currentSegment?.videoUrl, currentSegment?.title]);
 
   useMediaSession(currentSegment, {
     onNextTrack: hasNext ? goNext : undefined,
@@ -303,6 +313,32 @@ export function DocumentaryPlayer() {
             AI Historian
           </span>
 
+          {/* Illustration badge */}
+          <AnimatePresence>
+            {liveIllustration && (
+              <motion.span
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                style={{
+                  position: 'absolute',
+                  top: 20,
+                  right: 80,
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 400,
+                  fontSize: 10,
+                  letterSpacing: '0.2em',
+                  textTransform: 'uppercase' as const,
+                  color: 'var(--gold)',
+                  zIndex: 20,
+                }}
+              >
+                &#10022; Illustrated
+              </motion.span>
+            )}
+          </AnimatePresence>
+
           {/* Right: Controls */}
           <div className="flex items-center gap-4 min-w-[80px] justify-end">
             {/* Segment index */}
@@ -401,6 +437,36 @@ export function DocumentaryPlayer() {
       <div className="absolute bottom-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
         <CaptionTrack />
       </div>
+
+      {/* Layer 3b: Illustration caption */}
+      <AnimatePresence>
+        {liveIllustration?.caption && (
+          <motion.div
+            key="illustration-caption"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 0.85, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            className="absolute bottom-16 left-0 right-0 flex justify-center z-10 pointer-events-none"
+          >
+            <p
+              className="text-center"
+              style={{
+                maxWidth: 700,
+                fontFamily: 'var(--font-serif)',
+                fontWeight: 300,
+                fontStyle: 'italic',
+                fontSize: 16,
+                letterSpacing: '0.03em',
+                color: 'var(--gold)',
+                textShadow: '0 1px 12px rgba(0,0,0,0.7)',
+              }}
+            >
+              {liveIllustration.caption}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Layer 4: Bottom bar */}
       <div
@@ -650,6 +716,48 @@ export function DocumentaryPlayer() {
                     Save all
                   </>
                 )}
+              </button>
+            )}
+
+            {/* Download video */}
+            {currentSegment?.videoUrl && (
+              <button
+                onClick={handleDownloadVideo}
+                title="Download video"
+                aria-label="Download video"
+                className="flex items-center justify-center transition-colors duration-200"
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 6,
+                  border: '1px solid rgba(196,149,106,0.25)',
+                  background: 'rgba(196,149,106,0.10)',
+                  color: 'var(--glow-primary)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(196,149,106,0.22)';
+                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.55)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(196,149,106,0.10)';
+                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.25)';
+                }}
+              >
+                {/* Film/video download icon */}
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 13 13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="1.5" y="2.5" width="10" height="8" rx="1.5" />
+                  <path d="M5 5.5l3 1.5-3 1.5z" fill="currentColor" stroke="none" />
+                </svg>
               </button>
             )}
 
