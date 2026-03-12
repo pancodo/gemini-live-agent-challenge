@@ -118,7 +118,7 @@ export function useSSE(sessionId: string | null): void {
   );
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || sessionId.startsWith('dev-')) return;
 
     function connect(): EventSource {
       const url = `${BASE_URL}/api/session/${sessionId}/stream`;
