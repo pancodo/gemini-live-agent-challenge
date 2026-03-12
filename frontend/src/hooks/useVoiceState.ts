@@ -15,11 +15,12 @@ import type { VoiceState } from '../types';
  */
 
 const VALID_TRANSITIONS: Record<VoiceState, readonly VoiceState[]> = {
-  idle: ['listening'],
-  listening: ['processing', 'idle'],
-  processing: ['historian_speaking', 'idle'],
-  historian_speaking: ['interrupted', 'idle'],
-  interrupted: ['listening', 'idle'],
+  idle: ['listening', 'reconnecting'],
+  listening: ['processing', 'idle', 'reconnecting'],
+  processing: ['historian_speaking', 'idle', 'reconnecting'],
+  historian_speaking: ['interrupted', 'idle', 'reconnecting'],
+  interrupted: ['listening', 'idle', 'reconnecting'],
+  reconnecting: ['listening', 'idle'],
 } as const;
 
 export function useVoiceState() {
