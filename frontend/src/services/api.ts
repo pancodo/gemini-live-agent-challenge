@@ -1,4 +1,4 @@
-import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, Segment, UrlMeta, SegmentGeo } from '../types';
+import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, Segment, UrlMeta, SegmentGeo, GeoEvent, GeoRoute } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -101,30 +101,61 @@ Rules:
   }
 
   const data = await res.json() as {
-    candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
-  const text = data.candidates[0]?.content?.parts[0]?.text ?? '{}';
 
-  let parsed: Omit<SegmentGeo, 'segmentId'>;
+  if (!data.candidates?.length) {
+    throw new Error('Gemini returned no candidates — content may have been filtered');
+  }
+
+  const text = data.candidates[0]?.content?.parts?.[0]?.text ?? '{}';
+
+  let raw: Record<string, unknown>;
   try {
-    parsed = JSON.parse(text) as Omit<SegmentGeo, 'segmentId'>;
+    raw = JSON.parse(text) as Record<string, unknown>;
   } catch {
     console.warn('[extractGeoData] JSON parse failed, returning fallback');
     return { segmentId, center: [30, 30] as [number, number], zoom: 4, events: [], routes: [] };
   }
 
-  // Validate & fix swapped coordinates (|lat| > 90 means lat/lng are swapped)
-  const events = (parsed.events ?? []).map((e) => {
-    if (Math.abs(e.lat) > 90) return { ...e, lat: e.lng, lng: e.lat };
-    return e;
-  });
+  // Validate center tuple
+  const rawCenter = Array.isArray(raw.center) && raw.center.length >= 2
+    && typeof raw.center[0] === 'number' && typeof raw.center[1] === 'number'
+    ? [raw.center[0], raw.center[1]] as [number, number]
+    : [30, 30] as [number, number];
+
+  // Validate & filter events — discard entries with missing/invalid coordinates
+  const events: GeoEvent[] = (Array.isArray(raw.events) ? raw.events : [])
+    .filter((e): e is GeoEvent =>
+      typeof e === 'object' && e !== null &&
+      typeof e.name === 'string' &&
+      typeof e.lat === 'number' && !isNaN(e.lat) &&
+      typeof e.lng === 'number' && !isNaN(e.lng),
+    )
+    .map((e) => {
+      // Fix swapped coordinates and clamp to valid range
+      let { lat, lng } = e;
+      if (Math.abs(lat) > 90) [lat, lng] = [lng, lat];
+      lat = Math.max(-90, Math.min(90, lat));
+      lng = Math.max(-180, Math.min(180, lng));
+      return { ...e, lat, lng };
+    });
+
+  // Validate & filter routes
+  const routes: GeoRoute[] = (Array.isArray(raw.routes) ? raw.routes : [])
+    .filter((r): r is GeoRoute =>
+      typeof r === 'object' && r !== null &&
+      typeof r.name === 'string' &&
+      Array.isArray(r.points) && r.points.length >= 2 &&
+      r.points.every((p: unknown) => Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number'),
+    );
 
   const result: SegmentGeo = {
     segmentId,
-    center: parsed.center ?? [30, 30],
-    zoom: parsed.zoom ?? 4,
+    center: rawCenter,
+    zoom: typeof raw.zoom === 'number' && !isNaN(raw.zoom) ? raw.zoom : 4,
     events,
-    routes: parsed.routes ?? [],
+    routes,
   };
 
   // Don't cache empty results — allow retry on next render
