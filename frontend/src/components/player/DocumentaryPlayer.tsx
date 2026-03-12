@@ -319,7 +319,7 @@ export function DocumentaryPlayer() {
                   ref={shortcutsRef}
                   className="absolute top-full right-0 mt-2 rounded-lg p-3 z-50"
                   style={{
-                    background: 'var(--bg-card)',
+                    background: 'var(--bg2)',
                     border: '1px solid rgba(214,204,186,0.4)',
                     fontFamily: 'var(--font-sans)',
                     fontSize: 11,

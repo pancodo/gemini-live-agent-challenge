@@ -45,7 +45,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
           className="fixed top-0 right-0 h-full z-30 flex flex-col"
           style={{
             width: 280,
-            background: 'var(--bg-card)',
+            background: 'var(--bg2)',
             backdropFilter: 'blur(16px)',
             borderLeft: '1px solid rgba(196,149,106,0.15)',
           }}
@@ -143,7 +143,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                           fontSize: 14,
                           lineHeight: 1.4,
                           color: isActive
-                            ? '#e8ddd0'
+                            ? 'var(--text)'
                             : 'rgba(232,221,208,0.5)',
                         }}
                       >

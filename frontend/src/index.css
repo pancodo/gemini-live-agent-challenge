@@ -590,12 +590,11 @@ body {
   font-optical-sizing: auto;
 }
 
-/* ── Documentary Player (always dark) ─────────────────── */
+/* ── Documentary Player ────────────────────────────────── */
 .player-root {
-  background: var(--color-bg-deep);
-  color: #e8ddd0;
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-serif);
-  color-scheme: only dark;
 }
 
 /* ── Ambient Color Glow (YouTube ambient mode) ─────────── */

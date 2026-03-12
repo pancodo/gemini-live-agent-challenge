@@ -112,7 +112,7 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
     return (
       <div
         className="absolute inset-0"
-        style={{ background: 'var(--bg-deep)' }}
+        style={{ background: 'var(--bg)' }}
       />
     );
   }
