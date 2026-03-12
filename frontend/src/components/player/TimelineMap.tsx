@@ -1,5 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { usePlayerStore } from '../../store/playerStore';
@@ -9,13 +8,8 @@ import type { GeoEvent, GeoRoute } from '../../types';
 
 const ROUTE_SOURCE_PREFIX = 'route-';
 const ROUTE_LAYER_PREFIX = 'route-layer-';
-const PIN_ANIMATION_DELAY = 200; // ms between pin appearances
+const PIN_ANIMATION_DELAY = 200;
 
-/**
- * TimelineMap — Animated geographic map synced to documentary narration.
- * Renders MapLibre GL canvas with animated pins, progressive route drawing,
- * and fly-to transitions between segments.
- */
 export function TimelineMap({
   onPinClick,
 }: {
@@ -24,8 +18,8 @@ export function TimelineMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const popupRef = useRef<maplibregl.Popup | null>(null);
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
-  const [hoveredPin, setHoveredPin] = useState<GeoEvent | null>(null);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const { geo } = useSegmentGeo(currentSegmentId);
@@ -34,8 +28,15 @@ export function TimelineMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    // Prevent ctrl+scroll from triggering browser zoom on the map
+    const container = containerRef.current;
+    const preventBrowserZoom = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault();
+    };
+    container.addEventListener('wheel', preventBrowserZoom, { passive: false });
+
     const map = new maplibregl.Map({
-      container: containerRef.current,
+      container,
       style: mapStyle as maplibregl.StyleSpecification,
       center: [30, 35],
       zoom: 3,
@@ -51,35 +52,58 @@ export function TimelineMap({
     mapRef.current = map;
 
     return () => {
+      container.removeEventListener('wheel', preventBrowserZoom);
       map.remove();
       mapRef.current = null;
     };
   }, []);
 
-  // ── Clear markers ─────────────────────────────────────────
   const clearMarkers = useCallback(() => {
-    for (const m of markersRef.current) {
-      m.remove();
-    }
+    for (const m of markersRef.current) m.remove();
     markersRef.current = [];
+    popupRef.current?.remove();
+    popupRef.current = null;
   }, []);
 
-  // ── Clear route layers ────────────────────────────────────
   const clearRoutes = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
     const style = map.getStyle();
     if (!style?.layers) return;
     for (const layer of style.layers) {
-      if (layer.id.startsWith(ROUTE_LAYER_PREFIX)) {
-        map.removeLayer(layer.id);
-      }
+      if (layer.id.startsWith(ROUTE_LAYER_PREFIX)) map.removeLayer(layer.id);
     }
     for (const sourceId of Object.keys(style.sources ?? {})) {
-      if (sourceId.startsWith(ROUTE_SOURCE_PREFIX)) {
-        map.removeSource(sourceId);
-      }
+      if (sourceId.startsWith(ROUTE_SOURCE_PREFIX)) map.removeSource(sourceId);
     }
+  }, []);
+
+  // ── Show popup at pin location ────────────────────────────
+  const showPopup = useCallback((event: GeoEvent) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    popupRef.current?.remove();
+
+    const era = event.era ? `<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px">${event.era}</span>` : '';
+    const desc = event.description ? `<div style="font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px">${event.description}</div>` : '';
+
+    const popup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: true,
+      offset: 14,
+      className: 'timeline-map-popup',
+    })
+      .setLngLat([event.lng, event.lat])
+      .setHTML(`
+        <div style="font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em">
+          ${event.name}${era}
+        </div>
+        ${desc}
+      `)
+      .addTo(map);
+
+    popupRef.current = popup;
   }, []);
 
   // ── Create a pin DOM element ──────────────────────────────
@@ -92,7 +116,6 @@ export function TimelineMap({
       const size = isBattle ? 18 : 16;
       const color = isBattle ? '#c0392b' : '#c4956a';
 
-      // Outer glow ring
       el.style.cssText = `
         width: ${size}px;
         height: ${size}px;
@@ -107,14 +130,12 @@ export function TimelineMap({
         z-index: 10;
       `;
 
-      // Animate in with delay
       el.style.opacity = '0';
       setTimeout(() => {
         el.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.2s ease';
         el.style.opacity = '1';
       }, index * PIN_ANIMATION_DELAY);
 
-      // Add a pulsing ring behind the pin
       const pulse = document.createElement('div');
       pulse.style.cssText = `
         position: absolute;
@@ -132,13 +153,14 @@ export function TimelineMap({
       el.appendChild(pulse);
 
       el.addEventListener('mouseenter', () => {
-        setHoveredPin(event);
+        showPopup(event);
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.6)`;
         el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
       });
 
       el.addEventListener('mouseleave', () => {
-        setHoveredPin(null);
+        popupRef.current?.remove();
+        popupRef.current = null;
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1)`;
         el.style.boxShadow = `0 0 16px ${color}, 0 0 32px ${color}80`;
       });
@@ -150,17 +172,15 @@ export function TimelineMap({
 
       return el;
     },
-    [onPinClick],
+    [onPinClick, showPopup],
   );
 
-  // ── Add route to map ──────────────────────────────────────
   const addRoute = useCallback((route: GeoRoute, index: number) => {
     const map = mapRef.current;
     if (!map) return;
 
     const sourceId = `${ROUTE_SOURCE_PREFIX}${index}`;
     const layerId = `${ROUTE_LAYER_PREFIX}${index}`;
-
     const coordinates = route.points.map(([lat, lng]) => [lng, lat]);
 
     map.addSource(sourceId, {
@@ -168,10 +188,7 @@ export function TimelineMap({
       data: {
         type: 'Feature',
         properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates,
-        },
+        geometry: { type: 'LineString', coordinates },
       },
     });
 
@@ -199,24 +216,20 @@ export function TimelineMap({
     const map = mapRef.current;
     if (!map) return;
 
-    // Cancel any pending moveend listener from a previous fly-to
     if (pendingMoveEndRef.current) {
       map.off('moveend', pendingMoveEndRef.current);
       pendingMoveEndRef.current = null;
     }
 
-    // Clear everything immediately
     clearMarkers();
     clearRoutes();
 
     if (!geo) return;
 
-    // Fly to new center — pins and routes appear only after landing
     const onMoveEnd = () => {
       map.off('moveend', onMoveEnd);
       pendingMoveEndRef.current = null;
 
-      // Add pins with staggered animation
       for (let i = 0; i < geo.events.length; i++) {
         const event = geo.events[i];
         const el = createPinElement(event, i);
@@ -226,7 +239,6 @@ export function TimelineMap({
         markersRef.current.push(marker);
       }
 
-      // Add routes
       for (let i = 0; i < geo.routes.length; i++) {
         addRoute(geo.routes[i], i);
       }
@@ -264,63 +276,25 @@ export function TimelineMap({
         .maplibregl-ctrl-group button span {
           filter: invert(0.7) sepia(0.3) !important;
         }
+        .timeline-map-popup .maplibregl-popup-content {
+          background: rgba(13,11,9,0.92) !important;
+          border: 1px solid rgba(196,149,106,0.3) !important;
+          border-radius: 8px !important;
+          padding: 8px 14px !important;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+        }
+        .timeline-map-popup .maplibregl-popup-tip {
+          border-top-color: rgba(13,11,9,0.92) !important;
+        }
       `}</style>
 
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Tooltip for hovered pin */}
-      <AnimatePresence>
-        {hoveredPin && (
-          <motion.div
-            key={hoveredPin.name}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.15 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20"
-            style={{
-              background: 'rgba(13,11,9,0.85)',
-              border: '1px solid rgba(196,149,106,0.3)',
-              borderRadius: 8,
-              padding: '8px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontWeight: 400,
-                fontSize: 16,
-                color: 'var(--glow-primary)',
-                letterSpacing: '0.05em',
-              }}
-            >
-              {hoveredPin.name}
-            </span>
-            <span
-              style={{
-                fontFamily: 'var(--font-sans)',
-                fontSize: 10,
-                letterSpacing: '0.15em',
-                color: 'var(--muted)',
-                textTransform: 'uppercase',
-              }}
-            >
-              {[hoveredPin.era, hoveredPin.description].filter(Boolean).join(' — ')}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Vignette overlay to blend map edges into player background */}
+      {/* Vignette overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background:
-            'radial-gradient(ellipse at center, transparent 50%, rgba(13,11,9,0.6) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(13,11,9,0.6) 100%)',
         }}
       />
     </div>
