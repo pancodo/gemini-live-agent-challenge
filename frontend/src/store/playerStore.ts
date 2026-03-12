@@ -25,6 +25,9 @@ interface PlayerStore {
   liveIllustration: LiveIllustration | null;
   _illustrationTimer: ReturnType<typeof setTimeout> | null;
   setLiveIllustration: (ill: LiveIllustration | null) => void;
+  /** True when user is in voice conversation with historian (not during narration) */
+  isConversationMode: boolean;
+  setConversationMode: (mode: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -48,6 +51,8 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   addBranchNode: (node) =>
     set((state) => ({ branchGraph: [...state.branchGraph, node] })),
   setActiveBranch: (segmentId) => set({ activeBranchId: segmentId }),
+  isConversationMode: false,
+  setConversationMode: (isConversationMode) => set({ isConversationMode }),
   liveIllustration: null,
   _illustrationTimer: null,
   setLiveIllustration: (ill) => {
