@@ -105,8 +105,10 @@ export function VoiceLayer() {
     }
   }, [connect, disconnect, capture, playback, transition, reset]);
 
-  /** Start voice session with an initial text prompt to the historian. */
-  const handleSpeak = useCallback(() => {
+  // Stable ref for beginConsultation to avoid re-render loops.
+  // The ref always points at the latest closure so callers get fresh state.
+  const speakRef = useRef(() => {});
+  speakRef.current = () => {
     const currentState = useVoiceStore.getState().state;
     if (currentState !== 'idle') return;
 
@@ -118,14 +120,14 @@ export function VoiceLayer() {
     setTimeout(() => {
       sendText('Hello! Please introduce yourself briefly and tell me about the document I uploaded.');
     }, 1500);
-  }, [connect, capture, transition, sendText]);
+  };
 
-  // Register beginConsultation in store so HistorianPanel can invoke it.
-  // Use setState directly to avoid subscribe-triggered re-render loops.
+  // Register once on mount, clean up on unmount. The stable lambda
+  // delegates to speakRef.current so it always calls the latest closure.
   useEffect(() => {
-    useVoiceStore.setState({ beginConsultation: handleSpeak });
+    useVoiceStore.setState({ beginConsultation: () => speakRef.current() });
     return () => useVoiceStore.setState({ beginConsultation: null });
-  }, [handleSpeak]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playbackAnalyser = playback.getAnalyser();
   useAudioVisualSync(playbackAnalyser);
