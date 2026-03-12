@@ -256,9 +256,14 @@ export function TimelineMap({
 
     if (!geo) return;
 
+    const capturedEpoch = geoEpochRef.current;
+
     const onMoveEnd = () => {
       map.off('moveend', onMoveEnd);
       pendingMoveEndRef.current = null;
+
+      // Guard against stale callback from a previous segment's fly-to
+      if (geoEpochRef.current !== capturedEpoch) return;
 
       for (let i = 0; i < geo.events.length; i++) {
         const event = geo.events[i];
