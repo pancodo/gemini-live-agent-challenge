@@ -103,6 +103,7 @@ export function HistorianAvatar({ size, className, active = false, onLoad }: His
           position: 'absolute',
           top: 0,
           left: 0,
+          filter: 'sepia(0.3) saturate(0.65) contrast(0.9) brightness(0.95) blur(0.7px)',
         }}
       />
     </div>
