@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { VoiceButton } from './VoiceButton';
 import { useSessionStore } from '../../store/sessionStore';
 import { useVoiceStore } from '../../store/voiceStore';
@@ -22,11 +23,19 @@ export function VoiceLayer() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const resumptionToken = useVoiceStore((s) => s.resumptionToken);
   const setResumptionToken = useVoiceStore((s) => s.setResumptionToken);
+  const loadResumptionToken = useVoiceStore((s) => s.loadResumptionToken);
+  const clearResumptionToken = useVoiceStore((s) => s.clearResumptionToken);
 
   const { state, transition, handleInterrupt, reset } = useVoiceState();
+
+  // Hydrate resumption token from localStorage on mount
+  useEffect(() => {
+    loadResumptionToken();
+  }, [loadResumptionToken]);
+
   const playback = useAudioPlayback();
 
-  const { sendPCM, sendText, connect, disconnect, isConnected } = useGeminiLive({
+  const { sendPCM, sendText, connect, disconnect, reconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
     onAudioChunk: (pcm: ArrayBuffer) => {
@@ -53,6 +62,29 @@ export function VoiceLayer() {
     onResumeToken: (token: string) => {
       setResumptionToken(token);
     },
+    onGoAway: () => {
+      toast.warning('Session expiring, reconnecting...');
+    },
+    onReconnecting: (attempt: number, max: number) => {
+      transition('reconnecting');
+      toast.info(`Reconnecting... (attempt ${attempt}/${max})`);
+    },
+    onReconnectFailed: () => {
+      transition('idle');
+      toast.error('Connection lost', {
+        action: {
+          label: 'Reconnect',
+          onClick: () => {
+            reconnect();
+          },
+        },
+        duration: Infinity,
+      });
+    },
+    onResumptionExpired: () => {
+      clearResumptionToken();
+      toast.info('Session refreshed — historian context reloaded');
+    },
   });
 
   const capture = useAudioCapture(sendPCM);
@@ -64,9 +96,10 @@ export function VoiceLayer() {
     prevConnectedRef.current = isConnected;
 
     if (wasConnected && !isConnected && useVoiceStore.getState().state !== 'idle') {
-      reset();
+      // Soft reset: return to idle but keep the resumption token for reconnection
+      transition('idle');
     }
-  }, [isConnected, reset]);
+  }, [isConnected, transition]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -92,6 +125,7 @@ export function VoiceLayer() {
         capture.stop();
         disconnect();
         reset();
+        clearResumptionToken();
         break;
 
       case 'historian_speaking':
@@ -100,11 +134,19 @@ export function VoiceLayer() {
         transition('listening');
         break;
 
+      case 'reconnecting':
+        // Manual retry — reset attempts and reconnect
+        disconnect();
+        connect();
+        void capture.start();
+        transition('listening');
+        break;
+
       default:
         // processing, interrupted — no-op
         break;
     }
-  }, [connect, disconnect, capture, playback, transition, reset]);
+  }, [connect, disconnect, capture, playback, transition, reset, clearResumptionToken]);
 
   // Stable ref for beginConsultation to avoid re-render loops.
   // The ref always points at the latest closure so callers get fresh state.

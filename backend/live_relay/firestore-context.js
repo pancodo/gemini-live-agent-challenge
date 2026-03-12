@@ -108,4 +108,61 @@ async function fetchDocumentaryContext(sessionId) {
   return result;
 }
 
-module.exports = { fetchDocumentaryContext, getFirestore };
+// ---------------------------------------------------------------------------
+// Session Resumption Token Persistence
+// ---------------------------------------------------------------------------
+
+/**
+ * Save a Gemini session resumption token to Firestore.
+ *
+ * Written to `/sessions/{sessionId}/liveSession` so the token survives
+ * relay restarts (Cloud Run cold starts). Fire-and-forget — callers should
+ * `.catch()` to avoid unhandled rejections.
+ *
+ * @param {string} sessionId
+ * @param {string} token
+ * @returns {Promise<void>}
+ */
+async function saveResumptionToken(sessionId, token) {
+  const db = getFirestore();
+  await db
+    .collection('sessions')
+    .doc(sessionId)
+    .collection('liveSession')
+    .doc('state')
+    .set(
+      {
+        resumptionToken: token,
+        lastConnectedAt: Firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+}
+
+/**
+ * Load a previously stored resumption token from Firestore.
+ *
+ * Returns `null` if no token exists or the document is missing.
+ *
+ * @param {string} sessionId
+ * @returns {Promise<string | null>}
+ */
+async function loadResumptionToken(sessionId) {
+  const db = getFirestore();
+  const snap = await db
+    .collection('sessions')
+    .doc(sessionId)
+    .collection('liveSession')
+    .doc('state')
+    .get();
+
+  if (!snap.exists) return null;
+  return snap.data()?.resumptionToken ?? null;
+}
+
+module.exports = {
+  fetchDocumentaryContext,
+  getFirestore,
+  saveResumptionToken,
+  loadResumptionToken,
+};

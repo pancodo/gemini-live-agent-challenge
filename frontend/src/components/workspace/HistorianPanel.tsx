@@ -18,6 +18,7 @@ const VOICE_MESSAGES: Record<VoiceState, string> = {
   processing: 'Consulting my sources\u2026',
   historian_speaking: 'Narrating\u2026',
   interrupted: 'Yes, what is it?',
+  reconnecting: 'Reconnecting\u2026',
 };
 
 function isVoiceActive(state: VoiceState): boolean {
