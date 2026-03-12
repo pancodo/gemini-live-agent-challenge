@@ -431,6 +431,11 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         return;
       }
 
+      // Turn complete — historian finished speaking
+      if (msg.serverContent.turnComplete) {
+        clientWs.send(JSON.stringify({ type: 'turn_complete' }));
+      }
+
       // Audio parts
       const parts = msg.serverContent.modelTurn?.parts;
       if (Array.isArray(parts)) {
