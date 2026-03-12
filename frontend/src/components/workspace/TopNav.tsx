@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { useSessionStore } from '../../store/sessionStore';
 import { useResearchStore } from '../../store/researchStore';
@@ -70,10 +70,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   );
 }
 
-const isDev = import.meta.env.DEV;
-
 export function TopNav() {
-  const navigate = useNavigate();
   const status = useSessionStore((s) => s.status);
   const gcsPath = useSessionStore((s) => s.gcsPath);
   const reset = useSessionStore((s) => s.reset);
@@ -318,30 +315,6 @@ export function TopNav() {
                 <Toggle on={settings.reducedMotion} onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)} />
               </div>
 
-              {/* Dev tools — only in development */}
-              {isDev && (
-                <>
-                  <div className="mx-3 my-1.5 border-t border-[var(--bg4)]" />
-                  <div className="px-3 pb-1">
-                    <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-[var(--muted)]/60">Dev Tools</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setSettingsOpen(false); navigate('/test-map'); }}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[var(--bg3)] transition-colors duration-150 cursor-pointer"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--teal)]">
-                      <circle cx="8" cy="8" r="6" />
-                      <path d="M2 8h12" />
-                      <path d="M8 2c-2 2-2 4 0 6s2 4 0 6" />
-                    </svg>
-                    <div>
-                      <span className="font-sans text-[12px] text-[var(--text)]">Timeline Map</span>
-                      <p className="font-sans text-[10px] text-[var(--muted)] leading-tight">Test geographic map with mock data</p>
-                    </div>
-                  </button>
-                </>
-              )}
             </div>
           )}
         </div>
