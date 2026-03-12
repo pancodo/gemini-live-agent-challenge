@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { VoiceButton } from './VoiceButton';
 import { useSessionStore } from '../../store/sessionStore';
 import { useVoiceStore } from '../../store/voiceStore';
@@ -31,9 +32,10 @@ export function VoiceLayer() {
   useEffect(() => {
     loadResumptionToken();
   }, [loadResumptionToken]);
+
   const playback = useAudioPlayback();
 
-  const { sendPCM, sendText, connect, disconnect, isConnected } = useGeminiLive({
+  const { sendPCM, sendText, connect, disconnect, reconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
     onAudioChunk: (pcm: ArrayBuffer) => {
@@ -59,6 +61,29 @@ export function VoiceLayer() {
     },
     onResumeToken: (token: string) => {
       setResumptionToken(token);
+    },
+    onGoAway: () => {
+      toast.warning('Session expiring, reconnecting...');
+    },
+    onReconnecting: (attempt: number, max: number) => {
+      transition('reconnecting');
+      toast.info(`Reconnecting... (attempt ${attempt}/${max})`);
+    },
+    onReconnectFailed: () => {
+      transition('idle');
+      toast.error('Connection lost', {
+        action: {
+          label: 'Reconnect',
+          onClick: () => {
+            reconnect();
+          },
+        },
+        duration: Infinity,
+      });
+    },
+    onResumptionExpired: () => {
+      clearResumptionToken();
+      toast.info('Session refreshed — historian context reloaded');
     },
   });
 
@@ -110,7 +135,7 @@ export function VoiceLayer() {
         break;
 
       default:
-        // processing, interrupted — no-op
+        // processing, interrupted, reconnecting — no-op
         break;
     }
   }, [connect, disconnect, capture, playback, transition, reset, clearResumptionToken]);
