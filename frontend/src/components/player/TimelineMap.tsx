@@ -18,8 +18,10 @@ export function TimelineMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const pinTimeoutIds = useRef<ReturnType<typeof setTimeout>[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
+  const geoEpochRef = useRef(0);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const { geo } = useSegmentGeo(currentSegmentId);
@@ -59,6 +61,8 @@ export function TimelineMap({
   }, []);
 
   const clearMarkers = useCallback(() => {
+    for (const id of pinTimeoutIds.current) clearTimeout(id);
+    pinTimeoutIds.current = [];
     for (const m of markersRef.current) m.remove();
     markersRef.current = [];
     popupRef.current?.remove();
@@ -71,10 +75,14 @@ export function TimelineMap({
     const style = map.getStyle();
     if (!style?.layers) return;
     for (const layer of style.layers) {
-      if (layer.id.startsWith(ROUTE_LAYER_PREFIX)) map.removeLayer(layer.id);
+      if (layer.id.startsWith(ROUTE_LAYER_PREFIX)) {
+        try { map.removeLayer(layer.id); } catch { /* already removed */ }
+      }
     }
     for (const sourceId of Object.keys(style.sources ?? {})) {
-      if (sourceId.startsWith(ROUTE_SOURCE_PREFIX)) map.removeSource(sourceId);
+      if (sourceId.startsWith(ROUTE_SOURCE_PREFIX)) {
+        try { map.removeSource(sourceId); } catch { /* already removed */ }
+      }
     }
   }, []);
 
@@ -131,10 +139,11 @@ export function TimelineMap({
       `;
 
       el.style.opacity = '0';
-      setTimeout(() => {
+      const tid = setTimeout(() => {
         el.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.2s ease';
         el.style.opacity = '1';
       }, index * PIN_ANIMATION_DELAY);
+      pinTimeoutIds.current.push(tid);
 
       const pulse = document.createElement('div');
       pulse.style.cssText = `
@@ -179,8 +188,9 @@ export function TimelineMap({
     const map = mapRef.current;
     if (!map) return;
 
-    const sourceId = `${ROUTE_SOURCE_PREFIX}${index}`;
-    const layerId = `${ROUTE_LAYER_PREFIX}${index}`;
+    const epoch = geoEpochRef.current;
+    const sourceId = `${ROUTE_SOURCE_PREFIX}${epoch}-${index}`;
+    const layerId = `${ROUTE_LAYER_PREFIX}${epoch}-${index}`;
     const coordinates = route.points.map(([lat, lng]) => [lng, lat]);
 
     map.addSource(sourceId, {
@@ -223,6 +233,7 @@ export function TimelineMap({
 
     clearMarkers();
     clearRoutes();
+    geoEpochRef.current += 1;
 
     if (!geo) return;
 
