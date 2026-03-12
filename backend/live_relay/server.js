@@ -61,6 +61,28 @@ const HISTORIAN_API_URL = process.env.HISTORIAN_API_URL || 'http://localhost:800
 /** @type {Map<string, CacheEntry>} */
 const systemInstructionCache = new Map();
 
+/** @type {Map<string, ReturnType<typeof setTimeout>>} */
+const transcriptDebounceTimers = new Map();
+
+/**
+ * @typedef {Object} QueryCacheEntry
+ * @property {string} result
+ * @property {number} expiresAt
+ */
+/** @type {Map<string, Map<string, QueryCacheEntry>>} */
+const queryResultCache = new Map();
+
+function _normalizeQuery(query) {
+  return query.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function _getSessionQueryCache(sessionId) {
+  if (!queryResultCache.has(sessionId)) {
+    queryResultCache.set(sessionId, new Map());
+  }
+  return queryResultCache.get(sessionId);
+}
+
 /**
  * Get or build the system instruction for a session.
  *
@@ -112,6 +134,12 @@ setInterval(() => {
       systemInstructionCache.delete(key);
     }
   }
+  for (const [sid, sessionCache] of queryResultCache) {
+    for (const [k, entry] of sessionCache) {
+      if (entry.expiresAt <= now) sessionCache.delete(k);
+    }
+    if (sessionCache.size === 0) queryResultCache.delete(sid);
+  }
 }, 5 * 60 * 1000); // every 5 minutes
 
 /**
@@ -126,6 +154,13 @@ setInterval(() => {
  * @returns {Promise<string>}
  */
 async function retrieveContext(sessionId, query) {
+  const now = Date.now();
+  const key = _normalizeQuery(query);
+  const cache = _getSessionQueryCache(sessionId);
+
+  const hit = cache.get(key);
+  if (hit && hit.expiresAt > now) return hit.result;
+
   try {
     const res = await fetch(
       `${HISTORIAN_API_URL}/api/session/${sessionId}/retrieve`,
@@ -133,24 +168,35 @@ async function retrieveContext(sessionId, query) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, top_k: 4 }),
-        signal: AbortSignal.timeout(1500),  // never block the voice path > 1.5s
+        signal: AbortSignal.timeout(1500),
       }
     );
     if (!res.ok) return '';
     const { chunks } = await res.json();
     if (!chunks || chunks.length === 0) return '';
 
-    return chunks
+    const contextText = chunks
       .map(c => {
         const pages = c.page_end > c.page_start
           ? `p.${c.page_start}–${c.page_end}`
           : `p.${c.page_start}`;
-        const body = c.summary || c.text.slice(0, 400);
-        return `[Document ${pages}] ${body}`;
+        const heading = c.heading ? `${c.heading}: ` : '';
+        let body = c.summary || '';
+        if (!body) {
+          const raw = c.text.slice(0, 400);
+          const match = raw.match(/(.+[.!?])\s*$/);
+          body = match ? match[1] : raw;
+        }
+        return `[Document ${pages}] ${heading}${body}`;
       })
       .join('\n');
+
+    // Cache for 60 seconds; evict oldest if over 20 entries
+    cache.set(key, { result: contextText, expiresAt: now + 60_000 });
+    if (cache.size > 20) cache.delete(cache.keys().next().value);
+
+    return contextText;
   } catch {
-    // Timeout, network error, JSON parse — all silently ignored.
     return '';
   }
 }
@@ -348,18 +394,25 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         // RAG injection: for substantive questions (>15 chars), retrieve relevant
         // document passages and inject them upstream before the historian responds.
         if (transcript.length > 15 && geminiWs.readyState === WebSocket.OPEN) {
-          retrieveContext(sessionId, transcript).then(contextText => {
-            if (!contextText || geminiWs.readyState !== WebSocket.OPEN) return;
-            geminiWs.send(JSON.stringify({
-              clientContent: {
-                turns: [{
-                  role: 'user',
-                  parts: [{ text: `[Retrieved source context — use to answer the question]\n${contextText}` }],
-                }],
-                turnComplete: false,
-              },
-            }));
-          }).catch(() => { /* silently ignore */ });
+          // Debounce: Gemini Live streams partial transcripts; only fire on the final one
+          const existing = transcriptDebounceTimers.get(sessionId);
+          if (existing) clearTimeout(existing);
+          const timer = setTimeout(() => {
+            transcriptDebounceTimers.delete(sessionId);
+            retrieveContext(sessionId, transcript).then(contextText => {
+              if (!contextText || geminiWs.readyState !== WebSocket.OPEN) return;
+              geminiWs.send(JSON.stringify({
+                clientContent: {
+                  turns: [{
+                    role: 'user',
+                    parts: [{ text: `[System: Retrieved document context]\n${contextText}` }],
+                  }],
+                  turnComplete: false,
+                },
+              }));
+            }).catch(() => {});
+          }, 300);
+          transcriptDebounceTimers.set(sessionId, timer);
         }
       }
     }
@@ -405,6 +458,8 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
     if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
       geminiWs.close(1000, 'client disconnected');
     }
+    const pendingTimer = transcriptDebounceTimers.get(sessionId);
+    if (pendingTimer) { clearTimeout(pendingTimer); transcriptDebounceTimers.delete(sessionId); }
   });
 
   /** Close client when Gemini disconnects unexpectedly. */
