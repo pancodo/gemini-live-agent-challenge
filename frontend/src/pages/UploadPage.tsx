@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { DropZone, PersonaSelector } from '../components/upload';
 import { Badge } from '../components/ui';
 import { useSessionStore } from '../store/sessionStore';
@@ -65,8 +66,11 @@ function SampleDocuments() {
         resetResearch();
         setSession({ sessionId, gcsPath, status: 'processing' });
         navigate('/workspace');
-      } catch {
+      } catch (err) {
         setLoading(null);
+        toast.error('Failed to load sample document', {
+          description: err instanceof Error ? err.message : 'Is the backend running?',
+        });
       }
     },
     [navigate, setSession, persona, resetResearch]
