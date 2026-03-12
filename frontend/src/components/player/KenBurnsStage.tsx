@@ -24,6 +24,8 @@ function sampleImageColor(img: HTMLImageElement): string {
 
 interface KenBurnsStageProps {
   segment: Segment | null;
+  /** Called whenever the visible image index changes (or on initial mount). */
+  onActiveImageChange?: (url: string | null) => void;
 }
 
 const DRIFT_PRESETS = [
@@ -34,9 +36,9 @@ const DRIFT_PRESETS = [
 ];
 
 const CROSSFADE_DURATION_MS = 2000;
-const CYCLE_INTERVAL_MS = 10000;
+const CYCLE_INTERVAL_MS = 7000;
 
-export function KenBurnsStage({ segment }: KenBurnsStageProps) {
+export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStageProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const isKenBurnsPaused = usePlayerStore((s) => s.isKenBurnsPaused);
   const voiceState = useVoiceStore((s) => s.state);
@@ -70,6 +72,13 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
   useEffect(() => {
     setCurrentIndex(0);
   }, [segment?.id]);
+
+  // Notify parent of active image URL whenever it changes
+  useEffect(() => {
+    if (!onActiveImageChange) return;
+    const url = images[currentIndex] ?? null;
+    onActiveImageChange(url);
+  }, [currentIndex, images, onActiveImageChange]);
 
   const playState = shouldPause ? 'paused' : 'running';
 
@@ -117,6 +126,52 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
     );
   }
 
+  if (images.length === 0 && !hasVideo) {
+    return (
+      <div
+        className="absolute inset-0 flex flex-col items-center justify-center"
+        style={{ background: '#0d0b09' }}
+      >
+        {/* Ornamental pulse ring */}
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            border: '1px solid rgba(196,149,106,0.3)',
+            animation: 'kb-skeleton-pulse 2s ease-in-out infinite',
+          }}
+        />
+        <style>{`
+          @keyframes kb-skeleton-pulse {
+            0%, 100% { transform: scale(1);   opacity: 0.3; }
+            50%       { transform: scale(1.2); opacity: 0.7; }
+          }
+        `}</style>
+        <p
+          className="mt-4"
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: 11,
+            textTransform: 'uppercase',
+            letterSpacing: '0.3em',
+            color: 'rgba(232,221,208,0.3)',
+          }}
+        >
+          Loading visuals…
+        </p>
+        {/* Vignette overlay */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+          }}
+        />
+      </div>
+    );
+  }
+
   if (hasVideo) {
     return (
       <div className="absolute inset-0">
@@ -141,7 +196,11 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
   }
 
   return (
-    <div className="absolute inset-0 overflow-hidden player-stage">
+    // key={segment.id} forces a full remount on every segment change so that:
+    // 1. All ken-burns @keyframe animations restart from 0% rather than
+    //    continuing from wherever they were in the previous segment's cycle.
+    // 2. currentIndex is implicitly reset to 0 because the component remounts.
+    <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
       <style>{`
         @keyframes ken-burns-0 {
           0%   { transform: scale(1.0) translate(${driftAssignments[0]?.xStart ?? '0%'}, ${driftAssignments[0]?.yStart ?? '0%'}); }
@@ -176,8 +235,14 @@ export function KenBurnsStage({ segment }: KenBurnsStageProps) {
             style={{
               opacity: isActive ? 1 : 0,
               transition: `opacity ${CROSSFADE_DURATION_MS}ms ease-in-out`,
+              // Only the active image runs its drift animation; inactive images
+              // are paused so they don't burn through GPU resources and so that
+              // when they become active they start the animation fresh from the
+              // beginning (animationPlayState: 'paused' holds them at the
+              // initial keyframe position).
               animation: `ken-burns-${i % 4} var(--ken-speed) ease-in-out infinite alternate`,
               animationPlayState: isActive ? playState : 'paused',
+              pointerEvents: isActive ? 'auto' : 'none',
               willChange: 'transform, opacity',
             }}
           />
