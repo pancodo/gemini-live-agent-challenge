@@ -76,6 +76,7 @@ from .sse_helpers import (
     build_agent_status_event,
     build_pipeline_phase_event,
     build_segment_update_event,
+    build_stats_update_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -1871,11 +1872,9 @@ class VisualDirectorOrchestrator(BaseAgent):
         if self.emitter:
             await self.emitter.emit(
                 "stats_update",
-                {
-                    "type": "stats_update",
-                    "imagesGenerated": total_images,
-                    "videosGenerated": total_videos,
-                },
+                build_stats_update_event(
+                    facts_verified=total_images,
+                ),
             )
             await self.emitter.emit(
                 "agent_status",
