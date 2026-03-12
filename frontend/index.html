@@ -5,6 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Historian</title>
+    <!-- Blocking theme init — must run before CSS to prevent FOUC -->
+    <script>
+      (function() {
+        try {
+          var s = localStorage.getItem('ai-historian-settings');
+          var obj = s ? JSON.parse(s) : null;
+          var theme = obj && obj.theme;
+          var resolved = (theme === 'dark' || theme === 'light')
+            ? theme
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', resolved);
+        } catch(e) {}
+      })();
+    </script>
     <!-- Self-hosted variable fonts (preload for zero CLS) -->
     <link rel="preload" href="/fonts/CormorantGaramond-Variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/CormorantGaramond-Variable-Italic.woff2" as="font" type="font/woff2" crossorigin />
