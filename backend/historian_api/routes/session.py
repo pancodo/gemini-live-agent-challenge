@@ -5,6 +5,7 @@ Endpoints:
   GET  /api/session/{session_id}/status             → poll session state from Firestore
   GET  /api/session/{session_id}/agent/{agent_id}/logs → fetch agent log entries from Firestore
   GET  /api/meta?url=<encoded_url>                  → fetch Open Graph metadata for a URL
+  GET  /api/download?url=<encoded_gcs_url>&filename=<name> → GCS download proxy (bypasses cross-origin download restriction)
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ import google.auth.transport.requests
 import httpx
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from google.cloud import firestore, storage
 
 from ..models import (
@@ -221,6 +223,7 @@ async def get_session_segments(session_id: str) -> SegmentsResponse:
                 imageUrls=signed_image_urls,
                 videoUrl=video_url,
                 sources=d.get("sources", []),
+                graphEdges=d.get("graphEdges", []),
             )
         )
 
@@ -357,6 +360,85 @@ async def branch_session(
     )
 
     return BranchResponse(segmentId=placeholder_segment_id)
+
+
+# ---------------------------------------------------------------------------
+# GCS download proxy (bypasses cross-origin download attribute restriction)
+# ---------------------------------------------------------------------------
+
+_ALLOWED_GCS_PREFIXES = (
+    "https://storage.googleapis.com/",
+    "https://storage.cloud.google.com/",
+)
+
+
+@router.get("/download")
+async def proxy_download(
+    url: str = Query(..., description="GCS signed URL to download"),
+    filename: str = Query(default="download", description="Suggested filename for the browser"),
+) -> StreamingResponse:
+    """Stream a GCS object to the browser with Content-Disposition: attachment.
+
+    The browser's ``download`` attribute on ``<a>`` tags is silently ignored for
+    cross-origin URLs.  This endpoint fetches the GCS signed URL server-side and
+    proxies the bytes back with the correct headers so the browser triggers a
+    save-as dialog.
+    """
+    if not url.startswith(_ALLOWED_GCS_PREFIXES):
+        raise HTTPException(status_code=400, detail="Only GCS URLs are allowed")
+
+    # Sanitise filename: strip characters that break Content-Disposition
+    safe_filename = filename.replace('"', "").replace("\\", "").replace("\n", "").replace("\r", "")
+    if not safe_filename:
+        safe_filename = "download"
+
+    # We open the httpx client *outside* the generator so we can inspect the
+    # upstream status code / content-type before returning the StreamingResponse.
+    client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0))
+    try:
+        upstream = await client.send(
+            client.build_request("GET", url),
+            stream=True,
+        )
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        logger.warning("GCS download proxy failed to connect: %s", exc)
+        raise HTTPException(status_code=502, detail="Failed to reach storage backend") from exc
+
+    if upstream.status_code == 403:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(status_code=403, detail="GCS URL expired or access denied")
+    if upstream.status_code == 404:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(status_code=404, detail="Object not found in storage")
+    if upstream.status_code >= 400:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(
+            status_code=upstream.status_code,
+            detail=f"Storage returned HTTP {upstream.status_code}",
+        )
+
+    upstream_content_type = upstream.headers.get("content-type", "application/octet-stream")
+
+    async def _stream():
+        try:
+            async for chunk in upstream.aiter_bytes(chunk_size=65_536):
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        _stream(),
+        media_type=upstream_content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -540,11 +622,3 @@ async def get_clip_status(session_id: str, clip_id: str) -> ClipStatusResponse:
     raise HTTPException(status_code=501, detail="Clip generator not yet implemented")
 
 
-# ---------------------------------------------------------------------------
-# Grounding Sources
-# ---------------------------------------------------------------------------
-
-@router.get("/session/{session_id}/segments/{segment_id}/sources", response_model=GroundingSourcesResponse)
-async def get_segment_sources(session_id: str, segment_id: str) -> GroundingSourcesResponse:
-    """Return verified grounding sources for a segment from visual manifests. Implemented by Team 3."""
-    raise HTTPException(status_code=501, detail="Sources endpoint not yet implemented")

@@ -1,5 +1,6 @@
 import { motion } from 'motion/react';
 import { useClipGeneration } from '../../hooks/useClipGeneration';
+import { downloadVideo } from '../../utils/downloadImage';
 
 interface ShareButtonProps {
   sessionId: string | null;
@@ -76,11 +77,7 @@ export function ShareButton({ sessionId, segmentId }: ShareButtonProps) {
     if (!segmentId || isGenerating) return;
 
     if (isReady && clipStatus?.downloadUrl) {
-      // Re-download
-      const a = document.createElement('a');
-      a.href = clipStatus.downloadUrl;
-      a.download = `ai-historian-clip-${segmentId}.mp4`;
-      a.click();
+      void downloadVideo(clipStatus.downloadUrl, `ai-historian-clip-${segmentId}.mp4`);
       return;
     }
 
