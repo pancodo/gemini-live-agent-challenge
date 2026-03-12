@@ -54,6 +54,7 @@ export function useSegmentGeo(segmentId: string | null): {
 
     return () => {
       abortController.abort();
+      setIsLoading(false);
     };
   }, [segmentId, segment, setSegmentGeo]);
 
