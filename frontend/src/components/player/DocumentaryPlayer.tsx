@@ -49,6 +49,13 @@ export function DocumentaryPlayer() {
   const mapViewMode = usePlayerStore((s) => s.mapViewMode);
   const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
 
+  const handlePinClick = useCallback((locationName: string) => {
+    const send = useVoiceStore.getState().sendTextToHistorian;
+    if (send) {
+      send(`Tell me more about ${locationName} and its historical significance.`);
+    }
+  }, []);
+
   const cycleMapMode = useCallback(() => {
     const modes: MapViewMode[] = ['ken-burns', 'split', 'map'];
     const idx = modes.indexOf(mapViewMode);
@@ -282,7 +289,7 @@ export function DocumentaryPlayer() {
               className="relative h-full"
               style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
             >
-              <TimelineMap />
+              <TimelineMap onPinClick={handlePinClick} />
             </motion.div>
           )}
         </AnimatePresence>
