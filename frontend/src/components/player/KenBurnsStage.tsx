@@ -121,7 +121,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     return (
       <div
         className="absolute inset-0"
-        style={{ background: 'var(--bg)' }}
+        style={{ background: '#0d0b09' }}
       />
     );
   }
@@ -228,7 +228,6 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             src={url}
             alt=""
             role="presentation"
-            crossOrigin="anonymous"
             data-index={i}
             onLoad={(e) => handleImageLoad(e, i)}
             className="absolute inset-0 w-full h-full object-cover"

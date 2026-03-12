@@ -205,7 +205,7 @@ export function DocumentaryPlayer() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden player-root select-none">
+    <div className="relative w-screen h-screen overflow-hidden player-root select-none" style={{ background: '#0d0b09' }}>
       {/* View Transition CSS */}
       <style>{`
         ::view-transition-old(root) {
