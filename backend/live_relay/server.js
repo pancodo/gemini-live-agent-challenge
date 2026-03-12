@@ -468,8 +468,10 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       }
 
       // Session resumption token — persist to Firestore + forward to client
-      if (msg.sessionResumptionUpdate?.handle) {
-        const handle = msg.sessionResumptionUpdate.handle;
+      // Gemini sends either `handle` (docs) or `newHandle` (actual behavior)
+      const resumeHandle = msg.sessionResumptionUpdate?.handle || msg.sessionResumptionUpdate?.newHandle;
+      if (resumeHandle) {
+        const handle = resumeHandle;
         clientWs.send(
           JSON.stringify({
             type: 'resumption_token',
