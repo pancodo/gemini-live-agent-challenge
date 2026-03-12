@@ -646,6 +646,10 @@ resource "google_cloud_run_v2_service" "live_relay" {
         name  = "GEMINI_MODEL"
         value = "gemini-2.5-flash-native-audio-preview-12-2025"
       }
+      env {
+        name  = "HISTORIAN_API_URL"
+        value = google_cloud_run_v2_service.historian_api.uri
+      }
 
       ports {
         container_port = 8080

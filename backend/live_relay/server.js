@@ -19,6 +19,7 @@
 //   GEMINI_MODEL    - Model ID (default: gemini-2.5-flash-native-audio-preview-12-2025)
 //   GCP_PROJECT_ID  - GCP project for Firestore
 //   PORT            - HTTP/WS listen port (default: 8080)
+//   HISTORIAN_API_URL - historian-api base URL (default: http://localhost:8000)
 // ---------------------------------------------------------------------------
 
 const http = require('node:http');
@@ -43,6 +44,9 @@ const GEMINI_WS_URL =
 
 /** Cache TTL in milliseconds (15 minutes). */
 const CONTEXT_TTL_MS = 15 * 60 * 1000;
+
+/** Base URL of the historian-api Cloud Run service. */
+const HISTORIAN_API_URL = process.env.HISTORIAN_API_URL || 'http://localhost:8000';
 
 // ---------------------------------------------------------------------------
 // System instruction cache
@@ -109,6 +113,47 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000); // every 5 minutes
+
+/**
+ * Call the historian-api /retrieve endpoint to get semantically relevant
+ * document chunks for the given user query.
+ *
+ * Returns a formatted string ready for injection into Gemini Live, or an
+ * empty string on any error (best-effort, never throws).
+ *
+ * @param {string} sessionId
+ * @param {string} query  The user's speech transcript.
+ * @returns {Promise<string>}
+ */
+async function retrieveContext(sessionId, query) {
+  try {
+    const res = await fetch(
+      `${HISTORIAN_API_URL}/api/session/${sessionId}/retrieve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, top_k: 4 }),
+        signal: AbortSignal.timeout(1500),  // never block the voice path > 1.5s
+      }
+    );
+    if (!res.ok) return '';
+    const { chunks } = await res.json();
+    if (!chunks || chunks.length === 0) return '';
+
+    return chunks
+      .map(c => {
+        const pages = c.page_end > c.page_start
+          ? `p.${c.page_start}–${c.page_end}`
+          : `p.${c.page_start}`;
+        const body = c.summary || c.text.slice(0, 400);
+        return `[Document ${pages}] ${body}`;
+      })
+      .join('\n');
+  } catch {
+    // Timeout, network error, JSON parse — all silently ignored.
+    return '';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // HTTP server (health check + WebSocket upgrade)
@@ -293,12 +338,29 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         }
       }
 
-      // Input transcript (user speech -> text) -- used for branch trigger detection
+      // Input transcript (user speech -> text)
       if (msg.serverContent?.inputTranscript?.text) {
-        clientWs.send(JSON.stringify({
-          type: 'transcript',
-          text: msg.serverContent.inputTranscript.text,
-        }));
+        const transcript = msg.serverContent.inputTranscript.text;
+
+        // Always forward transcript to the frontend (branch detection, captions).
+        clientWs.send(JSON.stringify({ type: 'transcript', text: transcript }));
+
+        // RAG injection: for substantive questions (>15 chars), retrieve relevant
+        // document passages and inject them upstream before the historian responds.
+        if (transcript.length > 15 && geminiWs.readyState === WebSocket.OPEN) {
+          retrieveContext(sessionId, transcript).then(contextText => {
+            if (!contextText || geminiWs.readyState !== WebSocket.OPEN) return;
+            geminiWs.send(JSON.stringify({
+              clientContent: {
+                turns: [{
+                  role: 'user',
+                  parts: [{ text: `[Retrieved source context — use to answer the question]\n${contextText}` }],
+                }],
+                turnComplete: false,
+              },
+            }));
+          }).catch(() => { /* silently ignore */ });
+        }
       }
     }
   });
