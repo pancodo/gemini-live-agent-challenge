@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from '../../types';
@@ -11,6 +11,7 @@ import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
 import { ShareButton } from './ShareButton';
 import { useSessionStore } from '../../store/sessionStore';
+import { downloadImage, downloadImages } from '../../utils/downloadImage';
 
 /**
  * DocumentaryPlayer — Full-screen cinematic player.
@@ -25,8 +26,11 @@ import { useSessionStore } from '../../store/sessionStore';
 export function DocumentaryPlayer() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
+  /** Tracks the URL of whichever image KenBurnsStage is currently showing. */
+  const activeImageUrlRef = useRef<string | null>(null);
   const navigate = useNavigate();
   const sessionId = useSessionStore((s) => s.sessionId);
   const voiceState = useVoiceStore((s) => s.state);
@@ -45,7 +49,7 @@ export function DocumentaryPlayer() {
   );
 
   const readySegments = useMemo(
-    () => segments.filter((s) => s.status === 'ready'),
+    () => segments.filter((s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready'),
     [segments],
   );
 
@@ -112,6 +116,31 @@ export function DocumentaryPlayer() {
   // ── Media Session API (OS-level transport controls) ──────────
   const goNext = useCallback(() => navigateSegment('next'), [navigateSegment]);
   const goPrev = useCallback(() => navigateSegment('prev'), [navigateSegment]);
+
+  // ── Download helpers ─────────────────────────────────────────
+  const handleActiveImageChange = useCallback((url: string | null) => {
+    activeImageUrlRef.current = url;
+  }, []);
+
+  const handleDownloadCurrent = useCallback(() => {
+    const url = activeImageUrlRef.current;
+    if (!url) return;
+    const slug = currentSegment?.title
+      ? currentSegment.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 40)
+      : 'frame';
+    void downloadImage(url, `ai-historian-${slug}.jpg`);
+  }, [currentSegment?.title]);
+
+  const handleSaveAll = useCallback(() => {
+    const urls = currentSegment?.imageUrls;
+    if (!urls || urls.length === 0) return;
+    const slug = currentSegment.title
+      ? currentSegment.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 40)
+      : 'scene';
+    startSaveAllTransition(() => {
+      void downloadImages(urls, `ai-historian-${slug}`, 500);
+    });
+  }, [currentSegment?.imageUrls, currentSegment?.title]);
 
   useMediaSession(currentSegment, {
     onNextTrack: hasNext ? goNext : undefined,
@@ -204,7 +233,10 @@ export function DocumentaryPlayer() {
           transition={{ duration: 0.6, ease: 'easeInOut' }}
           className="absolute inset-0"
         >
-          <KenBurnsStage segment={currentSegment} />
+          <KenBurnsStage
+            segment={currentSegment}
+            onActiveImageChange={handleActiveImageChange}
+          />
         </motion.div>
       </AnimatePresence>
 
@@ -497,6 +529,129 @@ export function DocumentaryPlayer() {
               </svg>
               Segments
             </button>
+
+            {/* Download current image */}
+            {(currentSegment?.imageUrls?.length ?? 0) > 0 && (
+              <button
+                onClick={handleDownloadCurrent}
+                title="Download image"
+                aria-label="Download current image"
+                className="flex items-center justify-center transition-colors duration-200"
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 6,
+                  border: '1px solid rgba(196,149,106,0.25)',
+                  background: 'rgba(196,149,106,0.10)',
+                  color: 'var(--glow-primary)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(196,149,106,0.22)';
+                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.55)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(196,149,106,0.10)';
+                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.25)';
+                }}
+              >
+                {/* Download-arrow icon */}
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 13 13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M6.5 1v8M3.5 6.5l3 2.5 3-2.5" />
+                  <path d="M1.5 11.5h10" />
+                </svg>
+              </button>
+            )}
+
+            {/* Save all images */}
+            {(currentSegment?.imageUrls?.length ?? 0) > 1 && (
+              <button
+                onClick={handleSaveAll}
+                disabled={isSavingAll}
+                title={
+                  isSavingAll
+                    ? 'Saving…'
+                    : `Save all ${currentSegment!.imageUrls.length} images`
+                }
+                aria-label="Save all images"
+                className="flex items-center gap-1.5 transition-colors duration-200"
+                style={{
+                  height: 30,
+                  padding: '0 10px',
+                  borderRadius: 6,
+                  border: '1px solid rgba(196,149,106,0.25)',
+                  background: isSavingAll
+                    ? 'rgba(196,149,106,0.18)'
+                    : 'rgba(196,149,106,0.10)',
+                  color: isSavingAll
+                    ? 'rgba(196,149,106,0.55)'
+                    : 'var(--glow-primary)',
+                  cursor: isSavingAll ? 'default' : 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 400,
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (isSavingAll) return;
+                  e.currentTarget.style.background = 'rgba(196,149,106,0.22)';
+                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.55)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isSavingAll
+                    ? 'rgba(196,149,106,0.18)'
+                    : 'rgba(196,149,106,0.10)';
+                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.25)';
+                }}
+              >
+                {isSavingAll ? (
+                  <>
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 11 11"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M5.5 1v3M8.5 2.5l-2 2M10 5.5H7M8.5 8.5l-2-2M5.5 10V7M2.5 8.5l2-2M1 5.5h3M2.5 2.5l2 2" />
+                    </svg>
+                    Saving
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 11 11"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="1" y="1" width="9" height="9" rx="1.5" />
+                      <path d="M3.5 6l2 2 2-2" />
+                      <path d="M5.5 3v5" />
+                    </svg>
+                    Save all
+                  </>
+                )}
+              </button>
+            )}
 
             <ShareButton sessionId={sessionId} segmentId={currentSegmentId} />
           </div>
