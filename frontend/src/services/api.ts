@@ -86,6 +86,7 @@ Rules:
   const res = await fetch(`${GEMINI_FLASH_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(15_000),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
@@ -103,13 +104,33 @@ Rules:
     candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
   };
   const text = data.candidates[0]?.content?.parts[0]?.text ?? '{}';
-  const parsed = JSON.parse(text) as Omit<SegmentGeo, 'segmentId'>;
 
-  return {
+  let parsed: Omit<SegmentGeo, 'segmentId'>;
+  try {
+    parsed = JSON.parse(text) as Omit<SegmentGeo, 'segmentId'>;
+  } catch {
+    console.warn('[extractGeoData] JSON parse failed, returning fallback');
+    return { segmentId, center: [30, 30] as [number, number], zoom: 4, events: [], routes: [] };
+  }
+
+  // Validate & fix swapped coordinates (|lat| > 90 means lat/lng are swapped)
+  const events = (parsed.events ?? []).map((e) => {
+    if (Math.abs(e.lat) > 90) return { ...e, lat: e.lng, lng: e.lat };
+    return e;
+  });
+
+  const result: SegmentGeo = {
     segmentId,
     center: parsed.center ?? [30, 30],
     zoom: parsed.zoom ?? 4,
-    events: parsed.events ?? [],
+    events,
     routes: parsed.routes ?? [],
   };
+
+  // Don't cache empty results — allow retry on next render
+  if (result.events.length === 0 && result.routes.length === 0) {
+    throw new Error('Geo extraction returned no events or routes');
+  }
+
+  return result;
 }
