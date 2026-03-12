@@ -62,17 +62,22 @@ export function useSSE(sessionId: string | null): void {
           addEvaluatedSource(event.agentId, event.source);
           break;
 
-        case 'segment_update':
+        case 'segment_update': {
+          // Strip gs:// URIs — they are GCS paths, not browser-loadable URLs.
+          // getSegments() provides signed HTTPS URLs once the pipeline completes.
+          const httpImageUrls = event.imageUrls?.filter((u) => !u.startsWith('gs://'));
+          const httpVideoUrl = event.videoUrl?.startsWith('gs://') ? undefined : event.videoUrl;
           setSegment(event.segmentId, {
             id: event.segmentId,
             status: event.status,
             ...(event.title !== undefined && { title: event.title }),
-            ...(event.imageUrls !== undefined && { imageUrls: event.imageUrls }),
-            ...(event.videoUrl !== undefined && { videoUrl: event.videoUrl }),
+            ...(httpImageUrls !== undefined && httpImageUrls.length > 0 && { imageUrls: httpImageUrls }),
+            ...(httpVideoUrl !== undefined && { videoUrl: httpVideoUrl }),
             ...(event.script !== undefined && { script: event.script }),
             ...(event.mood !== undefined && { mood: event.mood }),
           });
           break;
+        }
 
         case 'stats_update':
           updateStats({
