@@ -506,9 +506,9 @@ function ProductPreviewCard() {
           className="absolute inset-0"
           style={{
             background: `
-              radial-gradient(ellipse 100% 100% at 30% 40%, rgba(139,94,26,0.25) 0%, transparent 60%),
-              radial-gradient(ellipse 80% 80% at 75% 60%, rgba(30,60,80,0.3) 0%, transparent 55%),
-              linear-gradient(160deg, #1a1208 0%, #0a0e14 50%, #0d0b09 100%)
+              radial-gradient(ellipse 100% 100% at 30% 40%, rgba(139,94,26,0.12) 0%, transparent 60%),
+              radial-gradient(ellipse 80% 80% at 75% 60%, rgba(30,60,80,0.1) 0%, transparent 55%),
+              var(--bg3)
             `,
           }}
         />
@@ -531,7 +531,7 @@ function ProductPreviewCard() {
         <div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 25%, rgba(13,11,9,0.5) 65%, rgba(13,11,9,0.9) 100%)',
+            background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 25%, color-mix(in srgb, var(--bg) 30%, transparent) 65%, color-mix(in srgb, var(--bg) 60%, transparent) 100%)',
           }}
         />
 
