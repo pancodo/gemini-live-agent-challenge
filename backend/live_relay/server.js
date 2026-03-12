@@ -368,15 +368,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
-            startOfSpeechSensitivity: 'START_OF_SPEECH_SENSITIVITY_LOW',
-            endOfSpeechSensitivity: 'END_OF_SPEECH_SENSITIVITY_LOW',
-            prefixPaddingMs: 100,
-            silenceTimeoutMs: 1000,
           },
         },
-        inputAudioTranscription: {
-          languageCode: 'en',
-        },
+        inputAudioTranscription: {},
         contextWindowCompression: {
           slidingWindow: {},
         },
