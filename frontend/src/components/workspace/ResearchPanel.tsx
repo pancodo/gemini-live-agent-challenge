@@ -215,7 +215,7 @@ function FactsPopover({ agents, onEntityClick }: { agents: Record<string, AgentS
 }
 
 function SegmentsPopover({ segments, triggerIris }: { segments: Record<string, Segment>; triggerIris: (path: string) => void }) {
-  const ready = Object.values(segments).filter((s) => s.status === 'ready' || s.status === 'complete');
+  const ready = Object.values(segments).filter((s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready');
   if (ready.length === 0) return <p className="font-sans text-[12px] text-[var(--muted)] text-center py-2">No segments ready yet</p>;
   return (
     <div className="flex flex-col gap-2">

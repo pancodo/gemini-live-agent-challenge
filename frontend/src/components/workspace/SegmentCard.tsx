@@ -12,6 +12,7 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useReducedMotion } 
 import { Badge, Button } from '../ui';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTextScramble } from '../../hooks/useTextScramble';
+import { downloadImage } from '../../utils/downloadImage';
 import type { Segment } from '../../types';
 
 // ── Lightbox ─────────────────────────────────────────────────────
@@ -45,10 +46,7 @@ function Lightbox({ urls, initialIndex, onClose }: LightboxProps) {
     (e: MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       const url = urls[current];
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `scene-${current + 1}.jpg`;
-      a.click();
+      void downloadImage(url, `scene-${current + 1}.jpg`);
     },
     [urls, current],
   );
@@ -184,7 +182,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
   const my = useMotionValue(0);
   const springX = useSpring(mx, { stiffness: 150, damping: 15 });
   const springY = useSpring(my, { stiffness: 150, damping: 15 });
-  const isReady = segment.status === 'ready' || segment.status === 'complete';
+  const isReady = segment.status === 'ready' || segment.status === 'complete' || segment.status === 'visual_ready';
   const [hasBeenReady, setHasBeenReady] = useState(isReady);
 
   // Track transition to ready/complete for cipher reveal

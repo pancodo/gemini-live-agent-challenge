@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePlayerStore } from '../store/playerStore';
 
 // ── Wire protocol types ────────────────────────────────────────
 type RelayMessage =
@@ -8,6 +9,7 @@ type RelayMessage =
   | { type: 'resumption_token'; token: string }
   | { type: 'go_away' }
   | { type: 'transcript'; text: string }
+  | { type: 'live_illustration'; imageUrl: string; caption: string }
   | { type: 'error'; message: string };
 
 // ── Public interface ───────────────────────────────────────────
@@ -148,6 +150,17 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
         case 'transcript':
           setLastUserTranscript(msg.text);
           break;
+
+        case 'live_illustration': {
+          if (msg.imageUrl) {
+            usePlayerStore.getState().setLiveIllustration({
+              imageUrl: msg.imageUrl,
+              caption: msg.caption,
+              receivedAt: Date.now(),
+            });
+          }
+          break;
+        }
 
         case 'error':
           console.error('[useGeminiLive] Relay error:', msg.message);

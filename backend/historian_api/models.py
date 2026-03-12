@@ -40,6 +40,7 @@ class SegmentResponse(BaseModel):
     imageUrls: list[str] = []
     videoUrl: str | None = None
     sources: list[str] = []
+    graphEdges: list[str] = []
 
 
 class SegmentsResponse(BaseModel):
@@ -96,6 +97,18 @@ class GroundingSourcesResponse(BaseModel):
 
 
 # ── RAG Retrieval ──────────────────────────────────────────────
+
+class IllustrateRequest(BaseModel):
+    query: str
+    current_segment_id: str = ""
+    mood: str = "cinematic"
+
+
+class IllustrateResponse(BaseModel):
+    imageUrl: str | None = None
+    caption: str
+    generatedAt: str
+
 
 class RetrieveRequest(BaseModel):
     query: str

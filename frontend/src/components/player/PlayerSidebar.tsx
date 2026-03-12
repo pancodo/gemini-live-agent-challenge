@@ -6,6 +6,7 @@ import { useResearchStore } from '../../store/researchStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useGroundingSources } from '../../hooks/useGroundingSources';
 import { SourcePanel } from './SourcePanel';
+import { downloadImage } from '../../utils/downloadImage';
 
 /** Extended player store shape — branchGraph will be added by Team 1. */
 interface PlayerStoreWithBranch {
@@ -36,14 +37,7 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
   const handleDownload = useCallback(() => {
     const url = images[index];
     const filename = `${segmentTitle.replace(/\s+/g, '-').toLowerCase()}-frame-${index + 1}.jpg`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadImage(url, filename);
   }, [images, index, segmentTitle]);
 
   // Keyboard navigation + Escape

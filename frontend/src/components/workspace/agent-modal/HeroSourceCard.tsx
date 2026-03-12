@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { getUrlMeta } from '../../../services/api';
+import { downloadImage } from '../../../utils/downloadImage';
 import type { EvaluatedSource, UrlMeta } from '../../../types';
 
 // ─────────────────────────────────────────────────────────────
@@ -40,14 +41,7 @@ function HeroImageDownloadButton({ imageUrl, filename }: { imageUrl: string; fil
   const handleDownload = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const a = document.createElement('a');
-    a.href = imageUrl;
-    a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadImage(imageUrl, filename);
   };
 
   return (

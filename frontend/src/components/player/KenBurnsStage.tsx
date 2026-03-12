@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useVoiceStore } from '../../store/voiceStore';
@@ -41,6 +42,7 @@ const CYCLE_INTERVAL_MS = 7000;
 export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStageProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const isKenBurnsPaused = usePlayerStore((s) => s.isKenBurnsPaused);
+  const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const voiceState = useVoiceStore((s) => s.state);
 
   const shouldPause =
@@ -218,6 +220,10 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           0%   { transform: scale(1.0) translate(${driftAssignments[3]?.xStart ?? '0%'}, ${driftAssignments[3]?.yStart ?? '0%'}); }
           100% { transform: scale(1.12) translate(${driftAssignments[3]?.xEnd ?? '1%'}, ${driftAssignments[3]?.yEnd ?? '0.5%'}); }
         }
+        @keyframes illustration-generating {
+          0%, 100% { box-shadow: inset 0 0 60px rgba(139, 94, 26, 0); }
+          50% { box-shadow: inset 0 0 60px rgba(139, 94, 26, 0.12); }
+        }
       `}</style>
 
       {images.map((url, i) => {
@@ -247,6 +253,41 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           />
         );
       })}
+
+      {/* Live illustration overlay */}
+      <AnimatePresence>
+        {liveIllustration && (
+          <motion.img
+            key={liveIllustration.imageUrl}
+            src={liveIllustration.imageUrl}
+            alt=""
+            role="presentation"
+            initial={{ opacity: 0, scale: 1.0 }}
+            animate={{ opacity: 1, scale: 1.08 }}
+            exit={{ opacity: 0 }}
+            transition={{
+              opacity: { duration: 1.2, ease: 'easeInOut' },
+              scale: { duration: 20, ease: 'linear' },
+            }}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{
+              zIndex: 2,
+              willChange: 'transform, opacity',
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Illustration shimmer glow */}
+      {liveIllustration && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            zIndex: 1,
+            animation: 'illustration-generating 3s ease-in-out infinite',
+          }}
+        />
+      )}
 
       {/* Vignette overlay */}
       <div

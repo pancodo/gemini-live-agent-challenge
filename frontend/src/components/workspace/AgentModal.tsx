@@ -10,6 +10,7 @@ import type {
   AgentState, AgentStatus, AgentLog,
   AgentLogsResponse, EvaluatedSource, UrlMeta,
 } from '../../types';
+import { downloadImage } from '../../utils/downloadImage';
 import { HeroSourceCard } from './agent-modal/HeroSourceCard';
 import { RelevanceBar, deriveRelevanceScore } from './agent-modal/RelevanceBar';
 import { KeyFindingBanner } from './agent-modal/KeyFindingBanner';
@@ -225,14 +226,7 @@ function ImageDownloadButton({ imageUrl, filename }: { imageUrl: string; filenam
   const handleDownload = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const a = document.createElement('a');
-    a.href = imageUrl;
-    a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadImage(imageUrl, filename);
   };
 
   return (

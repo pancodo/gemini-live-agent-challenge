@@ -72,6 +72,11 @@ const transcriptDebounceTimers = new Map();
 /** @type {Map<string, Map<string, QueryCacheEntry>>} */
 const queryResultCache = new Map();
 
+// --- LIVE ILLUSTRATION ---
+const ILLUSTRATION_COOLDOWN_MS = 12_000;
+/** @type {Map<string, number>} sessionId → last illustration timestamp */
+const lastIllustrationTime = new Map();
+
 function _normalizeQuery(query) {
   return query.toLowerCase().trim().replace(/\s+/g, ' ');
 }
@@ -140,6 +145,10 @@ setInterval(() => {
     }
     if (sessionCache.size === 0) queryResultCache.delete(sid);
   }
+  // Clean expired illustration cooldowns (older than 5 minutes)
+  for (const [sid, ts] of lastIllustrationTime) {
+    if (now - ts > 5 * 60 * 1000) lastIllustrationTime.delete(sid);
+  }
 }, 5 * 60 * 1000); // every 5 minutes
 
 /**
@@ -198,6 +207,58 @@ async function retrieveContext(sessionId, query) {
     return contextText;
   } catch {
     return '';
+  }
+}
+
+/**
+ * Fire-and-forget illustration generation. Sends the result to the client
+ * WebSocket as a `live_illustration` message. Never throws — errors are
+ * silently swallowed because the historian voice must never be interrupted.
+ *
+ * @param {string} sessionId
+ * @param {string} transcript  User's speech transcript
+ * @param {WebSocket} clientWs  Browser WebSocket to send result to
+ */
+async function maybeGenerateIllustration(sessionId, transcript, clientWs) {
+  // 1. Cooldown check
+  const now = Date.now();
+  const lastTime = lastIllustrationTime.get(sessionId) || 0;
+  if (now - lastTime < ILLUSTRATION_COOLDOWN_MS) return;
+
+  // 2. Minimum length heuristic
+  if (transcript.length < 20) return;
+
+  // 3. Set cooldown immediately (prevents double-fire)
+  lastIllustrationTime.set(sessionId, now);
+
+  try {
+    const res = await fetch(
+      `${HISTORIAN_API_URL}/api/session/${sessionId}/illustrate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: transcript,
+          current_segment_id: '',
+          mood: 'cinematic',
+        }),
+        signal: AbortSignal.timeout(15_000),
+      }
+    );
+
+    if (!res.ok) return;
+    const { imageUrl, caption } = await res.json();
+
+    if (imageUrl && clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(JSON.stringify({
+        type: 'live_illustration',
+        imageUrl,
+        caption,
+      }));
+    }
+  } catch (err) {
+    console.warn('[live-relay] Illustration generation failed:', err.message);
+    // Non-fatal: historian voice continues regardless
   }
 }
 
@@ -425,6 +486,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
           }, 300);
           transcriptDebounceTimers.set(sessionId, timer);
         }
+
+        // Fire-and-forget live illustration
+        maybeGenerateIllustration(sessionId, transcript, clientWs);
       }
     }
   });
@@ -471,6 +535,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
     }
     const pendingTimer = transcriptDebounceTimers.get(sessionId);
     if (pendingTimer) { clearTimeout(pendingTimer); transcriptDebounceTimers.delete(sessionId); }
+    lastIllustrationTime.delete(sessionId);
   });
 
   /** Close client when Gemini disconnects unexpectedly. */
