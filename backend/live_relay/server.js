@@ -322,10 +322,10 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       `[live-relay] System instruction ready (${systemText.length} chars) for session=${sessionId}`
     );
   } catch (err) {
-    console.error(`[live-relay] Failed to fetch context for session=${sessionId}:`, err);
-    clientWs.send(JSON.stringify({ type: 'error', message: 'Failed to load documentary context' }));
-    clientWs.close(1011, 'context fetch failed');
-    return;
+    console.warn(`[live-relay] Failed to fetch context for session=${sessionId}, using fallback:`, err.message);
+    // Fallback: use default persona prompt without documentary context
+    const fallbackPersona = PERSONA_PROMPTS.professor || '';
+    systemText = fallbackPersona || 'You are a knowledgeable historian. Greet the user and offer to discuss any historical topic.';
   }
 
   // ── 2. Open upstream Gemini WebSocket ─────────────────────────
