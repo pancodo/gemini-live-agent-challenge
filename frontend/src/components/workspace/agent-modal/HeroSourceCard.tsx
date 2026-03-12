@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { getUrlMeta } from '../../../services/api';
@@ -33,6 +33,38 @@ function useUrlMeta(url: string, enabled: boolean) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Hero Download Button
+// ─────────────────────────────────────────────────────────────
+
+function HeroImageDownloadButton({ imageUrl, filename }: { imageUrl: string; filename: string }) {
+  const handleDownload = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      aria-label="Download image"
+      className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-white/80 hover:bg-black/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-auto font-sans text-[10px] uppercase tracking-[0.1em]"
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M6 1v6.5M3 5l3 3 3-3M1.5 10h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      Save
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Hero OG Image Zone — 220px tall (vs 140px on SourceCard)
 // ─────────────────────────────────────────────────────────────
 
@@ -53,7 +85,7 @@ function HeroOgImageZone({
   const showFallback = !isLoading && (!showImage || imgError);
 
   return (
-    <div className="relative w-full h-[220px] overflow-hidden bg-[var(--bg3)] rounded-t-xl">
+    <div className="group relative w-full h-[220px] overflow-hidden bg-[var(--bg3)] rounded-t-xl">
       {/* Shimmer skeleton while loading */}
       {showSkeleton && (
         <div className="absolute inset-0 log-source evaluating" />
@@ -92,6 +124,11 @@ function HeroOgImageZone({
         className="absolute inset-0 pointer-events-none"
         style={{ background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.32) 100%)' }}
       />
+
+      {/* Download button — appears on hover */}
+      {showImage && imageLoaded && (
+        <HeroImageDownloadButton imageUrl={imageUrl} filename={`${hostname}-featured.jpg`} />
+      )}
     </div>
   );
 }
