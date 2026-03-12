@@ -29,6 +29,7 @@ import type { MapViewMode } from '../../types';
 export function DocumentaryPlayer() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mapHintDismissed, setMapHintDismissed] = useState(false);
   const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
@@ -294,6 +295,55 @@ export function DocumentaryPlayer() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Map onboarding hint */}
+      <AnimatePresence>
+        {mapViewMode !== 'ken-burns' && !mapHintDismissed && (
+          <motion.div
+            key="map-hint"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.4, delay: 0.8 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20"
+            style={{
+              background: 'rgba(26,21,16,0.95)',
+              border: '1px solid rgba(196,149,106,0.3)',
+              borderRadius: 10,
+              padding: '14px 20px',
+              maxWidth: 360,
+            }}
+          >
+            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--glow-primary)', marginBottom: 8 }}>
+              Live Time Travel Map
+            </p>
+            <ul style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'rgba(232,221,208,0.7)', lineHeight: 1.8, paddingLeft: 14, margin: 0 }}>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>M</strong> — cycle view: visuals / split / map</li>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>&larr; &rarr;</strong> — switch segments (map flies to new region)</li>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>Hover pins</strong> — see location name + era</li>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>Click a pin</strong> — ask the historian about that place</li>
+            </ul>
+            <button
+              onClick={() => setMapHintDismissed(true)}
+              style={{
+                marginTop: 10,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 10,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                color: 'var(--muted)',
+                background: 'transparent',
+                border: '1px solid rgba(139,94,26,0.25)',
+                borderRadius: 4,
+                padding: '4px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              Got it
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Layer 1.5: Conversation mode — Historian avatar overlay */}
       <AnimatePresence>
