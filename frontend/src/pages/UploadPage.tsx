@@ -57,7 +57,7 @@ function SampleDocuments() {
       setLoading(doc.filename);
       prefetchWorkspace();
       try {
-        const res = await fetch(`/${doc.filename}`);
+        const res = await fetch(`/samples/${doc.filename}`);
         if (!res.ok) throw new Error('fetch failed');
         const blob = await res.blob();
         const file = new File([blob], doc.filename, { type: 'application/pdf' });
