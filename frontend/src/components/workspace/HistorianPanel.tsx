@@ -100,11 +100,10 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
         <motion.circle
           cx="32"
           cy="32"
-          r="3"
+          r={3}
           fill={active ? 'var(--gold)' : 'var(--muted)'}
-          fillOpacity={active ? 0.9 : 0.4}
-          animate={active && !reducedMotion ? { r: [3, 3.8, 3], fillOpacity: [0.9, 0.5, 0.9] } : { r: 3, fillOpacity: active ? 0.9 : 0.4 }}
-          transition={active ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
+          animate={{ fillOpacity: active && !reducedMotion ? [0.9, 0.5, 0.9] : active ? 0.9 : 0.4 }}
+          transition={active && !reducedMotion ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
         />
 
         {/* Cardinal arrowheads */}
@@ -166,19 +165,18 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
 
 function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; voiceState: VoiceState }) {
   const [avatarReady, setAvatarReady] = useState(false);
-  const showEmblem = !active || !avatarReady;
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
-      {/* Live2D Avatar — loads lazily when voice becomes active */}
+      {/* Live2D Avatar — always active so it loads eagerly and shows idle animation */}
       <HistorianAvatar
         size={160}
-        active={active}
+        active
         onLoad={() => setAvatarReady(true)}
       />
 
-      {/* Emblem fallback — shows when avatar isn't loaded yet */}
-      {showEmblem && (
+      {/* Emblem fallback — only while avatar is loading */}
+      {!avatarReady && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 1 }}>
           <HistorianEmblem active={active} voiceState={voiceState} />
         </div>
