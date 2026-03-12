@@ -14,7 +14,7 @@ export function useSegmentGeo(segmentId: string | null): {
 } {
   const segmentGeo = usePlayerStore((s) => s.segmentGeo);
   const setSegmentGeo = usePlayerStore((s) => s.setSegmentGeo);
-  const segments = useResearchStore((s) => s.segments);
+  const segment = useResearchStore((s) => segmentId ? s.segments[segmentId] : null);
   const [isLoading, setIsLoading] = useState(false);
   const inFlightRef = useRef<Set<string>>(new Set());
 
@@ -28,14 +28,13 @@ export function useSegmentGeo(segmentId: string | null): {
     if (cached) return;
     if (inFlightRef.current.has(segmentId)) return;
 
-    const segment = segments[segmentId];
     if (!segment?.script) return;
 
     const abortController = new AbortController();
     inFlightRef.current.add(segmentId);
     setIsLoading(true);
 
-    extractGeoData(segmentId, segment.script, segment.title, abortController.signal)
+    extractGeoData(segmentId, segment.script, segment.title ?? '', abortController.signal)
       .then((result) => {
         if (!abortController.signal.aborted) {
           setSegmentGeo(segmentId, result);
@@ -56,7 +55,7 @@ export function useSegmentGeo(segmentId: string | null): {
     return () => {
       abortController.abort();
     };
-  }, [segmentId, segments, setSegmentGeo]);
+  }, [segmentId, segment, setSegmentGeo]);
 
   return { geo, isLoading };
 }
