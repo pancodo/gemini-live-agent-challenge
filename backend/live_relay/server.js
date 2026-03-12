@@ -370,6 +370,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
             disabled: false,
           },
         },
+        inputAudioTranscription: {},
         contextWindowCompression: {
           slidingWindow: {},
         },
