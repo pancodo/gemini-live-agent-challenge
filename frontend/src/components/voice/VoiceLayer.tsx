@@ -22,8 +22,15 @@ export function VoiceLayer() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const resumptionToken = useVoiceStore((s) => s.resumptionToken);
   const setResumptionToken = useVoiceStore((s) => s.setResumptionToken);
+  const loadResumptionToken = useVoiceStore((s) => s.loadResumptionToken);
+  const clearResumptionToken = useVoiceStore((s) => s.clearResumptionToken);
 
   const { state, transition, handleInterrupt, reset } = useVoiceState();
+
+  // Hydrate resumption token from localStorage on mount
+  useEffect(() => {
+    loadResumptionToken();
+  }, [loadResumptionToken]);
   const playback = useAudioPlayback();
 
   const { sendPCM, sendText, connect, disconnect, isConnected } = useGeminiLive({
@@ -64,9 +71,10 @@ export function VoiceLayer() {
     prevConnectedRef.current = isConnected;
 
     if (wasConnected && !isConnected && useVoiceStore.getState().state !== 'idle') {
-      reset();
+      // Soft reset: return to idle but keep the resumption token for reconnection
+      transition('idle');
     }
-  }, [isConnected, reset]);
+  }, [isConnected, transition]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -92,6 +100,7 @@ export function VoiceLayer() {
         capture.stop();
         disconnect();
         reset();
+        clearResumptionToken();
         break;
 
       case 'historian_speaking':
@@ -104,7 +113,7 @@ export function VoiceLayer() {
         // processing, interrupted — no-op
         break;
     }
-  }, [connect, disconnect, capture, playback, transition, reset]);
+  }, [connect, disconnect, capture, playback, transition, reset, clearResumptionToken]);
 
   // Stable ref for beginConsultation to avoid re-render loops.
   // The ref always points at the latest closure so callers get fresh state.
