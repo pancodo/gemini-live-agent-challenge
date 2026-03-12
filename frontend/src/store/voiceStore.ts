@@ -12,6 +12,8 @@ interface VoiceStore {
   userTranscript: string | null;
   /** Set by VoiceLayer — triggers voice connection + initial greeting */
   beginConsultation: (() => void) | null;
+  /** Set by VoiceLayer — sends a text message to the historian mid-session */
+  sendTextToHistorian: ((text: string) => void) | null;
   /** Playback AnalyserNode — used by HistorianAvatar for lip sync */
   analyserNode: AnalyserNode | null;
   setState: (state: VoiceState) => void;
@@ -22,6 +24,7 @@ interface VoiceStore {
   setCaption: (text: string) => void;
   setUserTranscript: (text: string | null) => void;
   setBeginConsultation: (fn: (() => void) | null) => void;
+  setSendTextToHistorian: (fn: ((text: string) => void) | null) => void;
   setAnalyserNode: (node: AnalyserNode | null) => void;
   clearResume: () => void;
 }
@@ -34,6 +37,7 @@ export const useVoiceStore = create<VoiceStore>()((set) => ({
   caption: null,
   userTranscript: null,
   beginConsultation: null,
+  sendTextToHistorian: null,
   analyserNode: null,
   setState: (state) => set({ state }),
   setResume: (resumeSegmentId, resumeOffset) => set({ resumeSegmentId, resumeOffset }),
@@ -54,6 +58,7 @@ export const useVoiceStore = create<VoiceStore>()((set) => ({
   setCaption: (caption) => set({ caption }),
   setUserTranscript: (userTranscript) => set({ userTranscript }),
   setBeginConsultation: (fn) => set({ beginConsultation: fn }),
+  setSendTextToHistorian: (fn) => set({ sendTextToHistorian: fn }),
   setAnalyserNode: (analyserNode) => set({ analyserNode }),
   clearResume: () => set({ resumeSegmentId: null, resumeOffset: 0, caption: null, userTranscript: null }),
 }));
