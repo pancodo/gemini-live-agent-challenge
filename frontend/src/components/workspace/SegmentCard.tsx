@@ -268,23 +268,20 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         onMouseMove={handleMouseMove}
         className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-4 cursor-pointer`}
       >
-        {/* Header row: segment index */}
-        <div className="flex items-center justify-between mb-3">
-          <span />
+        {/* Title row with index */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <h3 className="seg-title font-serif text-[18px] font-normal text-[var(--text)] leading-snug flex-1">
+            {isGenerating
+              ? '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'
+              : scrambledTitle}
+          </h3>
           <span
-            className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em]"
+            className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em] shrink-0 mt-1.5"
             style={{ fontVariantNumeric: 'tabular-nums' }}
           >
             {String(index + 1).padStart(2, '0')}
           </span>
         </div>
-
-        {/* Title with cipher reveal / skeleton shimmer */}
-        <h3 className="seg-title font-serif text-[18px] font-normal text-[var(--text)] mb-3 leading-snug">
-          {isGenerating
-            ? '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'
-            : scrambledTitle}
-        </h3>
 
         {/* Image carousel — single image with crossfade + dot navigation */}
         {imageCount > 0 && (
