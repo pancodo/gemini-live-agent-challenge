@@ -395,7 +395,10 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
   // Re-render all pages on pdf/zoom/renderPage changes
   useEffect(() => {
     if (!pdf) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Render at slightly higher resolution than display for crisper text.
+    // Native PDF viewers use their own high-res engines; pdfjs needs help.
+    const rawDpr = window.devicePixelRatio || 1;
+    const dpr = rawDpr < 1.5 ? rawDpr * 1.5 : rawDpr;
 
     async function renderAll() {
       for (let i = 1; i <= pdf!.numPages; i++) {
