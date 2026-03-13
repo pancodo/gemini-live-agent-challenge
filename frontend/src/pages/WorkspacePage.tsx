@@ -83,7 +83,6 @@ export function WorkspacePage() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const status = useSessionStore((s) => s.status);
   const setSegment = useResearchStore((s) => s.setSegment);
-  const segments = useResearchStore((s) => s.segments);
   const triggerIrisWs = usePlayerStore((s) => s.triggerIris);
   const [settings] = useSettings();
   const autoWatchFired = useRef(false);
@@ -93,18 +92,21 @@ export function WorkspacePage() {
   // Do not reset the research store on unmount — the player route
   // reads segments from this store immediately after navigation.
 
+  const hasReadySegment = useResearchStore(
+    (s) => Object.values(s.segments).some(
+      (seg) => seg.status === 'ready' || seg.status === 'complete' || seg.status === 'visual_ready',
+    ),
+  );
+
   // Prefetch player chunk when first segment becomes ready
   const playerPrefetched = useRef(false);
   useEffect(() => {
     if (playerPrefetched.current) return;
-    const hasReady = Object.values(segments).some(
-      (s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready',
-    );
-    if (hasReady) {
+    if (hasReadySegment) {
       playerPrefetched.current = true;
       import('./PlayerPage').catch(() => {});
     }
-  }, [segments]);
+  }, [hasReadySegment]);
 
   // When pipeline finishes, fetch full segments from Firestore (with signed image URLs)
   useEffect(() => {
@@ -117,6 +119,13 @@ export function WorkspacePage() {
     }
   }, [status, sessionId, setSegment]);
 
+  const firstReadyId = useResearchStore((s) => {
+    const entry = Object.values(s.segments).find(
+      (seg) => seg.status === 'ready' || seg.status === 'complete' || seg.status === 'visual_ready',
+    );
+    return entry?.id ?? null;
+  });
+
   // Auto-watch: navigate to player when status is ready/playing (if enabled).
   // Works on mount if status is already 'ready' — no transition needed.
   // Resets the fired flag when the setting is toggled off so re-enabling fires again.
@@ -127,15 +136,11 @@ export function WorkspacePage() {
     }
     if (autoWatchFired.current) return;
     if (status !== 'ready' && status !== 'playing') return;
-
-    const readySegment = Object.values(segments).find(
-      (s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready',
-    );
-    if (!readySegment) return;
+    if (!firstReadyId) return;
 
     autoWatchFired.current = true;
-    triggerIrisWs(`/player/${readySegment.id}`);
-  }, [settings.autoWatch, status, segments, triggerIrisWs]);
+    triggerIrisWs(`/player/${firstReadyId}`);
+  }, [settings.autoWatch, status, firstReadyId, triggerIrisWs]);
 
   if (!sessionId) return <Navigate to="/" replace />;
 

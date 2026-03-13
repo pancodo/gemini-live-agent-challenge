@@ -20,6 +20,8 @@ export function IrisOverlay() {
   const navigate = useNavigate();
   const overlayRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const openTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     if (!irisTargetPath || activeRef.current) return;
@@ -44,7 +46,7 @@ export function IrisOverlay() {
     overlay.classList.add('iris-close');
 
     // After iris closes (650ms): navigate, then iris-open
-    const closeTimer = setTimeout(() => {
+    closeTimerRef.current = setTimeout(() => {
       navigate(irisTargetPath);
 
       overlay.classList.remove('iris-close');
@@ -52,18 +54,17 @@ export function IrisOverlay() {
       overlay.classList.add('iris-open');
 
       // After iris opens (750ms): hide overlay and reset
-      const openTimer = setTimeout(() => {
+      openTimerRef.current = setTimeout(() => {
         overlay.classList.remove('iris-open');
         overlay.style.display = 'none';
         activeRef.current = false;
         clearIris();
       }, 750);
-
-      return () => clearTimeout(openTimer);
     }, 650);
 
     return () => {
-      clearTimeout(closeTimer);
+      clearTimeout(closeTimerRef.current);
+      clearTimeout(openTimerRef.current);
     };
   }, [irisTargetPath, navigate, clearIris]);
 

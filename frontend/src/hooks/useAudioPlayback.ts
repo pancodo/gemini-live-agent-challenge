@@ -23,6 +23,8 @@ export function useAudioPlayback() {
   const workletReadyRef = useRef(false);
   const preBufferQueueRef = useRef<Float32Array[]>([]);
   const preBufferSentRef = useRef(false);
+  // Pre-allocated scratch buffer — resized only when incoming chunk is larger.
+  const scratchRef = useRef<Float32Array | null>(null);
 
   const ensureContext = useCallback(async () => {
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -63,9 +65,12 @@ export function useAudioPlayback() {
         void ctx.resume();
       }
 
-      // Convert Int16 PCM to Float32
+      // Convert Int16 PCM to Float32 — reuse scratch buffer to avoid allocation per chunk.
       const int16 = new Int16Array(pcmData);
-      const float32 = new Float32Array(int16.length);
+      if (!scratchRef.current || scratchRef.current.length < int16.length) {
+        scratchRef.current = new Float32Array(int16.length);
+      }
+      const float32 = scratchRef.current;
       for (let i = 0; i < int16.length; i++) {
         float32[i] = int16[i] / 32768;
       }
@@ -123,12 +128,12 @@ export function useAudioPlayback() {
     analyserRef.current = null;
   }, [stop]);
 
+  const getAnalyser = useCallback(() => analyserRef.current, []);
+
   return {
     enqueue,
     stop,
     destroy,
-    analyser: analyserRef.current,
-    /** Access the current analyser ref value (useful when ref updates after first enqueue) */
-    getAnalyser: () => analyserRef.current,
+    getAnalyser,
   } as const;
 }

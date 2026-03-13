@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useLayoutEffect } from 'react';
 import { useSettings, type Theme } from './useSettings';
 
 export type { Theme };
@@ -16,7 +16,7 @@ export function useTheme(): {
   const [settings, updateSetting] = useSettings();
   const { theme } = settings;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 

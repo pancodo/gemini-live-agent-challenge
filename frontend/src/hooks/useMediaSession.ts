@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Segment } from '../types';
 
 interface MediaSessionHandlers {
@@ -19,6 +19,11 @@ export function useMediaSession(
   handlers: MediaSessionHandlers = {},
 ): void {
   const { onNextTrack, onPreviousTrack } = handlers;
+
+  const nextRef = useRef(onNextTrack);
+  const prevRef = useRef(onPreviousTrack);
+  useEffect(() => { nextRef.current = onNextTrack; }, [onNextTrack]);
+  useEffect(() => { prevRef.current = onPreviousTrack; }, [onPreviousTrack]);
 
   // ── Metadata ────────────────────────────────────────────────
   useEffect(() => {
@@ -41,8 +46,8 @@ export function useMediaSession(
     if (!('mediaSession' in navigator)) return;
 
     const actions: Array<[MediaSessionAction, MediaSessionActionHandler | null]> = [
-      ['nexttrack', onNextTrack ? () => onNextTrack() : null],
-      ['previoustrack', onPreviousTrack ? () => onPreviousTrack() : null],
+      ['nexttrack', () => nextRef.current?.()],
+      ['previoustrack', () => prevRef.current?.()],
     ];
 
     for (const [action, handler] of actions) {
@@ -62,7 +67,7 @@ export function useMediaSession(
         }
       }
     };
-  }, [onNextTrack, onPreviousTrack]);
+  }, []);
 
   // ── Playback state sync ─────────────────────────────────────
   useEffect(() => {

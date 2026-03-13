@@ -9,9 +9,11 @@ import { usePlayerStore } from '../store/playerStore';
 import { useResearchStore } from '../store/researchStore';
 import type { EntityHighlight } from '../types';
 
+const EMPTY: EntityHighlight[] = [];
+
 export function usePDFHighlights(): EntityHighlight[] {
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const entityHighlights = useResearchStore((s) => s.entityHighlights);
-  if (!currentSegmentId) return [];
-  return entityHighlights[currentSegmentId] ?? [];
+  if (!currentSegmentId) return EMPTY;
+  return entityHighlights[currentSegmentId] ?? EMPTY;
 }
