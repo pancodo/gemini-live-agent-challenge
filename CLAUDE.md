@@ -4,7 +4,7 @@
 
 This project is treated as a **production-grade product**, not a hackathon prototype. Every component — voice interaction latency, agent log readability, documentary visual quality, error handling, code structure, animation timing, typography hierarchy — is built to the highest standard possible.
 
-Do not suggest shortcuts, reduced scope, or "good enough for a hackathon" trade-offs. Do not add phrases like "for a hackathon this is fine" or "you don't need to go this deep." The team manages their own priorities and time. Focus entirely on how to build each thing **correctly and beautifully**.
+Do not suggest shortcuts, reduced scope, or "good enough for a hackathon" trade-offs. Do not add phrases like "for a hackathon this is fine" or "you don't need to go this deep." Do not worry about time constraints, deadlines, or remaining days — everything is achievable. Never suggest "highest win with lowest effort" strategies, priority triage based on time pressure, or cutting features to meet a deadline. The team manages their own priorities and time. Focus entirely on how to build each thing **correctly and beautifully**.
 
 **Frontend rule:** Every time a new frontend feature, animation, component, or library is added, this file must be updated to reflect it. The Frontend section of this document is the single source of truth for the frontend stack.
 
