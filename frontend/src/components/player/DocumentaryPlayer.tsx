@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Segment } from '../../types';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../store/playerStore';
 import { useResearchStore } from '../../store/researchStore';
 import { useVoiceStore } from '../../store/voiceStore';
@@ -33,30 +33,24 @@ export function DocumentaryPlayer() {
   const activeImageUrlRef = useRef<string | null>(null);
   const navigate = useNavigate();
   const sessionId = useSessionStore((s) => s.sessionId);
-  const voiceState = useVoiceStore((s) => s.state);
-  const setVoiceState = useVoiceStore((s) => s.setState);
-
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const isIdle = usePlayerStore((s) => s.isIdle);
-  const setIdle = usePlayerStore((s) => s.setIdle);
   const open = usePlayerStore((s) => s.open);
 
-  const segmentsRecord = useResearchStore((s) => s.segments);
-
-  const segments: Segment[] = useMemo(
-    () => Object.values(segmentsRecord),
-    [segmentsRecord],
+  // Narrowed subscriptions — only get ready segments to avoid re-renders on
+  // intermediate status updates (generating, etc.)
+  const readySegments = useResearchStore(
+    useShallow((s) =>
+      Object.values(s.segments).filter(
+        (seg) => seg.status === 'ready' || seg.status === 'complete' || seg.status === 'visual_ready',
+      )
+    )
   );
 
-  const readySegments = useMemo(
-    () => segments.filter((s) => s.status === 'ready' || s.status === 'complete' || s.status === 'visual_ready'),
-    [segments],
+  const currentSegment = useResearchStore(
+    (s) => (currentSegmentId ? s.segments[currentSegmentId] ?? null : null)
   );
-
-  const currentSegment = currentSegmentId
-    ? segmentsRecord[currentSegmentId] ?? null
-    : null;
 
   const currentIndexInReady = useMemo(() => {
     if (!currentSegmentId) return -1;
@@ -71,9 +65,9 @@ export function DocumentaryPlayer() {
 
   useEffect(() => {
     const reset = () => {
-      setIdle(false);
+      usePlayerStore.getState().setIdle(false);
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setIdle(true), 3000);
+      timerRef.current = setTimeout(() => usePlayerStore.getState().setIdle(true), 3000);
     };
 
     window.addEventListener('mousemove', reset);
@@ -87,7 +81,7 @@ export function DocumentaryPlayer() {
       window.removeEventListener('touchstart', reset);
       clearTimeout(timerRef.current);
     };
-  }, [setIdle]);
+  }, []);
 
   // ── Segment navigation ───────────────────────────────────────
   const navigateSegment = useCallback(
@@ -180,16 +174,17 @@ export function DocumentaryPlayer() {
         }
       } else if (e.key === ' ') {
         e.preventDefault();
-        if (voiceState === 'idle') {
-          setVoiceState('listening');
-        } else if (voiceState === 'listening') {
-          setVoiceState('idle');
+        const vs = useVoiceStore.getState().state;
+        if (vs === 'idle') {
+          useVoiceStore.getState().setState('listening');
+        } else if (vs === 'listening') {
+          useVoiceStore.getState().setState('idle');
         }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate, voiceState, setVoiceState]);
+  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate]);
 
   // ── Click-outside to close shortcuts tooltip ────────────────
   useEffect(() => {
@@ -208,31 +203,8 @@ export function DocumentaryPlayer() {
     return () => window.removeEventListener('mousedown', onMouseDown);
   }, [shortcutsOpen]);
 
-  // ── Chrome opacity/transform ─────────────────────────────────
-  const chromeStyle = {
-    opacity: isIdle ? 0 : 1,
-    transition: 'opacity 0.5s ease, transform 0.5s ease',
-  };
-
   return (
     <div className="relative w-screen h-screen overflow-hidden player-root select-none" style={{ background: '#0d0b09' }}>
-      {/* View Transition CSS */}
-      <style>{`
-        ::view-transition-old(root) {
-          animation: 0.35s ease-in both fade-and-scale-out;
-        }
-        ::view-transition-new(root) {
-          animation: 0.35s ease-out both fade-and-scale-in;
-        }
-        @keyframes fade-and-scale-out {
-          to { opacity: 0; filter: brightness(0); transform: scale(1); }
-        }
-        @keyframes fade-and-scale-in {
-          from { opacity: 0; filter: brightness(0); transform: scale(1.03); }
-          to   { opacity: 1; filter: brightness(1); transform: scale(1); }
-        }
-      `}</style>
-
       {/* Layer 1: Ken Burns Stage */}
       <AnimatePresence mode="wait">
         <motion.div
@@ -252,8 +224,7 @@ export function DocumentaryPlayer() {
 
       {/* Layer 2: Top bar */}
       <div
-        className="absolute top-0 left-0 right-0 z-10 archival-frame"
-        style={chromeStyle}
+        className={`absolute top-0 left-0 right-0 z-10 archival-frame player-chrome${isIdle ? ' player-chrome--idle' : ''}`}
       >
         <div
           className="flex items-center justify-between px-8 py-5"
@@ -266,7 +237,7 @@ export function DocumentaryPlayer() {
           <div className="flex items-center gap-3 min-w-[80px]">
             <button
               onClick={() => navigate('/workspace')}
-              className="p-2 rounded transition-colors duration-200"
+              className="p-2 rounded transition-colors duration-200 hover:text-[rgba(232,221,208,0.9)]"
               style={{
                 color: 'rgba(232,221,208,0.6)',
                 background: 'transparent',
@@ -275,12 +246,6 @@ export function DocumentaryPlayer() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = 'rgba(232,221,208,0.9)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'rgba(232,221,208,0.6)';
               }}
               aria-label="Back to workspace"
             >
@@ -470,11 +435,7 @@ export function DocumentaryPlayer() {
 
       {/* Layer 4: Bottom bar */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-10"
-        style={{
-          ...chromeStyle,
-          transform: isIdle ? 'translateY(20px)' : 'translateY(0)',
-        }}
+        className={`absolute bottom-0 left-0 right-0 z-10 player-chrome player-chrome-bottom${isIdle ? ' player-chrome--idle player-chrome-bottom--idle' : ''}`}
       >
         <div
           className="flex items-center justify-between px-8 py-5"
@@ -602,7 +563,7 @@ export function DocumentaryPlayer() {
                 onClick={handleDownloadCurrent}
                 title="Download image"
                 aria-label="Download current image"
-                className="flex items-center justify-center transition-colors duration-200"
+                className="flex items-center justify-center transition-colors duration-200 hover:bg-[rgba(196,149,106,0.22)] hover:border-[rgba(196,149,106,0.55)]"
                 style={{
                   width: 30,
                   height: 30,
@@ -611,14 +572,6 @@ export function DocumentaryPlayer() {
                   background: 'rgba(196,149,106,0.10)',
                   color: 'var(--glow-primary)',
                   cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(196,149,106,0.22)';
-                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.55)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(196,149,106,0.10)';
-                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.25)';
                 }}
               >
                 {/* Download-arrow icon */}
@@ -649,7 +602,7 @@ export function DocumentaryPlayer() {
                     : `Save all ${currentSegment!.imageUrls.length} images`
                 }
                 aria-label="Save all images"
-                className="flex items-center gap-1.5 transition-colors duration-200"
+                className="flex items-center gap-1.5 transition-colors duration-200 hover:bg-[rgba(196,149,106,0.22)] hover:border-[rgba(196,149,106,0.55)]"
                 style={{
                   height: 30,
                   padding: '0 10px',
@@ -668,17 +621,6 @@ export function DocumentaryPlayer() {
                   letterSpacing: '0.12em',
                   textTransform: 'uppercase',
                   whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={(e) => {
-                  if (isSavingAll) return;
-                  e.currentTarget.style.background = 'rgba(196,149,106,0.22)';
-                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.55)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isSavingAll
-                    ? 'rgba(196,149,106,0.18)'
-                    : 'rgba(196,149,106,0.10)';
-                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.25)';
                 }}
               >
                 {isSavingAll ? (
@@ -725,7 +667,7 @@ export function DocumentaryPlayer() {
                 onClick={handleDownloadVideo}
                 title="Download video"
                 aria-label="Download video"
-                className="flex items-center justify-center transition-colors duration-200"
+                className="flex items-center justify-center transition-colors duration-200 hover:bg-[rgba(196,149,106,0.22)] hover:border-[rgba(196,149,106,0.55)]"
                 style={{
                   width: 30,
                   height: 30,
@@ -734,14 +676,6 @@ export function DocumentaryPlayer() {
                   background: 'rgba(196,149,106,0.10)',
                   color: 'var(--glow-primary)',
                   cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(196,149,106,0.22)';
-                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.55)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(196,149,106,0.10)';
-                  e.currentTarget.style.borderColor = 'rgba(196,149,106,0.25)';
                 }}
               >
                 {/* Film/video download icon */}

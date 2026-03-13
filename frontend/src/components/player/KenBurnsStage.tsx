@@ -1,8 +1,22 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useVoiceStore } from '../../store/voiceStore';
+
+/**
+ * Module-level cached canvas for sampleImageColor.
+ * Avoids creating a new DOM element on every color sample call.
+ */
+let _samplerCanvas: HTMLCanvasElement | null = null;
+function getSamplerCanvas(): HTMLCanvasElement {
+  if (!_samplerCanvas) {
+    _samplerCanvas = document.createElement('canvas');
+    _samplerCanvas.width = 4;
+    _samplerCanvas.height = 4;
+  }
+  return _samplerCanvas;
+}
 
 /**
  * Sample the dominant color from an image by down-scaling to 4x4
@@ -10,9 +24,7 @@ import { useVoiceStore } from '../../store/voiceStore';
  * the ambient glow color (YouTube ambient mode style).
  */
 function sampleImageColor(img: HTMLImageElement): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = 4;
-  canvas.height = 4;
+  const canvas = getSamplerCanvas();
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return 'transparent';
   ctx.drawImage(img, 0, 0, 4, 4);
@@ -28,13 +40,6 @@ interface KenBurnsStageProps {
   /** Called whenever the visible image index changes (or on initial mount). */
   onActiveImageChange?: (url: string | null) => void;
 }
-
-const DRIFT_PRESETS = [
-  { xStart: '0%', yStart: '0%', xEnd: '1%', yEnd: '0.5%' },
-  { xStart: '-3%', yStart: '-2%', xEnd: '0%', yEnd: '0%' },
-  { xStart: '3%', yStart: '0%', xEnd: '-1%', yEnd: '-1%' },
-  { xStart: '0%', yStart: '-3%', xEnd: '1%', yEnd: '0%' },
-];
 
 const CROSSFADE_DURATION_MS = 2000;
 const CYCLE_INTERVAL_MS = 7000;
@@ -52,12 +57,6 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
 
   const images = segment?.imageUrls ?? [];
   const hasVideo = Boolean(segment?.videoUrl);
-
-  // Assign a random drift preset to each image index (stable per segment)
-  const driftAssignments = useMemo(() => {
-    if (images.length === 0) return [];
-    return images.map((_, i) => DRIFT_PRESETS[i % DRIFT_PRESETS.length]);
-  }, [images]);
 
   // Cycle through images
   useEffect(() => {
@@ -136,20 +135,14 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
       >
         {/* Ornamental pulse ring */}
         <div
+          className="kb-skeleton-pulse"
           style={{
             width: 40,
             height: 40,
             borderRadius: '50%',
             border: '1px solid rgba(196,149,106,0.3)',
-            animation: 'kb-skeleton-pulse 2s ease-in-out infinite',
           }}
         />
-        <style>{`
-          @keyframes kb-skeleton-pulse {
-            0%, 100% { transform: scale(1);   opacity: 0.3; }
-            50%       { transform: scale(1.2); opacity: 0.7; }
-          }
-        `}</style>
         <p
           className="mt-4"
           style={{
@@ -203,29 +196,6 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     //    continuing from wherever they were in the previous segment's cycle.
     // 2. currentIndex is implicitly reset to 0 because the component remounts.
     <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
-      <style>{`
-        @keyframes ken-burns-0 {
-          0%   { transform: scale(1.0) translate(${driftAssignments[0]?.xStart ?? '0%'}, ${driftAssignments[0]?.yStart ?? '0%'}); }
-          100% { transform: scale(1.12) translate(${driftAssignments[0]?.xEnd ?? '1%'}, ${driftAssignments[0]?.yEnd ?? '0.5%'}); }
-        }
-        @keyframes ken-burns-1 {
-          0%   { transform: scale(1.0) translate(${driftAssignments[1]?.xStart ?? '0%'}, ${driftAssignments[1]?.yStart ?? '0%'}); }
-          100% { transform: scale(1.12) translate(${driftAssignments[1]?.xEnd ?? '1%'}, ${driftAssignments[1]?.yEnd ?? '0.5%'}); }
-        }
-        @keyframes ken-burns-2 {
-          0%   { transform: scale(1.0) translate(${driftAssignments[2]?.xStart ?? '0%'}, ${driftAssignments[2]?.yStart ?? '0%'}); }
-          100% { transform: scale(1.12) translate(${driftAssignments[2]?.xEnd ?? '1%'}, ${driftAssignments[2]?.yEnd ?? '0.5%'}); }
-        }
-        @keyframes ken-burns-3 {
-          0%   { transform: scale(1.0) translate(${driftAssignments[3]?.xStart ?? '0%'}, ${driftAssignments[3]?.yStart ?? '0%'}); }
-          100% { transform: scale(1.12) translate(${driftAssignments[3]?.xEnd ?? '1%'}, ${driftAssignments[3]?.yEnd ?? '0.5%'}); }
-        }
-        @keyframes illustration-generating {
-          0%, 100% { box-shadow: inset 0 0 60px rgba(139, 94, 26, 0); }
-          50% { box-shadow: inset 0 0 60px rgba(139, 94, 26, 0.12); }
-        }
-      `}</style>
-
       {images.map((url, i) => {
         const isActive = i === currentIndex;
         return (
@@ -248,7 +218,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
               animation: `ken-burns-${i % 4} var(--ken-speed) ease-in-out infinite alternate`,
               animationPlayState: isActive ? playState : 'paused',
               pointerEvents: isActive ? 'auto' : 'none',
-              willChange: 'transform, opacity',
+              willChange: isActive ? 'transform, opacity' : 'auto',
             }}
           />
         );
@@ -281,11 +251,8 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
       {/* Illustration shimmer glow */}
       {liveIllustration && (
         <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            zIndex: 1,
-            animation: 'illustration-generating 3s ease-in-out infinite',
-          }}
+          className="illustration-shimmer absolute inset-0 pointer-events-none"
+          style={{ zIndex: 1 }}
         />
       )}
 

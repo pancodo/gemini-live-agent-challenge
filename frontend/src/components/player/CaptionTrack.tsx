@@ -1,25 +1,19 @@
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
  * CaptionTrack — word-by-word caption reveal synchronized with narrator audio.
  *
- * Each word fades in with a blur-to-clear animation staggered by 0.2s.
+ * Each word fades in with a blur-to-clear animation staggered by 0.08s.
  * Uses the `word-appear` keyframe defined in index.css.
  * Captions use Cormorant Garamond 300 italic at 26px with warm text-shadow.
+ *
+ * The `key` prop on <p> is set to `captionText` directly — React unmounts and
+ * remounts the element whenever the text changes, restarting all word animations
+ * without needing a separate renderKey state or useEffect.
  */
 export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const [renderKey, setRenderKey] = useState(0);
-  const previousTextRef = useRef('');
-
-  // Re-trigger animation when captionText changes
-  useEffect(() => {
-    if (captionText !== previousTextRef.current) {
-      previousTextRef.current = captionText;
-      setRenderKey((k) => k + 1);
-    }
-  }, [captionText]);
 
   const words = useMemo(() => {
     if (!captionText.trim()) return [];
@@ -37,7 +31,7 @@ export function CaptionTrack() {
       }}
     >
       <p
-        key={renderKey}
+        key={captionText}
         className="text-center leading-relaxed"
         style={{
           maxWidth: 800,
@@ -53,13 +47,9 @@ export function CaptionTrack() {
       >
         {words.map((word, i) => (
           <span
-            key={`${renderKey}-${i}`}
-            className="inline-block mr-[0.3em]"
-            style={{
-              opacity: 0,
-              animation: 'word-appear 0.4s ease-out forwards',
-              animationDelay: `${i * 0.2}s`,
-            }}
+            key={`${i}-${word}`}
+            className="caption-word inline-block mr-[0.3em]"
+            style={{ '--word-delay': `${i * 0.08}s` } as React.CSSProperties}
           >
             {word}
           </span>
