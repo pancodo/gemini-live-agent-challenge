@@ -184,6 +184,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
   const springY = useSpring(my, { stiffness: 150, damping: 15 });
   const isReady = segment.status === 'ready' || segment.status === 'complete' || segment.status === 'visual_ready';
   const [hasBeenReady, setHasBeenReady] = useState(isReady);
+  const [scriptExpanded, setScriptExpanded] = useState(false);
 
   // Track transition to ready/complete for cipher reveal
   useEffect(() => {
@@ -364,11 +365,24 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
           </div>
         )}
 
-        {/* Script preview (2 lines) */}
+        {/* Script preview — expandable */}
         {segment.script && (
-          <p className="font-sans text-[13px] text-[var(--muted)] line-clamp-2 mb-3 leading-relaxed">
-            {segment.script}
-          </p>
+          <div className="mb-3">
+            <p
+              className={`font-sans text-[13px] text-[var(--muted)] leading-relaxed ${scriptExpanded ? '' : 'line-clamp-3'}`}
+            >
+              {segment.script}
+            </p>
+            {segment.script.length > 200 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setScriptExpanded((v) => !v); }}
+                className="font-sans text-[11px] text-[var(--gold)] mt-1 cursor-pointer bg-transparent border-none p-0 hover:underline"
+              >
+                {scriptExpanded ? 'Show less' : 'Read more'}
+              </button>
+            )}
+          </div>
         )}
 
         {/* Watch button */}
