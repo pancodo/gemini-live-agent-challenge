@@ -100,6 +100,7 @@ export type SSEEventType =
   | 'pipeline_phase'
   | 'stats_update'
   | 'live_illustration'
+  | 'geo_update'
   | 'error';
 
 export interface AgentStatusEvent {
@@ -125,7 +126,7 @@ export interface SegmentUpdateEvent {
 
 export interface PipelinePhaseEvent {
   type: 'pipeline_phase';
-  phase: 1 | 2 | 3 | 4 | 5;
+  phase: number;
   label: string;
   message: string;
 }
@@ -163,6 +164,12 @@ export interface LiveIllustrationEvent {
   query: string;
 }
 
+export interface GeoUpdateEvent {
+  type: 'geo_update';
+  segmentId: string;
+  geo: SegmentGeo;
+}
+
 export type SSEEvent =
   | AgentStatusEvent
   | AgentSourceEvaluationEvent
@@ -170,6 +177,7 @@ export type SSEEvent =
   | PipelinePhaseEvent
   | StatsUpdateEvent
   | LiveIllustrationEvent
+  | GeoUpdateEvent
   | ErrorEvent;
 
 // ── Documentary Branching ─────────────────────────────────────

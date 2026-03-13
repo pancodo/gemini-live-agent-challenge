@@ -1,6 +1,7 @@
 """ADK Pipeline — SequentialAgent orchestrating the full documentary generation flow.
 
-Current pipeline order (Phases I–V fully integrated, with III.5 fact validation):
+Current pipeline order (Phases I–V fully integrated, with III.5 fact validation
+and 3.8 geographic mapping):
     1. document_analyzer            — OCR, semantic chunking, parallel summarisation,
                                       narrative curation → scene_briefs + visual_bible
     2. scene_research_orch          — Parallel scene research (one google_search agent
@@ -10,6 +11,9 @@ Current pipeline order (Phases I–V fully integrated, with III.5 fact validatio
                                       Firestore write, segment_update SSE (Phase III)
    4b. fact_validator               — Hallucination firewall: cross-references narration
                                       claims against research evidence (Phase III.5)
+   4c. geo_location                 — Extracts geographic locations and routes from scripts,
+                                      geocodes via Gemini, produces SegmentGeo metadata
+                                      for frontend timeline map (Phase 3.8)
     5. narrative_visual_planner     — Single Gemini Pro call producing VisualStoryboard
                                       with per-scene primary subjects, avoid lists,
                                       targeted searches, and 4 frame concepts (Phase 4.0)
@@ -56,6 +60,7 @@ from pydantic import ConfigDict, Field
 from .checkpoint_helpers import load_checkpoint, save_checkpoint
 from .document_analyzer import build_document_analyzer
 from .fact_validator_agent import build_fact_validator_agent
+from .geo_location_agent import build_geo_location_agent
 from .narrative_visual_planner import build_narrative_visual_planner
 from .rate_limiter import GlobalRateLimiter
 from .scene_research_agent import build_scene_research_orchestrator
@@ -362,10 +367,12 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 #   1: scene_research           (Phase II)
 #   2: aggregator               (Phase II — grouped with scene_research)
 #   3: script_orch              (Phase III)
-#   4: fact_validator           (Phase III.5)
-#   5: narrative_visual_planner (Phase 4.0)
-#   6: visual_research_orch     (Phase IV / 5)
-#   7: visual_director_orch     (Phase V / 6)
+#   4: narrative_director       (Phase 3.1)
+#   5: fact_validator           (Phase III.5)
+#   6: geo_location             (Phase 3.8)
+#   7: narrative_visual_planner (Phase 4.0)
+#   8: visual_research_orch     (Phase IV)
+#   9: visual_director_orch     (Phase V)
 
 _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (1,   [0]),     # Phase I:     document_analyzer
@@ -373,9 +380,10 @@ _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (3,   [3]),     # Phase III:   script_orch
     (3.1, [4]),     # Phase 3.1:   narrative_director (Gemini TEXT+IMAGE interleaved)
     (3.5, [5]),     # Phase III.5: fact_validator
-    (4,   [6]),     # Phase 4.0:   narrative_visual_planner
-    (5,   [7]),     # Phase IV:    visual_research_orch
-    (6,   [8]),     # Phase V:     visual_director_orch
+    (3.8, [6]),     # Phase 3.8:   geo_location — Geographic Mapping
+    (4,   [7]),     # Phase 4.0:   narrative_visual_planner
+    (5,   [8]),     # Phase IV:    visual_research_orch
+    (6,   [9]),     # Phase V:     visual_director_orch
 ]
 
 
@@ -504,6 +512,9 @@ def build_new_pipeline(
       narration direction in ONE Gemini call. GCS URIs stored in storyboard_images.
     - Phase III.5 (FactValidatorAgent):       hallucination firewall -- cross-references
       narration claims against research evidence before visual production.
+    - Phase 3.8  (GeoLocationAgent):          extracts geographic locations and routes
+      from documentary scripts, geocodes via Gemini + Google Maps grounding,
+      produces SegmentGeo metadata for frontend timeline map.
     - Phase 4.0  (NarrativeVisualPlanner):    single Gemini Pro call producing a
       VisualStoryboard with per-scene primary subjects, avoid lists, targeted
       searches, and 4 frame concepts.
@@ -524,8 +535,9 @@ def build_new_pipeline(
     Returns:
         A ResumablePipelineAgent running:
         document_analyzer -> scene_research -> aggregator
-        -> script_orch -> fact_validator -> narrative_visual_planner
-        -> visual_research_orch -> visual_director_orch
+        -> script_orch -> fact_validator -> geo_location
+        -> narrative_visual_planner -> visual_research_orch
+        -> visual_director_orch
     """
     # Shared rate limiters — gating all Gemini and Imagen 3 API calls
     # across the entire pipeline to prevent 429 quota exhaustion.
@@ -539,6 +551,7 @@ def build_new_pipeline(
     script_orch = build_script_agent_orchestrator(emitter=emitter)
     narrative_director = build_narrative_director_agent(emitter=emitter)
     fact_validator = build_fact_validator_agent(emitter=emitter)
+    geo_location = build_geo_location_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
     visual_research_orch = build_visual_research_orchestrator(
         emitter=emitter, rate_limiter=gemini_limiter,
@@ -554,8 +567,9 @@ def build_new_pipeline(
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
             "scene research (Phase II), script generation (Phase III), "
-            "fact validation (Phase III.5), visual storyboard planning (Phase 4.0), "
-            "visual research (Phase IV), and visual generation (Phase V). "
+            "fact validation (Phase III.5), geographic mapping (Phase 3.8), "
+            "visual storyboard planning (Phase 4.0), visual research (Phase IV), "
+            "and visual generation (Phase V). "
             "Supports checkpoint-based resumption on failure."
         ),
         firestore_project=os.environ.get("GCP_PROJECT_ID", ""),
@@ -567,8 +581,9 @@ def build_new_pipeline(
             script_orch,                     # [3] Phase III
             narrative_director,              # [4] Phase 3.1 — Gemini TEXT+IMAGE interleaved
             fact_validator,                  # [5] Phase III.5
-            narrative_visual_planner_orch,   # [6] Phase 4.0
-            visual_research_orch,            # [7] Phase IV
-            visual_director_orch,            # [8] Phase V
+            geo_location,                    # [6] Phase 3.8 — Geographic Mapping
+            narrative_visual_planner_orch,   # [7] Phase 4.0
+            visual_research_orch,            # [8] Phase IV
+            visual_director_orch,            # [9] Phase V
         ],
     )
