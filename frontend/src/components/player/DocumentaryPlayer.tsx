@@ -734,7 +734,7 @@ export function DocumentaryPlayer() {
         }}
       >
         <div
-          className="flex items-center justify-between px-8 py-5"
+          className="flex items-center justify-between pl-8 pr-20 py-5"
           style={{
             background:
               'linear-gradient(to top, var(--player-overlay) 0%, transparent 100%)',
