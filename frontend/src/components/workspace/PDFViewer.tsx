@@ -395,7 +395,8 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
   // Re-render all pages on pdf/zoom/renderPage changes
   useEffect(() => {
     if (!pdf) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Render at 2x minimum for crisp text on all displays
+    const dpr = Math.max(2, window.devicePixelRatio || 1);
 
     async function renderAll() {
       for (let i = 1; i <= pdf!.numPages; i++) {
