@@ -301,7 +301,7 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
       variants={itemVariants}
       onMouseMove={handleMouseMove}
       onClick={() => onClick(agent.id)}
-      className={`agent-card ${statusClass} relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-3 cursor-pointer overflow-hidden`}
+      className={`agent-card ${statusClass} relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-3 cursor-pointer`}
       whileHover={reducedMotion ? undefined : { scale: 1.01 }}
       whileTap={reducedMotion ? undefined : { scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
