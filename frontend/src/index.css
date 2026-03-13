@@ -306,21 +306,21 @@ body {
   --mouse-x: 50%;
   --mouse-y: 50%;
   position: relative;
-  contain: layout paint;
 }
 .agent-card::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -8px;
   background: radial-gradient(
     400px circle at var(--mouse-x) var(--mouse-y),
-    rgba(196, 149, 106, 0.10),
+    rgba(196, 149, 106, 0.12),
     transparent 40%
   );
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
-  border-radius: inherit;
+  border-radius: 12px;
+  z-index: -1;
 }
 .agent-card:hover::after { opacity: 1; }
 
