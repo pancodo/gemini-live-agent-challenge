@@ -1,6 +1,7 @@
-import { useRef, useCallback, useMemo } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useVoiceStore } from '../../store/voiceStore';
+import { HistorianAvatar } from '../voice/HistorianAvatar';
 import type { VoiceState } from '../../types';
 
 // ── Props ────────────────────────────────────────────────────────
@@ -18,20 +19,12 @@ const VOICE_MESSAGES: Record<VoiceState, string> = {
   processing: 'Consulting my sources\u2026',
   historian_speaking: 'Narrating\u2026',
   interrupted: 'Yes, what is it?',
+  reconnecting: 'Reconnecting\u2026',
 };
 
 function isVoiceActive(state: VoiceState): boolean {
   return state === 'listening' || state === 'historian_speaking' || state === 'interrupted';
 }
-
-// ── Module-level Motion constants ────────────────────────────────
-
-const GLOW_ANIMATE_ACTIVE = { opacity: 1, scale: [1, 1.12, 1] as number[] };
-const GLOW_ANIMATE_INACTIVE = { opacity: 0.4, scale: 1 };
-const GLOW_TRANSITION_ACTIVE = { duration: 2.8, repeat: Infinity, ease: 'easeInOut' as const };
-const GLOW_TRANSITION_INACTIVE = { duration: 0.4 };
-
-const BAR_HEIGHTS = [0.6, 1.0, 0.75, 1.0, 0.6] as const;
 
 // ── Ornamental Emblem ────────────────────────────────────────────
 
@@ -62,8 +55,8 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
           background: `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`,
           filter: 'blur(12px)',
         }}
-        animate={active && !reducedMotion ? GLOW_ANIMATE_ACTIVE : GLOW_ANIMATE_INACTIVE}
-        transition={active && !reducedMotion ? GLOW_TRANSITION_ACTIVE : GLOW_TRANSITION_INACTIVE}
+        animate={{ opacity: active ? 1 : 0.4, scale: active && !reducedMotion ? [1, 1.12, 1] : 1 }}
+        transition={active && !reducedMotion ? { duration: 2.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.4 }}
       />
 
       {/* SVG emblem */}
@@ -107,11 +100,10 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
         <motion.circle
           cx="32"
           cy="32"
-          r="3"
+          r={3}
           fill={active ? 'var(--gold)' : 'var(--muted)'}
-          fillOpacity={active ? 0.9 : 0.4}
-          animate={active && !reducedMotion ? { r: [3, 3.8, 3], fillOpacity: [0.9, 0.5, 0.9] } : {}}
-          transition={active ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : {}}
+          animate={{ fillOpacity: active && !reducedMotion ? [0.9, 0.5, 0.9] : active ? 0.9 : 0.4 }}
+          transition={active && !reducedMotion ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
         />
 
         {/* Cardinal arrowheads */}
@@ -148,7 +140,7 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {BAR_HEIGHTS.map((h, i) => (
+            {[0.6, 1.0, 0.75, 1.0, 0.6].map((h, i) => (
               <motion.span
                 key={i}
                 className="rounded-full"
@@ -165,6 +157,30 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Avatar with Emblem Fallback ───────────────────────────────────
+
+function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; voiceState: VoiceState }) {
+  const [avatarReady, setAvatarReady] = useState(false);
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
+      {/* Live2D Avatar — always active so it loads eagerly and shows idle animation */}
+      <HistorianAvatar
+        size={160}
+        active
+        onLoad={() => setAvatarReady(true)}
+      />
+
+      {/* Emblem fallback — only while avatar is loading */}
+      {!avatarReady && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 1 }}>
+          <HistorianEmblem active={active} voiceState={voiceState} />
+        </div>
+      )}
     </div>
   );
 }
@@ -195,47 +211,54 @@ function ConsultButton({ onClick }: { onClick?: () => void }) {
   }, [onClick, reducedMotion]);
 
   return (
-    <motion.button
-      ref={btnRef}
-      type="button"
-      onClick={handleClick}
-      className="relative overflow-hidden w-full"
-      style={{
-        fontFamily: 'var(--font-serif)',
-        fontWeight: 400,
-        fontSize: 11,
-        letterSpacing: '0.35em',
-        textTransform: 'uppercase',
-        color: 'var(--gold)',
-        border: '1px solid rgba(139,94,26,0.35)',
-        background: 'transparent',
-        borderRadius: 4,
-        padding: '10px 16px',
-        cursor: 'pointer',
-      }}
-      whileHover={{ borderColor: 'rgba(139,94,26,0.7)', color: 'var(--gold-d)' }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-    >
-      {/* Corner brackets */}
-      <span
-        className="absolute top-0 left-0 w-2 h-2 pointer-events-none"
-        style={{ borderTop: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
-      />
-      <span
-        className="absolute top-0 right-0 w-2 h-2 pointer-events-none"
-        style={{ borderTop: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
-      />
-      <span
-        className="absolute bottom-0 left-0 w-2 h-2 pointer-events-none"
-        style={{ borderBottom: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
-      />
-      <span
-        className="absolute bottom-0 right-0 w-2 h-2 pointer-events-none"
-        style={{ borderBottom: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
-      />
-      Begin Consultation
-    </motion.button>
+    <>
+      <style>{`
+        @keyframes ink-ripple {
+          to { transform: translate(-50%,-50%) scale(24); opacity: 0; }
+        }
+      `}</style>
+      <motion.button
+        ref={btnRef}
+        type="button"
+        onClick={handleClick}
+        className="relative overflow-hidden w-full"
+        style={{
+          fontFamily: 'var(--font-serif)',
+          fontWeight: 400,
+          fontSize: 11,
+          letterSpacing: '0.35em',
+          textTransform: 'uppercase',
+          color: 'var(--gold)',
+          border: '1px solid rgba(139,94,26,0.35)',
+          background: 'transparent',
+          borderRadius: 4,
+          padding: '10px 16px',
+          cursor: 'pointer',
+        }}
+        whileHover={{ borderColor: 'rgba(139,94,26,0.7)', color: 'var(--gold-d)' }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+      >
+        {/* Corner brackets */}
+        <span
+          className="absolute top-0 left-0 w-2 h-2 pointer-events-none"
+          style={{ borderTop: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
+        />
+        <span
+          className="absolute top-0 right-0 w-2 h-2 pointer-events-none"
+          style={{ borderTop: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
+        />
+        <span
+          className="absolute bottom-0 left-0 w-2 h-2 pointer-events-none"
+          style={{ borderBottom: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
+        />
+        <span
+          className="absolute bottom-0 right-0 w-2 h-2 pointer-events-none"
+          style={{ borderBottom: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
+        />
+        Begin Consultation
+      </motion.button>
+    </>
   );
 }
 
@@ -243,34 +266,37 @@ function ConsultButton({ onClick }: { onClick?: () => void }) {
 
 export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
   const voiceState = useVoiceStore((s) => s.state);
+  const beginConsultation = useVoiceStore((s) => s.beginConsultation);
+  const caption = useVoiceStore((s) => s.caption);
+  const userTranscript = useVoiceStore((s) => s.userTranscript);
   const reducedMotion = useReducedMotion();
   const active = isVoiceActive(voiceState);
   const isIdle = voiceState === 'idle';
 
-  const borderColor = useMemo(() => {
-    if (!active) return 'var(--bg4)';
-    if (voiceState === 'historian_speaking') return 'rgba(196,149,106,0.4)';
-    if (voiceState === 'listening') return 'rgba(30,94,94,0.4)';
-    return 'rgba(139,94,26,0.3)';
-  }, [active, voiceState]);
+  const borderColor = active
+    ? voiceState === 'historian_speaking'
+      ? 'rgba(196,149,106,0.4)'
+      : voiceState === 'listening'
+        ? 'rgba(30,94,94,0.4)'
+        : 'rgba(139,94,26,0.3)'
+    : 'var(--bg4)';
 
-  const bgGradient = useMemo(() => {
-    if (!active) return 'var(--bg2)';
-    if (voiceState === 'historian_speaking') return 'linear-gradient(160deg, var(--bg2) 0%, rgba(139,94,26,0.06) 100%)';
-    if (voiceState === 'listening') return 'linear-gradient(160deg, var(--bg2) 0%, rgba(30,94,94,0.08) 100%)';
-    return 'var(--bg2)';
-  }, [active, voiceState]);
-
-  const panelStyle = useMemo(() => ({
-    border: `1px solid ${borderColor}`,
-    background: bgGradient,
-    transition: 'border-color 0.5s ease, background 0.6s ease',
-  }), [borderColor, bgGradient]);
+  const bgGradient = active
+    ? voiceState === 'historian_speaking'
+      ? 'linear-gradient(160deg, var(--bg2) 0%, rgba(139,94,26,0.06) 100%)'
+      : voiceState === 'listening'
+        ? 'linear-gradient(160deg, var(--bg2) 0%, rgba(30,94,94,0.08) 100%)'
+        : 'var(--bg2)'
+    : 'var(--bg2)';
 
   return (
     <motion.div
       className="rounded-lg relative overflow-hidden"
-      style={panelStyle}
+      style={{
+        border: `1px solid ${borderColor}`,
+        background: bgGradient,
+        transition: 'border-color 0.5s ease, background 0.6s ease',
+      }}
     >
       {/* Top accent line */}
       <AnimatePresence>
@@ -314,19 +340,23 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
           </div>
         </div>
 
-        {/* Emblem */}
-        <HistorianEmblem active={active} voiceState={voiceState} />
+        {/* Avatar / Emblem */}
+        <HistorianAvatarWithFallback active={active} voiceState={voiceState} />
 
-        {/* Voice status message */}
+        {/* Voice status message / live caption */}
         <motion.p
-          key={voiceState}
+          key={voiceState === 'historian_speaking' && caption ? caption.slice(-60) : voiceState}
           initial={reducedMotion ? false : { opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="font-serif text-[14px] italic leading-relaxed text-center"
+          className="font-serif text-[14px] italic leading-relaxed text-center max-h-[4.5em] overflow-hidden"
           style={{ color: active ? 'var(--text)' : 'var(--muted)' }}
         >
-          &ldquo;{VOICE_MESSAGES[voiceState]}&rdquo;
+          &ldquo;{voiceState === 'historian_speaking' && caption
+            ? caption
+            : voiceState === 'listening' && userTranscript
+              ? userTranscript
+              : VOICE_MESSAGES[voiceState]}&rdquo;
         </motion.p>
 
         {/* CTA button — only in standby */}
@@ -340,7 +370,7 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
             >
-              <ConsultButton onClick={onSpeak} />
+              <ConsultButton onClick={onSpeak ?? beginConsultation ?? undefined} />
               <p className="text-center font-sans text-[9px] uppercase tracking-[0.15em] mt-2" style={{ color: 'var(--muted)', opacity: 0.6 }}>
                 Voice interaction &middot; Speak freely
               </p>

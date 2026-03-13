@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../store/playerStore';
+import { useVoiceStore } from '../store/voiceStore';
 
 // ── Wire protocol types ────────────────────────────────────────
 type RelayMessage =
   | { type: 'ready' }
   | { type: 'audio'; data: string }
   | { type: 'interrupted' }
+  | { type: 'turn_complete' }
+  | { type: 'caption'; text: string }
   | { type: 'resumption_token'; token: string }
   | { type: 'go_away' }
   | { type: 'transcript'; text: string }
   | { type: 'live_illustration'; imageUrl: string; caption: string }
+  | { type: 'resumption_expired' }
   | { type: 'error'; message: string };
 
 // ── Public interface ───────────────────────────────────────────
@@ -18,13 +22,21 @@ export interface GeminiLiveConfig {
   resumptionToken: string | null;
   onAudioChunk: (pcm: ArrayBuffer) => void;
   onInterrupted: () => void;
+  onTurnComplete: () => void;
+  onCaption: (text: string) => void;
   onResumeToken: (token: string) => void;
+  onGoAway?: () => void;
+  onReconnecting?: (attempt: number, max: number) => void;
+  onReconnectFailed?: () => void;
+  onResumptionExpired?: () => void;
 }
 
 export interface GeminiLiveReturn {
   sendPCM: (chunk: Int16Array) => void;
+  sendText: (text: string) => void;
   connect: () => void;
   disconnect: () => void;
+  reconnect: () => void;
   isConnected: boolean;
   lastUserTranscript: string | null;
 }
@@ -55,7 +67,7 @@ function base64ToArrayBuffer(b64: string): ArrayBuffer {
 // ── Constants ──────────────────────────────────────────────────
 const WS_BASE = import.meta.env.VITE_WS_BASE_URL ?? 'ws://localhost:8001';
 const MAX_RECONNECT_ATTEMPTS = 3;
-const RECONNECT_DELAY_MS = 500;
+const RECONNECT_DELAY_MS = 1000;
 
 // ── Hook ───────────────────────────────────────────────────────
 export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
@@ -67,6 +79,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
   const isReadyRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectRef = useRef<() => void>(() => {});
 
   // Keep config callbacks in a ref so the message handler never goes stale
   const configRef = useRef(config);
@@ -138,17 +151,30 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
           cfg.onInterrupted();
           break;
 
+        case 'turn_complete':
+          cfg.onTurnComplete();
+          break;
+
+        case 'caption':
+          cfg.onCaption(msg.text);
+          break;
+
         case 'resumption_token':
           cfg.onResumeToken(msg.token);
           break;
 
         case 'go_away':
-          // Server is shutting down; attempt reconnect
-          reconnect();
+          cfg.onGoAway?.();
+          reconnectRef.current();
+          break;
+
+        case 'resumption_expired':
+          cfg.onResumptionExpired?.();
           break;
 
         case 'transcript':
           setLastUserTranscript(msg.text);
+          useVoiceStore.getState().setUserTranscript(msg.text);
           break;
 
         case 'live_illustration': {
@@ -168,9 +194,14 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
       }
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (event: CloseEvent) => {
       setIsConnected(false);
       isReadyRef.current = false;
+
+      // Auto-reconnect on unexpected closure (not user-initiated 1000)
+      if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectRef.current();
+      }
     });
 
     ws.addEventListener('error', (event) => {
@@ -184,10 +215,12 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
       console.error(
         `[useGeminiLive] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`
       );
+      configRef.current.onReconnectFailed?.();
       return;
     }
 
     reconnectAttemptsRef.current += 1;
+    const attempt = reconnectAttemptsRef.current;
 
     // Clean up the old socket before reconnecting
     const ws = wsRef.current;
@@ -197,16 +230,24 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     wsRef.current = null;
     isReadyRef.current = false;
 
+    configRef.current.onReconnecting?.(attempt, MAX_RECONNECT_ATTEMPTS);
+
+    // Exponential backoff: 1s, 3s, 9s
+    const delay = RECONNECT_DELAY_MS * Math.pow(3, attempt - 1);
+    console.log(`[useGeminiLive] Reconnecting in ${delay}ms (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})`);
+
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       connect();
-    }, RECONNECT_DELAY_MS);
+    }, delay);
   }, [connect]);
+
+  // Keep ref in sync so close/go_away handlers always call the latest reconnect
+  reconnectRef.current = reconnect;
 
   const sendPCM = useCallback((chunk: Int16Array) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !isReadyRef.current) {
-      // Silently drop — mic data before relay is ready is expected
       return;
     }
 
@@ -217,6 +258,15 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     ws.send(payload);
   }, []);
 
+  const sendText = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !isReadyRef.current) {
+      return;
+    }
+
+    ws.send(JSON.stringify({ type: 'text', text }));
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -224,5 +274,5 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     };
   }, [disconnect]);
 
-  return { sendPCM, connect, disconnect, isConnected, lastUserTranscript };
+  return { sendPCM, sendText, connect, disconnect, reconnect, isConnected, lastUserTranscript };
 }

@@ -66,6 +66,7 @@ const ARIA_LABELS: Record<VoiceState, string> = {
   processing: 'Processing your speech',
   historian_speaking: 'Historian is speaking. Click to interrupt.',
   interrupted: 'Historian interrupted',
+  reconnecting: 'Reconnecting to historian...',
 };
 
 function MicIcon({ muted }: { muted: boolean }) {

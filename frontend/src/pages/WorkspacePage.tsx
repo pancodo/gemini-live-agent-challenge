@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ResearchPanel } from '../components/workspace/ResearchPanel';
 import { ExpeditionLog } from '../components/workspace/ExpeditionLog';
+import { HistorianPanel } from '../components/workspace/HistorianPanel';
 import { useSessionStore } from '../store/sessionStore';
 import { useResearchStore } from '../store/researchStore';
 import { usePlayerStore } from '../store/playerStore';
@@ -152,8 +153,9 @@ export function WorkspacePage() {
 
           {(status === 'ready' || status === 'playing') && (
             <div className="flex flex-col h-full">
-              <div className="shrink-0 px-3 pt-3">
+              <div className="shrink-0 px-3 pt-3 flex flex-col gap-3">
                 <ReadyBanner />
+                <HistorianPanel />
               </div>
               <div className="flex-1 overflow-y-auto">
                 <ResearchPanel />

@@ -17,6 +17,14 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8002',
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     target: ['chrome120', 'safari17', 'firefox121'],
     rollupOptions: {
