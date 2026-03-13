@@ -305,27 +305,29 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
     onHandleReady?.(handle);
   }, [handle, onHandleReady]);
 
-  // Load PDF document
-  const loadPdf = useCallback(async () => {
-    if (!documentUrl) return;
+  // Load PDF document — only reload when the base path changes (not the signature).
+  // The signed URL is refreshed every poll but the actual document doesn't change.
+  const docUrlRef = useRef(documentUrl);
+  docUrlRef.current = documentUrl;
+
+  const basePath = documentUrl ? documentUrl.split('?')[0] : null;
+
+  useEffect(() => {
+    const url = docUrlRef.current;
+    if (!url) return;
 
     setLoading(true);
     setError(null);
 
-    try {
-      const doc = await pdfjsLib.getDocument(documentUrl).promise;
+    pdfjsLib.getDocument(url).promise.then((doc) => {
       setPdf(doc);
       setNumPages(doc.numPages);
-    } catch (err) {
+    }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Failed to load PDF document');
-    } finally {
+    }).finally(() => {
       setLoading(false);
-    }
-  }, [documentUrl]);
-
-  useEffect(() => {
-    loadPdf();
-  }, [loadPdf]);
+    });
+  }, [basePath]); // eslint-disable-line react-hooks/exhaustive-deps -- docUrlRef always has latest signed URL
 
   // Render a single page: canvas layer + text layer
   const renderPage = useCallback(
@@ -491,7 +493,18 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
         <p className="text-[14px] text-red-600 font-sans text-center">{error}</p>
-        <Button variant="secondary" size="sm" onClick={loadPdf}>
+        <Button variant="secondary" size="sm" onClick={() => {
+          const url = docUrlRef.current;
+          if (!url) return;
+          setLoading(true);
+          setError(null);
+          pdfjsLib.getDocument(url).promise.then((doc) => {
+            setPdf(doc);
+            setNumPages(doc.numPages);
+          }).catch((err) => {
+            setError(err instanceof Error ? err.message : 'Failed to load PDF');
+          }).finally(() => setLoading(false));
+        }}>
           Retry
         </Button>
       </div>
