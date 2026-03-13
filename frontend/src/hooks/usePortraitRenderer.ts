@@ -32,6 +32,45 @@ const BLINK_MIN_INTERVAL_MS = 3000;
 const BLINK_MAX_INTERVAL_MS = 6000;
 const ENERGY_SMOOTH_FACTOR = 0.3;
 const MOUTH_SCALE = 2.5;
+const WAKE_UP_MS = 1500;
+const WAKE_UP_BLINK_AT_MS = 800;
+const NOISE_TILE_SIZE = 64;
+const NOISE_ALPHA = 0.015;
+const NOISE_FRAME_INTERVAL = 5;
+const CANDLE_BASE_ALPHA = 0.04;
+const CANDLE_VARY = 0.02;
+
+// ── Offscreen Texture Generators ────────────────────────────
+
+function createNoisePattern(): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = NOISE_TILE_SIZE;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(NOISE_TILE_SIZE, NOISE_TILE_SIZE);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random() * 255;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function createCandlelightGradient(size: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d')!;
+  const grad = ctx.createRadialGradient(
+    size * 0.3, size * 0.25, 0,
+    size * 0.3, size * 0.25, size * 0.85,
+  );
+  grad.addColorStop(0, 'rgba(255, 200, 120, 1)');
+  grad.addColorStop(0.4, 'rgba(255, 180, 100, 0.5)');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return c;
+}
 
 // ── Image Loader ─────────────────────────────────────────────
 
@@ -74,6 +113,8 @@ export function usePortraitRenderer({
   const freqBufferRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(analyserNode);
   const rafRef = useRef(0);
+  const wakeUpRef = useRef({ active: false, startTime: 0, blinkTriggered: false });
+  const frameCountRef = useRef(0);
 
   // Keep analyserRef in sync without triggering effect re-runs
   analyserRef.current = analyserNode;
@@ -99,7 +140,12 @@ export function usePortraitRenderer({
         crossfadeRef.current = { active: true, startTime: performance.now() };
       }
 
+      // Trigger wake-up animation on first load only
+      const isFirstLoad = !imagesRef.current && !prevImagesRef.current;
       imagesRef.current = imgs;
+      if (isFirstLoad) {
+        wakeUpRef.current = { active: true, startTime: performance.now(), blinkTriggered: false };
+      }
       setIsLoaded(true);
     }).catch((err) => {
       console.warn(`[LivingPortrait] Failed to load era "${era}":`, err);
@@ -126,6 +172,11 @@ export function usePortraitRenderer({
 
     ctx.scale(dpr, dpr);
     scheduleNextBlink();
+
+    // Create offscreen textures once per effect lifecycle
+    const noiseCanvas = createNoisePattern();
+    const noisePattern = ctx.createPattern(noiseCanvas, 'repeat');
+    const candleCanvas = createCandlelightGradient(size);
 
     function drawPortrait(imgs: PortraitImages, alpha: number, now: number) {
       if (!ctx) return;
@@ -169,10 +220,10 @@ export function usePortraitRenderer({
       if (!imgs || !ctx) return;
 
       const now = performance.now();
+      frameCountRef.current++;
 
       // Update audio energy
       if (simulateAudio) {
-        // Dev mode: sine wave with random bursts to simulate speech
         const t = now / 1000;
         const base = Math.sin(t * 3) * 0.3 + 0.3;
         const burst = Math.sin(t * 7) * Math.sin(t * 1.3) * 0.4;
@@ -189,7 +240,7 @@ export function usePortraitRenderer({
           smoothEnergyRef.current =
             smoothEnergyRef.current * (1 - ENERGY_SMOOTH_FACTOR) + rawEnergy * ENERGY_SMOOTH_FACTOR;
         } else {
-          smoothEnergyRef.current *= 0.9; // decay to 0 when no analyser
+          smoothEnergyRef.current *= 0.9;
         }
       }
 
@@ -200,10 +251,19 @@ export function usePortraitRenderer({
         blink.startTime = now;
       }
 
+      // Wake-up: trigger deliberate slow blink partway through
+      const wake = wakeUpRef.current;
+      if (wake.active && !wake.blinkTriggered && (now - wake.startTime) >= WAKE_UP_BLINK_AT_MS) {
+        wake.blinkTriggered = true;
+        blink.active = true;
+        blink.startTime = now;
+      }
+
       // Clear canvas
       ctx.clearRect(0, 0, size, size);
 
-      // Era crossfade
+      // ── Draw portrait layers ──────────────────────────
+      const prevComposite = ctx.globalCompositeOperation;
       const cf = crossfadeRef.current;
       if (cf.active && prevImagesRef.current) {
         const t = Math.min(1, (now - cf.startTime) / ERA_CROSSFADE_MS);
@@ -217,6 +277,41 @@ export function usePortraitRenderer({
         drawPortrait(imgs, 1, now);
       }
 
+      // ── Candlelight flicker (soft-light blend) ────────
+      // Three incommensurate sine waves produce organic irregular flicker
+      const s = now / 1000;
+      const flickerAlpha = CANDLE_BASE_ALPHA +
+        CANDLE_VARY * Math.sin(s * 3.0) * Math.sin(s * 1.7) * Math.sin(s * 7.1);
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = Math.max(0, flickerAlpha);
+      ctx.drawImage(candleCanvas, 0, 0, size, size);
+
+      // ── Wake-up sepia overlay ─────────────────────────
+      if (wake.active) {
+        const elapsed = now - wake.startTime;
+        if (elapsed >= WAKE_UP_MS) {
+          wake.active = false;
+        } else {
+          // Ease-out: sepia fades from strong to zero
+          const t = elapsed / WAKE_UP_MS;
+          const sepiaAlpha = 0.15 * (1 - t) * (1 - t);
+          ctx.globalCompositeOperation = 'color';
+          ctx.globalAlpha = sepiaAlpha;
+          ctx.fillStyle = 'rgb(160, 130, 90)';
+          ctx.fillRect(0, 0, size, size);
+        }
+      }
+
+      // ── Film grain noise (every N frames) ─────────────
+      if (noisePattern && frameCountRef.current % NOISE_FRAME_INTERVAL === 0) {
+        ctx.globalCompositeOperation = 'overlay';
+        ctx.globalAlpha = NOISE_ALPHA;
+        ctx.fillStyle = noisePattern;
+        ctx.fillRect(0, 0, size, size);
+      }
+
+      // Reset composite state
+      ctx.globalCompositeOperation = prevComposite;
       ctx.globalAlpha = 1;
     }
 
