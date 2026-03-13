@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { BranchNode, LiveIllustration } from '../types';
+import type { BranchNode, LiveIllustration, MapViewMode, SegmentGeo } from '../types';
 
 interface PlayerStore {
   isOpen: boolean;
@@ -28,6 +28,12 @@ interface PlayerStore {
   /** True when user is in voice conversation with historian (not during narration) */
   isConversationMode: boolean;
   setConversationMode: (mode: boolean) => void;
+  /** Geographic metadata per segment, keyed by segmentId */
+  segmentGeo: Record<string, SegmentGeo>;
+  setSegmentGeo: (segmentId: string, geo: SegmentGeo) => void;
+  /** Current map view mode in the documentary player */
+  mapViewMode: MapViewMode;
+  setMapViewMode: (mode: MapViewMode) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -38,7 +44,7 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   isKenBurnsPaused: false,
   isIdle: false,
   open: (segmentId) => set({ isOpen: true, currentSegmentId: segmentId, isIdle: false }),
-  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '' }),
+  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {} }),
   setCaption: (captionText) => set({ captionText }),
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
   setIdle: (isIdle) => set({ isIdle }),
@@ -53,6 +59,11 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   setActiveBranch: (segmentId) => set({ activeBranchId: segmentId }),
   isConversationMode: false,
   setConversationMode: (isConversationMode) => set({ isConversationMode }),
+  segmentGeo: {},
+  setSegmentGeo: (segmentId, geo) =>
+    set((state) => ({ segmentGeo: { ...state.segmentGeo, [segmentId]: geo } })),
+  mapViewMode: 'ken-burns',
+  setMapViewMode: (mapViewMode) => set({ mapViewMode }),
   liveIllustration: null,
   _illustrationTimer: null,
   setLiveIllustration: (ill) => {
