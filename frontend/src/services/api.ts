@@ -11,27 +11,27 @@ export async function createSession(filename: string, language?: string, persona
   return res.json() as Promise<CreateSessionResponse>;
 }
 
-export async function getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
-  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/status`);
+export async function getSessionStatus(sessionId: string, signal?: AbortSignal): Promise<SessionStatusResponse> {
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/status`, { signal });
   if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
   return res.json() as Promise<SessionStatusResponse>;
 }
 
-export async function getAgentLogs(sessionId: string, agentId: string): Promise<AgentLogsResponse> {
-  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/agent/${agentId}/logs`);
+export async function getAgentLogs(sessionId: string, agentId: string, signal?: AbortSignal): Promise<AgentLogsResponse> {
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/agent/${agentId}/logs`, { signal });
   if (!res.ok) throw new Error(`Agent logs fetch failed: ${res.status}`);
   return res.json() as Promise<AgentLogsResponse>;
 }
 
-export async function getSegments(sessionId: string): Promise<Segment[]> {
-  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/segments`);
+export async function getSegments(sessionId: string, signal?: AbortSignal): Promise<Segment[]> {
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/segments`, { signal });
   if (!res.ok) throw new Error(`Segments fetch failed: ${res.status}`);
   const data = await res.json() as { segments: Segment[] };
   return data.segments;
 }
 
-export async function getUrlMeta(url: string): Promise<UrlMeta> {
-  const res = await fetch(`${BASE_URL}/api/meta?url=${encodeURIComponent(url)}`);
+export async function getUrlMeta(url: string, signal?: AbortSignal): Promise<UrlMeta> {
+  const res = await fetch(`${BASE_URL}/api/meta?url=${encodeURIComponent(url)}`, { signal });
   if (!res.ok) throw new Error(`Meta fetch failed: ${res.status}`);
   return res.json() as Promise<UrlMeta>;
 }
