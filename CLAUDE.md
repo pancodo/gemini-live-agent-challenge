@@ -312,6 +312,7 @@ frontend/
       useGeminiLive.ts      ← WebSocket session
       useAudioVisualSync.ts ← AnalyserNode → CSS custom properties (audio-reactive visuals)
       useTextScramble.ts    ← cipher/decode text animation
+      useSegmentGeo.ts          ← SSE-first geo data with client fallback
     store/
       sessionStore.ts       ← Zustand: sessionId, document, status
       researchStore.ts      ← Zustand: per-agent states, segment states
@@ -346,6 +347,7 @@ frontend/
 | `useSession` | `GET /api/session/:id/status` | REST |
 | `useSSE` | `GET /api/session/:id/stream` | SSE (EventSource) |
 | `useGeminiLive` | `wss://live-relay/session/:id` | WebSocket |
+| `useSSE` | `geo_update` SSE event | SSE (Phase 3.8) |
 | `AgentModal` | `GET /api/session/:id/agent/:agentId/logs` | REST |
 
 ---
@@ -483,6 +485,7 @@ SequentialAgent (pipeline)
         └── researcher_N   (Agent, google_search, gemini-2.0-flash)
   └── aggregator_agent     (Agent, reads all research_{n} state keys)
   └── script_agent         (Agent, gemini-2.0-pro)
+  └── geo_location_agent   (BaseAgent, gemini-2.0-flash, Google Maps grounding)
   └── visual_director      (Agent, calls Imagen 3 + Veo 2)
 ```
 
@@ -491,6 +494,12 @@ SequentialAgent (pipeline)
 - `google_search` tool **cannot be combined** with other tools in the same agent — research agents are search-only
 - Agent results are shared via `output_key` → `session.state[key]` → referenced in downstream agent instructions via `{key}` template syntax
 - `ParallelAgent` provides **no shared state during execution** — each subagent writes to its own `output_key`
+
+### Pipeline Phases
+
+The pipeline runs as a SequentialAgent. Between Phase III (Script Generation) and Phase IV (Visual Research), Phase 3.8 performs geographic mapping:
+
+- **Phase 3.8 — Geographic Mapping** (`geo_location_agent`): Extracts geographic locations from scripts and scene briefs, geocodes via Gemini + Google Maps grounding, writes SegmentGeo to Firestore and emits `geo_update` SSE events.
 
 ---
 
@@ -519,6 +528,7 @@ SequentialAgent (pipeline)
 │ │  └ researcher×N  │ │    │   Vertex AI                  │
 │ │ Aggregator       │─┼───▶│   Imagen 3 / Veo 2           │
 │ │ Script Agent     │ │    └─────────────────────────────┘
+│ │ Geo Location     │ │
 │ │ Visual Director  │ │
 │ └──────────────────┘ │
 └──────────┬──────────┘
@@ -573,6 +583,7 @@ SequentialAgent (pipeline)
   mood: string
   sources: array<string>
   graphEdges: array<string>
+  geo: object (optional — SegmentGeo from Phase 3.8)
   createdAt: timestamp
 ```
 
