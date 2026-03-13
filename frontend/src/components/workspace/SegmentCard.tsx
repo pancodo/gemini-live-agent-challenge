@@ -285,53 +285,80 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
             : scrambledTitle}
         </h3>
 
-        {/* Image thumbnails row */}
+        {/* Hero image + thumbnail strip */}
         {segment.imageUrls?.length > 0 && (
-          <div className="flex gap-1.5 mb-3 overflow-hidden">
-            {segment.imageUrls.slice(0, 3).map((url, i) => (
-              <div
-                key={i}
-                role="button"
-                tabIndex={0}
-                aria-label={`View scene ${i + 1} full size`}
-                className="w-16 h-10 rounded bg-[var(--bg3)] overflow-hidden shrink-0 cursor-pointer transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
-                style={{ outlineColor: 'var(--gold)' }}
-                onClick={(e) => handleThumbnailClick(e, i)}
-                onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setLightboxIndex(i);
-                  }
-                }}
-              >
-                <img
-                  src={url}
-                  alt={`Scene ${i + 1}`}
-                  className="w-full h-full object-cover pointer-events-none"
-                  loading="lazy"
-                />
-              </div>
-            ))}
-            {segment.imageUrls.length > 3 && (
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={`View ${segment.imageUrls.length - 3} more images`}
-                className="w-16 h-10 rounded bg-[var(--bg3)] flex items-center justify-center shrink-0 cursor-pointer transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
-                style={{ outlineColor: 'var(--gold)' }}
-                onClick={(e) => handleThumbnailClick(e, 3)}
-                onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setLightboxIndex(3);
-                  }
-                }}
-              >
-                <span className="font-sans text-[10px] text-[var(--muted)]">
-                  +{segment.imageUrls.length - 3}
-                </span>
+          <div className="mb-3">
+            {/* Hero: first image as a wide banner */}
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="View scene full size"
+              className="w-full h-36 rounded-md bg-[var(--bg3)] overflow-hidden cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 mb-1.5"
+              style={{ outlineColor: 'var(--gold)' }}
+              onClick={(e) => handleThumbnailClick(e, 0)}
+              onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setLightboxIndex(0);
+                }
+              }}
+            >
+              <img
+                src={segment.imageUrls[0]}
+                alt={`${segment.title} — scene 1`}
+                className="w-full h-full object-cover pointer-events-none"
+                loading="lazy"
+              />
+            </div>
+            {/* Secondary thumbnails */}
+            {segment.imageUrls.length > 1 && (
+              <div className="flex gap-1.5 overflow-hidden">
+                {segment.imageUrls.slice(1, 4).map((url, i) => (
+                  <div
+                    key={i + 1}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View scene ${i + 2} full size`}
+                    className="flex-1 h-14 rounded bg-[var(--bg3)] overflow-hidden cursor-pointer transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+                    style={{ outlineColor: 'var(--gold)' }}
+                    onClick={(e) => handleThumbnailClick(e, i + 1)}
+                    onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setLightboxIndex(i + 1);
+                      }
+                    }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Scene ${i + 2}`}
+                      className="w-full h-full object-cover pointer-events-none"
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
+                {segment.imageUrls.length > 4 && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View ${segment.imageUrls.length - 4} more images`}
+                    className="flex-1 h-14 rounded bg-[var(--bg3)] flex items-center justify-center cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
+                    onClick={(e) => handleThumbnailClick(e, 4)}
+                    onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setLightboxIndex(4);
+                      }
+                    }}
+                  >
+                    <span className="font-sans text-[10px] text-[var(--muted)]">
+                      +{segment.imageUrls.length - 4}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
