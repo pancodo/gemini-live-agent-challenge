@@ -249,7 +249,7 @@ GitHub will render it as an interactive SVG diagram. No build step needed.
 
 To preview locally before pushing:
 - VS Code: install the "Markdown Preview Mermaid Support" extension
-- CLI: `npx @mermaid-js/mermaid-cli mmdc -i docs/architecture-diagram.md -o diagram.svg`
+- CLI: `npx @mermaid-js/mermaid-cli mmdc -i docs/architecture/architecture-diagram.md -o diagram.svg`
 - Web: paste into https://mermaid.live/
 
 ---

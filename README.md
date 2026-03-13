@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="frontend/public/logo.png" alt="AI Historian" width="120" />
+
 # AI Historian
 
 **Upload any historical document. Watch it become a cinematic documentary in under 45 seconds.**
@@ -28,7 +30,11 @@ AI Historian is a real-time multimodal research and documentary engine. Drop any
 | **Output** | Self-generating documentary: Imagen 3 visuals · Veo 2 video · AI narration |
 | **Voice** | Gemini 2.5 Flash Native Audio — always listening, responds in < 300ms, resumes after interruption |
 | **Grounding** | Every spoken question retrieves the 4 most relevant source passages via Firestore vector search — the historian cites actual document pages, not just scripted narration |
+| **Live Illustration** | User questions during the documentary trigger on-the-fly Imagen 3 illustrations with cinematic crossfade |
+| **Timeline Map** | Interactive antique-style map with animated pins, routes, and fly-to transitions for each documentary segment |
+| **Historian Avatar** | Live2D animated character with lip-sync driven by `AnalyserNode` frequency data |
 | **Adaptation** | Documentary branches based on your questions — no two sessions are identical |
+| **Light / Dark** | Full theme support across all screens including the cinematic player with antique map styles |
 
 ---
 
@@ -272,10 +278,13 @@ gcloud firestore indexes composite create \
 | Vite | 6 | Build tool — ESBuild transforms, instant HMR |
 | TypeScript | 5.x strict | Full type safety, no `any` |
 | Tailwind CSS | v4 | CSS-first config, Lightning CSS engine |
-| Zustand | 5 | Client state — `useShallow` selectors, signals-based subscriptions |
+| Zustand | 5 | Client state — `useShallow` selectors, sessionStorage persistence |
 | Motion | 12 | All animations — springs, `AnimatePresence`, `layoutId` |
 | TanStack Query | v5 | Server state — REST polling, SSE stream management |
-| Radix UI | latest | Accessible headless components — Dialog, Tooltip |
+| MapLibre GL | 5.x | Interactive antique-style timeline map with animated pins and routes |
+| pixi.js + pixi-live2d-display | 6.x / 0.4 | Live2D historian avatar with lip-sync |
+| Radix UI | latest | Accessible headless components — Dialog, Tooltip, Collapsible |
+| react-resizable-panels | 4.x | Draggable split layout for PDF viewer + research panel |
 | Sonner | 2.x | Toast notifications — `toast.promise()` for async agent operations |
 | pdfjs-dist | latest | PDF rendering with text layer extraction |
 
@@ -289,9 +298,12 @@ gcloud firestore indexes composite create \
 | Frontend | SSE adaptive drip — 1 / 3 / 8 events per 150ms tick, single `startTransition` per batch | 50-event burst: 7.5s → ~1s catch-up |
 | Frontend | Canvas resize guard in Waveform — conditional `width`/`height` assignment | Eliminates 60 GPU context flushes/second during audio |
 | Frontend | All pages lazy-loaded via `React.lazy` + `Suspense` | Smaller initial bundle — only UploadPage parsed on first load |
+| Frontend | CSS containment (`contain: layout style paint`) + GPU hints (`will-change`) on player and map | Isolates repaint scope; prevents layout thrashing |
+| Frontend | ResearchStore persisted to `sessionStorage` via Zustand persist middleware | State survives page refreshes without re-fetching |
 | Backend | Firestore `WriteBatch` for segment writes | 4–8 sequential round-trips → 1 atomic commit |
 | Backend | `GlobalRateLimiter.locked()` + Retry-After header extraction | Correct backoff without hitting 429 cascades |
 | Backend | GCS `storage.Client()` singleton + `Bucket` cache | Eliminates per-upload connection pool creation under concurrent Imagen 3 |
+| Backend | Test mode: 6-chunk limit + 1 frame/segment + no Veo 2 | Fast iteration without burning Imagen/Veo quota |
 
 ### Performance Targets
 
@@ -395,31 +407,39 @@ cd frontend && pnpm install && pnpm dev
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       │   ├── upload/                 DropZone, FormatBadge
+│       │   ├── upload/                 DropZone, FormatBadge, PersonaSelector
 │       │   ├── workspace/              WorkspaceLayout, PDFViewer, ResearchPanel,
 │       │   │                           HistorianPanel, AgentModal, SegmentCard,
 │       │   │                           ExpeditionLog, TopNav
-│       │   ├── player/                 DocumentaryPlayer, KenBurnsStage,
-│       │   │                           CaptionTrack, PlayerSidebar, IrisOverlay
-│       │   ├── voice/                  VoiceButton, Waveform, VoiceLayer, LiveToast
+│       │   ├── player/                 DocumentaryPlayer, KenBurnsStage, TimelineMap,
+│       │   │                           CaptionTrack, PlayerSidebar, IrisOverlay,
+│       │   │                           SourcePanel, ShareButton, BranchTree
+│       │   ├── voice/                  VoiceButton, Waveform, VoiceLayer, LiveToast,
+│       │   │                           HistorianAvatar (Live2D)
 │       │   └── ui/                     Button, InkButton, Badge, Spinner, Modal
 │       ├── hooks/
 │       │   ├── useSSE.ts               Adaptive drip SSE — 1/3/8 events per 150ms tick
-│       │   ├── useGeminiLive.ts        WebSocket session lifecycle
+│       │   ├── useGeminiLive.ts        WebSocket session lifecycle + text messages
 │       │   ├── useAudioCapture.ts      Mic → 16kHz PCM via AudioWorklet
 │       │   ├── useAudioPlayback.ts     PCM chunk queue → Web Audio API
 │       │   ├── useAudioVisualSync.ts   AnalyserNode → CSS custom properties
-│       │   └── useTextScramble.ts      Cipher/decode title reveal animation
-│       ├── store/                      sessionStore · researchStore · voiceStore · playerStore
+│       │   ├── useSegmentGeo.ts        Geo extraction via Gemini Flash for timeline map
+│       │   ├── useLive2DModel.ts       Lazy Live2D model loading + expression control
+│       │   ├── useLipSync.ts           AnalyserNode frequency → Live2D mouth parameters
+│       │   ├── useTextScramble.ts      Cipher/decode title reveal animation
+│       │   └── useVoiceState.ts        Voice button state machine with auto-reconnect
+│       ├── store/                      sessionStore · researchStore (sessionStorage) · voiceStore · playerStore
 │       ├── services/                   api.ts · upload.ts (GCS signed URL)
-│       └── pages/                      UploadPage · WorkspacePage · PlayerPage (lazy-loaded)
+│       ├── styles/                     map-style.json · map-style-light.json · timeline-map.css
+│       └── pages/                      LandingPage · UploadPage · WorkspacePage · PlayerPage (lazy-loaded)
 │
 ├── backend/
 │   ├── historian_api/
 │   │   └── routes/
-│   │       ├── session.py              Session lifecycle, SSE stream, status
+│   │       ├── session.py              Session lifecycle, SSE stream, signed URL refresh
 │   │       ├── pipeline.py             Pipeline trigger, segment endpoints
-│   │       └── retrieve.py             POST /api/session/{id}/retrieve — RAG vector search
+│   │       ├── retrieve.py             POST /api/session/{id}/retrieve — RAG vector search
+│   │       └── illustrate.py           POST /api/session/{id}/illustrate — live Imagen 3 on user questions
 │   ├── agent_orchestrator/
 │   │   └── agents/
 │   │       ├── pipeline.py             ResumablePipelineAgent — checkpoint-aware orchestrator
@@ -430,6 +450,10 @@ cd frontend && pnpm install && pnpm dev
 │   │       ├── narrative_visual_planner.py   Phase 4.0 — VisualStoryboard
 │   │       ├── visual_research_orchestrator.py Phase IV — 6-stage visual research
 │   │       ├── visual_director_orchestrator.py Phase V — Imagen 3 + Veo 2 + GCS
+│   │       ├── narrative_director_agent.py   Phase 3.1 — TEXT+IMAGE interleaved storyboard
+│   │       ├── branch_pipeline.py      Branching documentary graph from user questions
+│   │       ├── entity_extractor.py     Named entity extraction for PDF highlights
+│   │       ├── research_deduplicator.py Source deduplication across scenes
 │   │       ├── checkpoint_helpers.py   Phase checkpoint load/save (Firestore)
 │   │       ├── rate_limiter.py         GlobalRateLimiter + Retry-After backoff
 │   │       ├── sse_helpers.py          SSE event builders
@@ -438,12 +462,18 @@ cd frontend && pnpm install && pnpm dev
 │   │       ├── storyboard_types.py     VisualStoryboard
 │   │       └── visual_detail_types.py  VisualDetailManifest
 │   └── live_relay/                     Node.js 20 WebSocket proxy → Gemini Live API
-│                                       + RAG injection on inputTranscript events
+│                                       + RAG injection · transcript forwarding · Firestore context
 │
 └── docs/
-    ├── architecture-diagram.md         Full + compact Mermaid diagrams
-    ├── DEMO_SCRIPT.md                  7-shot demo video shot list with timing
-    └── IMPROVEMENT_IDEAS.md            Research-backed feature backlog
+    ├── spec/                            Product specs (PRD, SRS, FRONTEND_PLAN, RESOURCES)
+    ├── project/                         Tasks, UI improvements, feature backlog
+    ├── architecture/                    Diagrams and generator script
+    │   ├── architecture-diagram.md      Full + compact Mermaid diagrams
+    │   └── architecture-diagram.png     Generated PNG
+    ├── demo/                            Demo script and interactive prototype
+    │   └── DEMO_SCRIPT.md              7-shot demo video shot list with timing
+    ├── blog/                            Blog drafts and posting strategy
+    └── plans/                           Dated engineering design documents
 ```
 
 ---
@@ -451,14 +481,16 @@ cd frontend && pnpm install && pnpm dev
 ## Team
 
 **Berkay** — Live Voice Layer & Real-Time Interaction
-`live-relay` · Gemini Live API · browser audio pipeline (PCM encoding) · interruption handling · voice button state machine · session resumption
+`live-relay` · Gemini Live API · browser audio pipeline (PCM encoding) · interruption handling · voice button state machine · session resumption · RAG context injection · transcript forwarding
 
 **Efe** — Research Pipeline, Agent Visualization & Documentary Engine
-ADK agent pipeline · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal
+ADK 7-phase agent pipeline · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal · Timeline Map · Live2D avatar · live illustration engine · light/dark theme
 
 ---
 
 <div align="center">
+
+<img src="frontend/public/logo.png" alt="AI Historian" width="48" />
 
 Built for the **[Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/)** by Google · `#GeminiLiveAgentChallenge`
 

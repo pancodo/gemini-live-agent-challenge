@@ -92,7 +92,7 @@ Agent 1 runs first and writes `src/types/index.ts` + store skeletons + Tailwind 
 
 ---
 
-## Design Tokens (from prototype.html)
+## Design Tokens (from docs/demo/prototype.html)
 
 ```css
 :root {
@@ -916,7 +916,7 @@ No WebGL libraries (Three.js, VFX-JS) — too heavy for this scope. All effects 
 
 The frontend is split into 5 sequential parts. Each part is self-contained and builds on the previous one. Execute one part per chat session to stay within context limits.
 
-**To continue in a new chat:** Read `FRONTEND_PLAN.md` fully, check the status table below, then say "start Part N" for the next uncompleted part.
+**To continue in a new chat:** Read `docs/spec/FRONTEND_PLAN.md` fully, check the status table below, then say "start Part N" for the next uncompleted part.
 
 | Part | Scope | Status |
 |---|---|---|

@@ -535,7 +535,7 @@ While the illustration is being generated (between "✦ Illustrating..." badge a
 ```
 
 #### 5e. Demo script addition
-Update `docs/DEMO_SCRIPT.md` with a dedicated "Live Illustration" demo moment:
+Update `docs/demo/DEMO_SCRIPT.md` with a dedicated "Live Illustration" demo moment:
 1. Start documentary playing (any historical document)
 2. Wait for 2nd segment to begin
 3. Press voice button, ask: "What did this place look like in its golden age?"
