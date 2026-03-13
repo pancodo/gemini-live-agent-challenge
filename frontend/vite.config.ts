@@ -26,6 +26,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: ['chrome120', 'safari17', 'firefox121'],
     rollupOptions: {
       output: {
         manualChunks: {

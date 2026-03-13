@@ -117,6 +117,8 @@ export function SourcePanel({ sources }: SourcePanelProps) {
                     alt=""
                     width={16}
                     height={16}
+                    loading="lazy"
+                    fetchPriority="low"
                     className="shrink-0 mt-0.5 rounded-sm"
                   />
 

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore } from '../../store/voiceStore';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,8 +15,9 @@ import { useNavigate } from 'react-router-dom';
  *   showResumeToast();
  */
 export function useResumeToast() {
-  const resumeSegmentId = useVoiceStore((s) => s.resumeSegmentId);
-  const clearResume = useVoiceStore((s) => s.clearResume);
+  const { resumeSegmentId, clearResume } = useVoiceStore(
+    useShallow((s) => ({ resumeSegmentId: s.resumeSegmentId, clearResume: s.clearResume })),
+  );
   const navigate = useNavigate();
 
   const showResumeToast = useCallback(() => {

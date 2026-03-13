@@ -50,6 +50,7 @@ function SampleDocuments() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
   const persona = useSessionStore((s) => s.persona) as PersonaType;
+  const researchMode = useSessionStore((s) => s.researchMode);
   const resetResearch = useResearchStore((s) => s.reset);
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -62,7 +63,7 @@ function SampleDocuments() {
         if (!res.ok) throw new Error('fetch failed');
         const blob = await res.blob();
         const file = new File([blob], doc.filename, { type: 'application/pdf' });
-        const { sessionId, gcsPath } = await uploadDocument(file, doc.language, persona);
+        const { sessionId, gcsPath } = await uploadDocument(file, doc.language, persona, undefined, researchMode);
         resetResearch();
         setSession({ sessionId, gcsPath, status: 'processing' });
         navigate('/workspace');
@@ -73,7 +74,7 @@ function SampleDocuments() {
         });
       }
     },
-    [navigate, setSession, persona, resetResearch]
+    [navigate, setSession, persona, researchMode, resetResearch]
   );
 
   return (
@@ -288,6 +289,39 @@ function DevSeedBar() {
   );
 }
 
+function ResearchModeToggle() {
+  const mode = useSessionStore((s) => s.researchMode);
+  const setSession = useSessionStore((s) => s.setSession);
+
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--muted)] font-sans">
+        Research depth
+      </span>
+      <div className="flex rounded-md border border-[var(--bg4)] overflow-hidden">
+        {(['test', 'normal'] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setSession({ researchMode: m })}
+            className={`px-3 py-1 text-[11px] font-sans uppercase tracking-[0.1em] transition-colors ${
+              mode === m
+                ? m === 'test'
+                  ? 'bg-[var(--teal)] text-white'
+                  : 'bg-[var(--gold)] text-white'
+                : 'bg-[var(--bg2)] text-[var(--muted)] hover:bg-[var(--bg3)]'
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+      <span className="text-[10px] text-[var(--muted)]/70 font-sans">
+        {mode === 'test' ? '1 scene · 1 search · fast & cheap' : 'up to 4 scenes · 3 searches each'}
+      </span>
+    </div>
+  );
+}
+
 export function UploadPage() {
   const persona = useSessionStore((s) => s.persona) as PersonaType;
   const setSession = useSessionStore((s) => s.setSession);
@@ -313,6 +347,7 @@ export function UploadPage() {
             onChange={(p) => setSession({ persona: p })}
           />
         </div>
+        <ResearchModeToggle />
         <DropZone />
         <SampleDocuments />
         <RecentSessions />

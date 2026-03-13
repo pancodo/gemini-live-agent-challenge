@@ -140,10 +140,10 @@ async def process_session(session_id: str, body: ProcessRequest) -> dict:
         logger.exception("Failed to update session status for %s", session_id)
         del _event_logs[session_id]
         raise HTTPException(status_code=500, detail="Could not update session") from exc
-    asyncio.create_task(_run_pipeline(session_id, body.gcsPath, log))
+    asyncio.create_task(_run_pipeline(session_id, body.gcsPath, body.mode, log))
     return {"sessionId": session_id, "status": "processing"}
 
-async def _run_pipeline(session_id: str, gcs_path: str, log: SessionEventLog) -> None:
+async def _run_pipeline(session_id: str, gcs_path: str, mode: str, log: SessionEventLog) -> None:
     emitter = LogSSEEmitter(log=log)
     db = get_db()
     try:
@@ -154,7 +154,7 @@ async def _run_pipeline(session_id: str, gcs_path: str, log: SessionEventLog) ->
             app_name="historian",
             user_id="user",
             session_id=session_id,
-            state={"gcs_path": gcs_path, "session_id": session_id},
+            state={"gcs_path": gcs_path, "session_id": session_id, "research_mode": mode},
         )
         user_message = genai_types.Content(
             role="user",

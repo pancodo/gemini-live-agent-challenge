@@ -6,9 +6,18 @@ import { useResearchStore } from '../../store/researchStore';
 import { uploadDocument } from '../../services/upload';
 import { InkButton } from '../ui';
 import { FormatBadge } from './FormatBadge';
-import type { PersonaType } from '../../types';
+import type { PersonaType, ResearchMode } from '../../types';
 
 type DropState = 'idle' | 'drag-active' | 'uploading' | 'error';
+
+const BORDER_CLASS: Record<DropState, string> = {
+  'drag-active': 'border-solid border-[var(--gold)]',
+  'error': 'border-dashed border-red-400',
+  'idle': 'border-dashed border-[var(--gold)]/40',
+  'uploading': 'border-dashed border-[var(--gold)]/40',
+} as const;
+
+const SERIF_STYLE = { fontFamily: 'var(--font-serif)' } as const;
 
 const ACCEPTED_TYPES = [
   'application/pdf',
@@ -30,6 +39,7 @@ export function DropZone() {
   const navigate = useNavigate();
   const setSession = useSessionStore((s) => s.setSession);
   const persona = useSessionStore((s) => s.persona) as PersonaType;
+  const researchMode = useSessionStore((s) => s.researchMode) as ResearchMode;
   const resetResearch = useResearchStore((s) => s.reset);
   const shouldReduceMotion = useReducedMotion();
 
@@ -65,7 +75,8 @@ export function DropZone() {
           file,
           language || undefined,
           persona,
-          (pct) => setProgress(pct)
+          (pct) => setProgress(pct),
+          researchMode,
         );
 
         resetResearch();
@@ -83,7 +94,7 @@ export function DropZone() {
         );
       }
     },
-    [language, persona, navigate, setSession, resetResearch]
+    [language, persona, researchMode, navigate, setSession, resetResearch]
   );
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -140,12 +151,18 @@ export function DropZone() {
     if (inputRef.current) inputRef.current.value = '';
   }, []);
 
-  const borderClass =
-    dropState === 'drag-active'
-      ? 'border-solid border-[var(--gold)]'
-      : dropState === 'error'
-        ? 'border-dashed border-red-400'
-        : 'border-dashed border-[var(--gold)]/40';
+  const handleZoneClick = useCallback(() => {
+    if (dropState === 'idle') inputRef.current?.click();
+  }, [dropState]);
+
+  const handleZoneKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (dropState === 'idle') inputRef.current?.click();
+    }
+  }, [dropState]);
+
+  const borderClass = BORDER_CLASS[dropState];
 
   return (
     <motion.div
@@ -158,18 +175,11 @@ export function DropZone() {
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onClick={() => {
-        if (dropState === 'idle') inputRef.current?.click();
-      }}
+      onClick={handleZoneClick}
       role="button"
       tabIndex={0}
       aria-label="Upload a historical document"
-      onKeyDown={(e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          if (dropState === 'idle') inputRef.current?.click();
-        }
-      }}
+      onKeyDown={handleZoneKeyDown}
     >
       <input
         ref={inputRef}
@@ -253,7 +263,7 @@ export function DropZone() {
             <div className="text-center">
               <p
                 className="text-[22px] text-[var(--text)]"
-                style={{ fontFamily: 'var(--font-serif)' }}
+                style={SERIF_STYLE}
               >
                 {dropState === 'drag-active'
                   ? 'Release to upload'
@@ -306,7 +316,7 @@ export function DropZone() {
           >
             <p
               className="text-[18px] text-[var(--text)]"
-              style={{ fontFamily: 'var(--font-serif)' }}
+              style={SERIF_STYLE}
             >
               Uploading document...
             </p>
