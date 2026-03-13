@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useVoiceStore } from '../../store/voiceStore';
 import type { VoiceState } from '../../types';
@@ -23,6 +23,15 @@ const VOICE_MESSAGES: Record<VoiceState, string> = {
 function isVoiceActive(state: VoiceState): boolean {
   return state === 'listening' || state === 'historian_speaking' || state === 'interrupted';
 }
+
+// ── Module-level Motion constants ────────────────────────────────
+
+const GLOW_ANIMATE_ACTIVE = { opacity: 1, scale: [1, 1.12, 1] as number[] };
+const GLOW_ANIMATE_INACTIVE = { opacity: 0.4, scale: 1 };
+const GLOW_TRANSITION_ACTIVE = { duration: 2.8, repeat: Infinity, ease: 'easeInOut' as const };
+const GLOW_TRANSITION_INACTIVE = { duration: 0.4 };
+
+const BAR_HEIGHTS = [0.6, 1.0, 0.75, 1.0, 0.6] as const;
 
 // ── Ornamental Emblem ────────────────────────────────────────────
 
@@ -53,8 +62,8 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
           background: `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`,
           filter: 'blur(12px)',
         }}
-        animate={{ opacity: active ? 1 : 0.4, scale: active && !reducedMotion ? [1, 1.12, 1] : 1 }}
-        transition={active && !reducedMotion ? { duration: 2.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.4 }}
+        animate={active && !reducedMotion ? GLOW_ANIMATE_ACTIVE : GLOW_ANIMATE_INACTIVE}
+        transition={active && !reducedMotion ? GLOW_TRANSITION_ACTIVE : GLOW_TRANSITION_INACTIVE}
       />
 
       {/* SVG emblem */}
@@ -139,7 +148,7 @@ function HistorianEmblem({ active, voiceState }: { active: boolean; voiceState: 
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {[0.6, 1.0, 0.75, 1.0, 0.6].map((h, i) => (
+            {BAR_HEIGHTS.map((h, i) => (
               <motion.span
                 key={i}
                 className="rounded-full"
@@ -186,54 +195,47 @@ function ConsultButton({ onClick }: { onClick?: () => void }) {
   }, [onClick, reducedMotion]);
 
   return (
-    <>
-      <style>{`
-        @keyframes ink-ripple {
-          to { transform: translate(-50%,-50%) scale(24); opacity: 0; }
-        }
-      `}</style>
-      <motion.button
-        ref={btnRef}
-        type="button"
-        onClick={handleClick}
-        className="relative overflow-hidden w-full"
-        style={{
-          fontFamily: 'var(--font-serif)',
-          fontWeight: 400,
-          fontSize: 11,
-          letterSpacing: '0.35em',
-          textTransform: 'uppercase',
-          color: 'var(--gold)',
-          border: '1px solid rgba(139,94,26,0.35)',
-          background: 'transparent',
-          borderRadius: 4,
-          padding: '10px 16px',
-          cursor: 'pointer',
-        }}
-        whileHover={{ borderColor: 'rgba(139,94,26,0.7)', color: 'var(--gold-d)' }}
-        whileTap={{ scale: 0.98 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-      >
-        {/* Corner brackets */}
-        <span
-          className="absolute top-0 left-0 w-2 h-2 pointer-events-none"
-          style={{ borderTop: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
-        />
-        <span
-          className="absolute top-0 right-0 w-2 h-2 pointer-events-none"
-          style={{ borderTop: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
-        />
-        <span
-          className="absolute bottom-0 left-0 w-2 h-2 pointer-events-none"
-          style={{ borderBottom: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
-        />
-        <span
-          className="absolute bottom-0 right-0 w-2 h-2 pointer-events-none"
-          style={{ borderBottom: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
-        />
-        Begin Consultation
-      </motion.button>
-    </>
+    <motion.button
+      ref={btnRef}
+      type="button"
+      onClick={handleClick}
+      className="relative overflow-hidden w-full"
+      style={{
+        fontFamily: 'var(--font-serif)',
+        fontWeight: 400,
+        fontSize: 11,
+        letterSpacing: '0.35em',
+        textTransform: 'uppercase',
+        color: 'var(--gold)',
+        border: '1px solid rgba(139,94,26,0.35)',
+        background: 'transparent',
+        borderRadius: 4,
+        padding: '10px 16px',
+        cursor: 'pointer',
+      }}
+      whileHover={{ borderColor: 'rgba(139,94,26,0.7)', color: 'var(--gold-d)' }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+    >
+      {/* Corner brackets */}
+      <span
+        className="absolute top-0 left-0 w-2 h-2 pointer-events-none"
+        style={{ borderTop: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
+      />
+      <span
+        className="absolute top-0 right-0 w-2 h-2 pointer-events-none"
+        style={{ borderTop: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
+      />
+      <span
+        className="absolute bottom-0 left-0 w-2 h-2 pointer-events-none"
+        style={{ borderBottom: '1px solid var(--gold)', borderLeft: '1px solid var(--gold)', opacity: 0.5 }}
+      />
+      <span
+        className="absolute bottom-0 right-0 w-2 h-2 pointer-events-none"
+        style={{ borderBottom: '1px solid var(--gold)', borderRight: '1px solid var(--gold)', opacity: 0.5 }}
+      />
+      Begin Consultation
+    </motion.button>
   );
 }
 
@@ -245,30 +247,30 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
   const active = isVoiceActive(voiceState);
   const isIdle = voiceState === 'idle';
 
-  const borderColor = active
-    ? voiceState === 'historian_speaking'
-      ? 'rgba(196,149,106,0.4)'
-      : voiceState === 'listening'
-        ? 'rgba(30,94,94,0.4)'
-        : 'rgba(139,94,26,0.3)'
-    : 'var(--bg4)';
+  const borderColor = useMemo(() => {
+    if (!active) return 'var(--bg4)';
+    if (voiceState === 'historian_speaking') return 'rgba(196,149,106,0.4)';
+    if (voiceState === 'listening') return 'rgba(30,94,94,0.4)';
+    return 'rgba(139,94,26,0.3)';
+  }, [active, voiceState]);
 
-  const bgGradient = active
-    ? voiceState === 'historian_speaking'
-      ? 'linear-gradient(160deg, var(--bg2) 0%, rgba(139,94,26,0.06) 100%)'
-      : voiceState === 'listening'
-        ? 'linear-gradient(160deg, var(--bg2) 0%, rgba(30,94,94,0.08) 100%)'
-        : 'var(--bg2)'
-    : 'var(--bg2)';
+  const bgGradient = useMemo(() => {
+    if (!active) return 'var(--bg2)';
+    if (voiceState === 'historian_speaking') return 'linear-gradient(160deg, var(--bg2) 0%, rgba(139,94,26,0.06) 100%)';
+    if (voiceState === 'listening') return 'linear-gradient(160deg, var(--bg2) 0%, rgba(30,94,94,0.08) 100%)';
+    return 'var(--bg2)';
+  }, [active, voiceState]);
+
+  const panelStyle = useMemo(() => ({
+    border: `1px solid ${borderColor}`,
+    background: bgGradient,
+    transition: 'border-color 0.5s ease, background 0.6s ease',
+  }), [borderColor, bgGradient]);
 
   return (
     <motion.div
       className="rounded-lg relative overflow-hidden"
-      style={{
-        border: `1px solid ${borderColor}`,
-        background: bgGradient,
-        transition: 'border-color 0.5s ease, background 0.6s ease',
-      }}
+      style={panelStyle}
     >
       {/* Top accent line */}
       <AnimatePresence>

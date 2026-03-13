@@ -271,7 +271,7 @@ function ElapsedTimer({ startElapsed, isActive }: { startElapsed: number; isActi
 
 interface AgentCardProps {
   agent: AgentState;
-  onClick: () => void;
+  onClick: (id: string) => void;
   onEntityClick?: (text: string) => void;
 }
 
@@ -299,7 +299,7 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
       ref={cardRef}
       variants={itemVariants}
       onMouseMove={handleMouseMove}
-      onClick={onClick}
+      onClick={() => onClick(agent.id)}
       className={`agent-card ${statusClass} relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-3 cursor-pointer overflow-hidden`}
       whileHover={reducedMotion ? undefined : { scale: 1.01 }}
       whileTap={reducedMotion ? undefined : { scale: 0.98 }}
@@ -307,7 +307,7 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
       role="button"
       tabIndex={0}
       aria-label={`Agent: ${agent.query}, status: ${agent.status}`}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(agent.id); }}
     >
       <div className="flex items-center gap-2.5">
         {/* Status dot */}
@@ -478,7 +478,9 @@ export function ResearchPanel() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const agents = useResearchStore(useShallow((s) => s.agents));
   const segments = useResearchStore(useShallow((s) => s.segments));
-  const stats = useResearchStore((s) => s.stats);
+  const sourcesFound = useResearchStore((s) => s.stats.sourcesFound);
+  const factsVerified = useResearchStore((s) => s.stats.factsVerified);
+  const segmentsReady = useResearchStore((s) => s.stats.segmentsReady);
   const triggerIris = usePlayerStore((s) => s.triggerIris);
   const pdfViewer = usePDFViewer();
 
@@ -546,6 +548,8 @@ export function ResearchPanel() {
       .filter((p) => p.agents.length > 0);
   }, [agents]);
 
+  const handleAgentClick = useCallback((id: string) => setSelectedAgentId(id), []);
+
   const segmentList = useMemo(() => Object.values(segments), [segments]);
   const selectedAgent = selectedAgentId ? agents[selectedAgentId] ?? null : null;
 
@@ -596,7 +600,7 @@ export function ResearchPanel() {
                             <AgentCard
                               key={agent.id}
                               agent={agent}
-                              onClick={() => setSelectedAgentId(agent.id)}
+                              onClick={handleAgentClick}
                               onEntityClick={handleEntityClick}
                             />
                           ))}
@@ -631,10 +635,10 @@ export function ResearchPanel() {
         style={{ borderColor: 'rgba(139,94,26,0.12)', background: 'var(--bg2)' }}
       >
         {([
-          { label: 'Sources', value: stats.sourcesFound, popover: <SourcesPopover agents={agents} /> },
-          { label: 'Facts', value: stats.factsVerified, popover: <FactsPopover agents={agents} onEntityClick={handleEntityClick} /> },
-          { label: 'Segments', value: stats.segmentsReady, popover: <SegmentsPopover segments={segments} triggerIris={triggerIris} /> },
-        ] as const).map(({ label, value, popover }) => (
+          { label: 'Sources', value: sourcesFound, popover: <SourcesPopover agents={agents} /> },
+          { label: 'Facts', value: factsVerified, popover: <FactsPopover agents={agents} onEntityClick={handleEntityClick} /> },
+          { label: 'Segments', value: segmentsReady, popover: <SegmentsPopover segments={segments} triggerIris={triggerIris} /> },
+        ] as { label: string; value: number; popover: React.ReactNode }[]).map(({ label, value, popover }) => (
           <div key={label} className="flex flex-col items-center gap-0.5">
             <StatButton
               label={label.toLowerCase()}

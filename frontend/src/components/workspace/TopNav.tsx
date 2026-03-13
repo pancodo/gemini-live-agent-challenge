@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { useSessionStore } from '../../store/sessionStore';
 import { useResearchStore } from '../../store/researchStore';
-import type { PhaseEntry } from '../../store/researchStore';
 import { Badge } from '../ui';
 import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '../../hooks/useTheme';
@@ -28,10 +27,24 @@ function PhaseDot({ state }: { state: DotState }) {
   return <span className="w-1.5 h-1.5 rounded-full border border-[var(--muted)]/40" />;
 }
 
-function deriveActivePhase(phases: PhaseEntry[]): number {
-  if (phases.length === 0) return 0;
-  return Math.max(...phases.map((p) => p.phase));
-}
+// ── ElapsedTimer — isolated so 1s ticks don't re-render TopNav ──
+
+const ElapsedTimer = memo(function ElapsedTimer({ status }: { status: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (status !== 'processing' && status !== 'uploading') return;
+    const start = Date.now();
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [status]);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return (
+    <span className="text-[10px] text-[var(--muted)] font-sans tabular-nums">
+      {m}:{String(s).padStart(2, '0')}
+    </span>
+  );
+});
 
 const STATUS_VARIANTS: Record<string, 'gold' | 'teal' | 'green' | 'muted' | 'red'> = {
   idle: 'muted',
@@ -74,7 +87,9 @@ export function TopNav() {
   const status = useSessionStore((s) => s.status);
   const gcsPath = useSessionStore((s) => s.gcsPath);
   const reset = useSessionStore((s) => s.reset);
-  const phases = useResearchStore((s) => s.phases);
+  const activePhaseNum = useResearchStore(
+    (s) => s.phases.length === 0 ? 0 : Math.max(...s.phases.map((p) => p.phase)),
+  );
 
   const [settings, updateSetting] = useSettings();
   const { theme, setTheme } = useTheme();
@@ -102,12 +117,10 @@ export function TopNav() {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [settingsOpen]);
 
-  const activePhaseNum = deriveActivePhase(phases);
   const activePhaseEntry = PHASE_NAMES.find((p) => p.phase === activePhaseNum);
   const currentPhaseLabel = activePhaseEntry
     ? `Phase ${activePhaseNum === 1 ? 'I' : activePhaseNum === 2 ? 'II' : activePhaseNum === 3 ? 'III' : activePhaseNum === 4 ? 'IV' : 'V'} \u2014 ${activePhaseEntry.label}`
     : '';
-  const [elapsed, setElapsed] = useState(0);
 
   // Extract filename from gcsPath
   const filename = gcsPath ? gcsPath.split('/').pop() ?? 'Document' : 'No document';
@@ -149,20 +162,6 @@ export function TopNav() {
     },
     [handleSave],
   );
-
-  // Elapsed timer while processing
-  useEffect(() => {
-    if (status !== 'processing' && status !== 'uploading') return;
-    const start = Date.now();
-    const timer = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [status]);
-
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-  const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
   return (
     <div className="sticky top-0 z-100">
@@ -321,9 +320,7 @@ export function TopNav() {
           {status}
         </Badge>
         {(status === 'processing' || status === 'uploading') && (
-          <span className="text-[10px] text-[var(--muted)] font-sans tabular-nums">
-            {timeStr}
-          </span>
+          <ElapsedTimer status={status} />
         )}
       </div>
     </header>
