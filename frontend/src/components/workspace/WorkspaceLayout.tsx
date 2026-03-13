@@ -25,7 +25,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       <div className="h-full bg-[var(--bg)] overflow-hidden">
         <Group
           orientation="horizontal"
-          defaultLayout={defaultLayout ?? { pdf: 40, research: 60 }}
+          defaultLayout={defaultLayout ?? { pdf: 45, research: 55 }}
           onLayoutChanged={onLayoutChanged}
           className="h-full"
         >
