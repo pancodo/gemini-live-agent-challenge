@@ -266,13 +266,13 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 22 }}
         onMouseMove={handleMouseMove}
-        className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-4 cursor-pointer`}
+        className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg)] p-4 cursor-pointer`}
       >
         {/* Title row with index */}
         <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="seg-title font-serif text-[20px] font-semibold text-[var(--text)] leading-snug flex-1">
+          <h3 className="seg-title font-serif text-[20px] font-normal text-[var(--text)] leading-snug flex-1">
             {isGenerating
-              ? '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'
+              ? <span className="inline-block w-3/4 h-[1.2em] rounded bg-[var(--bg3)] animate-pulse" />
               : scrambledTitle}
           </h3>
           <span
@@ -290,7 +290,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
               role="button"
               tabIndex={0}
               aria-label={`View scene ${carouselIdx + 1} of ${imageCount} full size`}
-              className="w-full h-40 rounded-md bg-[var(--bg3)] overflow-hidden cursor-pointer relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+              className="w-full aspect-[16/9] rounded-md bg-[var(--bg3)] overflow-hidden cursor-pointer relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
               style={{ outlineColor: 'var(--gold)' }}
               onClick={(e) => handleThumbnailClick(e, carouselIdx)}
               onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
@@ -380,7 +380,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
             onMouseLeave={handleWatchLeave}
           >
             <motion.div style={reducedMotion ? {} : { x: springX, y: springY }}>
-              <Button variant="secondary" size="sm" onClick={handleWatch}>
+              <Button variant="primary" size="sm" onClick={handleWatch}>
                 {'\u25B6'} Watch
               </Button>
             </motion.div>

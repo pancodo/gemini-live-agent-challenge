@@ -127,7 +127,7 @@ function StatBadge({ label, value }: { label: string; value: number }) {
       </span>
       <span
         ref={spanRef}
-        className="stat-value text-[13px] font-sans font-medium text-[var(--gold)] tabular-nums"
+        className="stat-value text-[16px] font-sans font-medium text-[var(--gold)] tabular-nums"
       >
         {value}
       </span>
@@ -379,7 +379,7 @@ export function ExpeditionLog() {
       </div>
 
       {/* Stats bar */}
-      <div className="stats-bar flex items-center gap-4 px-5 py-3 border-t border-[var(--bg4)]">
+      <div className="stats-bar flex items-center justify-center gap-6 px-5 py-3 border-t border-[var(--bg4)]" style={{ boxShadow: '0 -4px 12px rgba(0,0,0,0.04)' }}>
         <StatBadge label="SOURCES FOUND" value={sourcesFound} />
         <span className="text-[var(--bg4)]">&middot;</span>
         <StatBadge label="FACTS VERIFIED" value={factsVerified} />
