@@ -18,11 +18,14 @@ export function useSession(sessionId: string | null) {
 
   useEffect(() => {
     if (query.data) {
+      // Only update documentUrl if we don't have one yet — avoid re-rendering
+      // the PDF viewer every poll cycle with a fresh signed URL.
+      const currentDocUrl = useSessionStore.getState().documentUrl;
       setSession({
         status: query.data.status,
         language: query.data.language,
         visualBible: query.data.visualBible,
-        documentUrl: query.data.documentUrl ?? null,
+        ...(currentDocUrl ? {} : { documentUrl: query.data.documentUrl ?? null }),
       });
     }
   }, [query.data, setSession]);
