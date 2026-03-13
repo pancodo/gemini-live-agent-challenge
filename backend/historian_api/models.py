@@ -28,6 +28,7 @@ class AgentLogsResponse(BaseModel):
 
 class ProcessRequest(BaseModel):
     gcsPath: str
+    mode: str = "normal"  # "test" or "normal"
 
 
 class SegmentResponse(BaseModel):
