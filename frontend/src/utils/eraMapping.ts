@@ -1,5 +1,11 @@
 import type { PortraitEra, Segment, SegmentGeo } from '../types';
 
+const VALID_ERAS = new Set<PortraitEra>(['default', 'ancient', 'modern']);
+
+function isPortraitEra(s: string): s is PortraitEra {
+  return VALID_ERAS.has(s as PortraitEra);
+}
+
 const ERA_KEYWORDS: Record<Exclude<PortraitEra, 'default'>, string[]> = {
   ancient: [
     'ancient', 'egypt', 'rome', 'roman', 'greek', 'greece', 'mesopotamia',
@@ -23,13 +29,13 @@ export function resolveEra(segment: Segment, geo?: SegmentGeo): PortraitEra {
   // Check explicit era on geo events
   if (geo?.events?.length) {
     const eraFromGeo = geo.events[0].era;
-    if (eraFromGeo && eraFromGeo in ERA_KEYWORDS) return eraFromGeo as PortraitEra;
+    if (eraFromGeo && isPortraitEra(eraFromGeo)) return eraFromGeo;
   }
 
   // Keyword match on segment text
   const text = `${segment.title} ${segment.script} ${segment.mood}`.toLowerCase();
-  for (const [era, keywords] of Object.entries(ERA_KEYWORDS)) {
-    if (keywords.some((kw) => text.includes(kw))) return era as PortraitEra;
+  for (const [era, keywords] of Object.entries(ERA_KEYWORDS) as [PortraitEra, string[]][]) {
+    if (keywords.some((kw) => text.includes(kw))) return era;
   }
 
   return 'default';
