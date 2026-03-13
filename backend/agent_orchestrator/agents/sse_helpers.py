@@ -209,6 +209,29 @@ def build_segment_update_event(
     return event
 
 
+def build_geo_update_event(
+    *,
+    segment_id: str,
+    geo: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a geo_update SSE event payload.
+
+    Emitted during Phase 3.8 (Geographic Mapping) when geographic metadata
+    for a segment has been extracted and geocoded.
+
+    Matches the GeoUpdateEvent TypeScript interface.
+
+    Args:
+        segment_id: e.g. "segment_0"
+        geo: SegmentGeo.to_frontend_dict() -- contains center, zoom, events, routes.
+    """
+    return {
+        "type": "geo_update",
+        "segmentId": segment_id,
+        "geo": geo,
+    }
+
+
 def build_branch_triggered_event(
     *,
     session_id: str,
