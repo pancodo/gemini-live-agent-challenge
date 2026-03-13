@@ -270,7 +270,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
       >
         {/* Title row with index */}
         <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="seg-title font-serif text-[18px] font-normal text-[var(--text)] leading-snug flex-1">
+          <h3 className="seg-title font-serif text-[20px] font-semibold text-[var(--text)] leading-snug flex-1">
             {isGenerating
               ? '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'
               : scrambledTitle}
@@ -356,7 +356,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         {segment.script && (
           <div className="mb-3">
             <p
-              className={`font-sans text-[13px] text-[var(--muted)] leading-relaxed ${scriptExpanded ? '' : 'line-clamp-3'}`}
+              className={`font-sans text-[13.5px] text-[var(--text)] leading-relaxed opacity-70 ${scriptExpanded ? '' : 'line-clamp-3'}`}
             >
               {segment.script}
             </p>
