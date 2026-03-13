@@ -166,14 +166,18 @@ function LandingNav() {
         borderBottom: solid ? `1px solid ${C.border}` : 'none',
       }}
     >
-      <div className="flex items-center gap-2">
+      <button
+        className="flex items-center gap-2"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+      >
         <span
           className="text-[13px] tracking-[0.35em] uppercase"
           style={{ fontFamily: 'var(--font-serif)', color: C.goldBright, fontWeight: 300 }}
         >
           AI Historian
         </span>
-      </div>
+      </button>
 
       <div className="flex items-center gap-4">
         <a
