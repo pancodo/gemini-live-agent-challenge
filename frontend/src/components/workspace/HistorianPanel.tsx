@@ -172,7 +172,7 @@ function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; 
       <LivingPortrait
         size={240}
         active
-        simulateAudio
+        simulateAudio={import.meta.env.DEV}
         onLoad={() => setAvatarReady(true)}
       />
 
