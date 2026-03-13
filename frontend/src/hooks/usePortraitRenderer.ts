@@ -72,7 +72,11 @@ export function usePortraitRenderer({
   const smoothEnergyRef = useRef(0);
   const blinkRef = useRef({ active: false, startTime: 0, nextBlink: 0 });
   const freqBufferRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(analyserNode);
   const rafRef = useRef(0);
+
+  // Keep analyserRef in sync without triggering effect re-runs
+  analyserRef.current = analyserNode;
 
   // Schedule next random blink
   const scheduleNextBlink = useCallback(() => {
@@ -176,7 +180,7 @@ export function usePortraitRenderer({
         smoothEnergyRef.current =
           smoothEnergyRef.current * (1 - ENERGY_SMOOTH_FACTOR) + rawEnergy * ENERGY_SMOOTH_FACTOR;
       } else {
-        const currentAnalyser = analyserNode;
+        const currentAnalyser = analyserRef.current;
         if (currentAnalyser) {
           if (!freqBufferRef.current || freqBufferRef.current.length !== currentAnalyser.frequencyBinCount) {
             freqBufferRef.current = new Uint8Array(currentAnalyser.frequencyBinCount);
@@ -220,8 +224,10 @@ export function usePortraitRenderer({
 
     return () => {
       cancelAnimationFrame(rafRef.current);
+      imagesRef.current = null;
+      prevImagesRef.current = null;
     };
-  }, [active, size, analyserNode, canvasRef, scheduleNextBlink, simulateAudio]);
+  }, [active, size, canvasRef, scheduleNextBlink, simulateAudio]);
 
   return { isLoaded };
 }
