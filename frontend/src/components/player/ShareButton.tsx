@@ -108,8 +108,8 @@ export function ShareButton({ sessionId, segmentId }: ShareButtonProps) {
         letterSpacing: '0.15em',
         textTransform: 'uppercase',
         color: isGenerating
-          ? 'rgba(232,221,208,0.3)'
-          : 'rgba(232,221,208,0.5)',
+          ? 'var(--player-text-dim)'
+          : 'var(--player-text-dim)',
         background: 'transparent',
         border: 'none',
         cursor: isGenerating ? 'wait' : 'pointer',
@@ -120,9 +120,7 @@ export function ShareButton({ sessionId, segmentId }: ShareButtonProps) {
         }
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.color = isGenerating
-          ? 'rgba(232,221,208,0.3)'
-          : 'rgba(232,221,208,0.5)';
+        e.currentTarget.style.color = 'var(--player-text-dim)';
       }}
       aria-label={label}
     >

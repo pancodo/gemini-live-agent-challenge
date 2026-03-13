@@ -133,15 +133,15 @@ html {
 
 /* ── Dark Theme — Aurora Blob Overrides ───────────────── */
 [data-theme="dark"] .aurora-blob:nth-child(1) {
-  background: #c4956a;
+  --aurora-color: #c4956a;
   opacity: 0.05;
 }
 [data-theme="dark"] .aurora-blob:nth-child(2) {
-  background: #5a3e22;
+  --aurora-color: #5a3e22;
   opacity: 0.07;
 }
 [data-theme="dark"] .aurora-blob:nth-child(3) {
-  background: #3d2a14;
+  --aurora-color: #3d2a14;
   opacity: 0.06;
 }
 
@@ -201,7 +201,6 @@ body {
   pointer-events: none;
   z-index: 9998;
   opacity: 0.025;
-  filter: url(#grain);
   mix-blend-mode: multiply;
   animation: grain-shift 0.5s steps(4) infinite;
   will-change: transform;
@@ -221,7 +220,8 @@ body {
   position: fixed;
   width: 40vw; height: 40vw;
   border-radius: 50%;
-  filter: blur(80px);
+  /* Pre-blurred radial gradient — identical look, no GPU filter cost */
+  background: radial-gradient(circle, var(--aurora-color) 0%, transparent 70%);
   opacity: 0.08;
   pointer-events: none;
   z-index: -1;
@@ -229,17 +229,17 @@ body {
   contain: layout paint;
 }
 .aurora-blob:nth-child(1) {
-  background: #8b6914; top: 0; left: 0;
+  --aurora-color: #8b6914; top: 0; left: 0;
   transform: translate3d(-10%, -10%, 0);
   animation: drift 22s ease-in-out infinite alternate;
 }
 .aurora-blob:nth-child(2) {
-  background: #3d2e1a; top: 0; left: 0;
+  --aurora-color: #3d2e1a; top: 0; left: 0;
   transform: translate3d(calc(100vw - 40vw + 10%), calc(100vh - 40vw + 10%), 0);
   animation: drift 28s ease-in-out infinite alternate-reverse;
 }
 .aurora-blob:nth-child(3) {
-  background: #2a1f14; top: 0; left: 0;
+  --aurora-color: #2a1f14; top: 0; left: 0;
   transform: translate3d(30%, 50vh, 0);
   animation: drift 32s ease-in-out infinite alternate;
 }
@@ -623,7 +623,7 @@ body {
   inset: 0;
   pointer-events: none;
   background: radial-gradient(ellipse 80% 80% at 50% 50%,
-    transparent 30%, rgba(13,11,9,0.35) 65%, rgba(13,11,9,0.8) 100%);
+    transparent 30%, color-mix(in srgb, var(--player-vignette) 45%, transparent) 65%, var(--player-vignette) 100%);
   z-index: 1;
 }
 
@@ -637,9 +637,45 @@ body {
 
 /* ── Documentary Player ────────────────────────────────── */
 .player-root {
-  background: var(--bg);
-  color: var(--text);
+  /* Player tokens — dark by default (cinematic) */
+  --player-bg:              #0d0b09;
+  --player-text:            rgba(232,221,208,0.9);
+  --player-text-secondary:  rgba(232,221,208,0.6);
+  --player-text-dim:        rgba(232,221,208,0.4);
+  --player-text-disabled:   rgba(232,221,208,0.2);
+  --player-overlay:         rgba(13,11,9,0.7);
+  --player-surface:         rgba(26,21,16,0.95);
+  --player-card:            rgba(232,221,208,0.06);
+  --player-border:          rgba(196,149,106,0.3);
+  --player-caption-shadow:  0 2px 28px rgba(0,0,0,0.9), 0 0 80px rgba(0,0,0,0.5);
+  --player-vignette:        rgba(0,0,0,0.85);
+  --player-illustration-shadow: 0 1px 12px rgba(0,0,0,0.7);
+  --player-tooltip-shadow:  0 4px 20px rgba(0,0,0,0.5);
+  --player-ctrl-filter:     invert(0.7) sepia(0.3);
+  --player-pin-stroke:      rgba(255,255,255,0.3);
+
+  background: var(--player-bg);
+  color: var(--player-text);
   font-family: var(--font-serif);
+}
+
+/* ── Light Theme — Player Overrides ───────────────────── */
+[data-theme="light"] .player-root {
+  --player-bg:              var(--bg);
+  --player-text:            var(--text);
+  --player-text-secondary:  var(--muted);
+  --player-text-dim:        rgba(30,23,12,0.35);
+  --player-text-disabled:   rgba(30,23,12,0.2);
+  --player-overlay:         rgba(242,237,227,0.7);
+  --player-surface:         rgba(235,228,216,0.95);
+  --player-card:            rgba(30,23,12,0.05);
+  --player-border:          rgba(139,94,26,0.25);
+  --player-caption-shadow:  0 2px 16px rgba(0,0,0,0.15);
+  --player-vignette:        rgba(30,23,12,0.25);
+  --player-illustration-shadow: 0 1px 8px rgba(0,0,0,0.15);
+  --player-tooltip-shadow:  0 4px 12px rgba(0,0,0,0.12);
+  --player-ctrl-filter:     none;
+  --player-pin-stroke:      rgba(30,23,12,0.25);
 }
 
 /* ── Ambient Color Glow (YouTube ambient mode) ─────────── */

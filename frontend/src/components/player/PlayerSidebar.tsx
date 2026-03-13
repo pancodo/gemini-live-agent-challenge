@@ -82,7 +82,7 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
               fontWeight: 400,
               fontSize: 13,
               letterSpacing: '0.05em',
-              color: 'rgba(232,221,208,0.9)',
+              color: 'var(--player-text)',
               maxWidth: '70%',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -98,7 +98,7 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
                 fontSize: 10,
                 letterSpacing: '0.2em',
                 textTransform: 'uppercase',
-                color: 'rgba(232,221,208,0.4)',
+                color: 'var(--player-text-dim)',
               }}
             >
               {index + 1} / {images.length}
@@ -134,9 +134,9 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
                 width: 36,
                 height: 36,
                 borderRadius: '50%',
-                background: 'rgba(232,221,208,0.08)',
-                border: '1px solid rgba(196,149,106,0.25)',
-                color: 'rgba(232,221,208,0.7)',
+                background: 'var(--player-card)',
+                border: '1px solid var(--player-border)',
+                color: 'var(--player-text-secondary)',
                 fontSize: 16,
                 display: 'flex',
                 alignItems: 'center',
@@ -158,9 +158,9 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
                 width: 36,
                 height: 36,
                 borderRadius: '50%',
-                background: 'rgba(232,221,208,0.08)',
-                border: '1px solid rgba(196,149,106,0.25)',
-                color: 'rgba(232,221,208,0.7)',
+                background: 'var(--player-card)',
+                border: '1px solid var(--player-border)',
+                color: 'var(--player-text-secondary)',
                 fontSize: 16,
                 display: 'flex',
                 alignItems: 'center',
@@ -185,7 +185,7 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
               textTransform: 'uppercase',
               color: 'var(--gold)',
               background: 'rgba(139,94,26,0.15)',
-              border: '1px solid rgba(196,149,106,0.3)',
+              border: '1px solid var(--player-border)',
               borderRadius: 4,
               padding: '6px 14px',
               cursor: 'pointer',
@@ -204,9 +204,9 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
               fontSize: 11,
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
-              color: 'rgba(232,221,208,0.45)',
-              background: 'rgba(232,221,208,0.05)',
-              border: '1px solid rgba(232,221,208,0.1)',
+              color: 'var(--player-text-dim)',
+              background: 'var(--player-card)',
+              border: '1px solid var(--player-border)',
               borderRadius: 4,
               padding: '6px 14px',
               cursor: 'pointer',
@@ -252,18 +252,18 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
               width: 48,
               height: 32,
               padding: 0,
-              background: 'rgba(232,221,208,0.06)',
-              border: '1px solid rgba(196,149,106,0.2)',
+              background: 'var(--player-card)',
+              border: '1px solid var(--player-border)',
               cursor: 'pointer',
               opacity: 0.75,
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.opacity = '1';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(196,149,106,0.5)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--glow-primary)';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.opacity = '0.75';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(196,149,106,0.2)';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--player-border)';
             }}
           >
             <img
@@ -288,8 +288,8 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
             style={{
               width: 48,
               height: 32,
-              background: 'rgba(139,94,26,0.12)',
-              border: '1px solid rgba(196,149,106,0.2)',
+              background: 'var(--player-card)',
+              border: '1px solid var(--player-border)',
               fontFamily: 'var(--font-sans)',
               fontSize: 9,
               letterSpacing: '0.05em',
@@ -347,7 +347,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
             width: 280,
             background: 'var(--bg2)',
             backdropFilter: 'blur(16px)',
-            borderLeft: '1px solid rgba(196,149,106,0.15)',
+            borderLeft: '1px solid var(--player-border)',
           }}
         >
           {/* Header */}
@@ -372,7 +372,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                 fontSize: 11,
                 letterSpacing: '0.15em',
                 textTransform: 'uppercase',
-                color: 'rgba(232,221,208,0.5)',
+                color: 'var(--player-text-dim)',
               }}
             >
               {readyCount} segment{readyCount !== 1 ? 's' : ''} ready
@@ -418,7 +418,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                         letterSpacing: '0.1em',
                         color: isActive
                           ? 'var(--gold)'
-                          : 'rgba(232,221,208,0.35)',
+                          : 'var(--player-text-dim)',
                       }}
                     >
                       {String(index + 1).padStart(2, '0')}
@@ -431,7 +431,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                         style={{
                           width: '70%',
                           background:
-                            'linear-gradient(90deg, rgba(232,221,208,0.08) 25%, rgba(232,221,208,0.15) 50%, rgba(232,221,208,0.08) 75%)',
+                            `linear-gradient(90deg, var(--player-card) 25%, color-mix(in srgb, var(--player-card) 60%, var(--player-text-dim)) 50%, var(--player-card) 75%)`,
                           backgroundSize: '200% 100%',
                           animation: 'shimmer 1.5s ease-in-out infinite',
                         }}
@@ -445,7 +445,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                           lineHeight: 1.4,
                           color: isActive
                             ? 'var(--text)'
-                            : 'rgba(232,221,208,0.5)',
+                            : 'var(--player-text-dim)',
                         }}
                       >
                         {seg.title}
@@ -466,7 +466,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
           </nav>
 
           {/* Source panel divider */}
-          <div className="shrink-0" style={{ borderTop: '1px solid rgba(196,149,106,0.08)', margin: '8px 0' }} />
+          <div className="shrink-0" style={{ borderTop: '1px solid var(--player-border)', margin: '8px 0' }} />
 
           {/* Grounding evidence panel */}
           <div className="shrink-0">
@@ -474,7 +474,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
           </div>
 
           {/* Branch tree divider */}
-          <div className="shrink-0" style={{ borderTop: '1px solid rgba(196,149,106,0.08)', margin: '8px 0' }} />
+          <div className="shrink-0" style={{ borderTop: '1px solid var(--player-border)', margin: '8px 0' }} />
 
           {/* BranchTree — populated by branch pipeline via playerStore.branchGraph */}
           {branchGraph.length > 0 && (
@@ -488,7 +488,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                   key={node.segmentId}
                   onClick={() => openSegment(node.segmentId)}
                   className="w-full text-left px-2 py-2 rounded mb-1"
-                  style={{ fontSize: 11, color: 'rgba(232,221,208,0.6)', fontFamily: 'var(--font-sans)', background: 'transparent', borderLeft: '2px solid rgba(196,149,106,0.3)' }}
+                  style={{ fontSize: 11, color: 'var(--player-text-secondary)', fontFamily: 'var(--font-sans)', background: 'transparent', borderLeft: '2px solid var(--player-border)' }}
                 >
                   {'\u21B3'} {node.triggerQuestion}
                 </button>
@@ -497,7 +497,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
           )}
 
           {/* Close button */}
-          <div className="shrink-0 px-5 py-4 border-t" style={{ borderColor: 'rgba(196,149,106,0.1)' }}>
+          <div className="shrink-0 px-5 py-4 border-t" style={{ borderColor: 'var(--player-border)' }}>
             <button
               onClick={onClose}
               className="w-full py-2 rounded-md text-center transition-colors duration-200"
@@ -507,8 +507,8 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                 fontSize: 11,
                 letterSpacing: '0.15em',
                 textTransform: 'uppercase',
-                color: 'rgba(232,221,208,0.5)',
-                background: 'rgba(232,221,208,0.05)',
+                color: 'var(--player-text-dim)',
+                background: 'var(--player-card)',
               }}
             >
               Close

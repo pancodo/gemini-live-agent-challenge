@@ -40,9 +40,8 @@ export function CaptionTrack() {
           fontStyle: 'italic',
           fontSize: 26,
           letterSpacing: '0.02em',
-          color: 'var(--text)',
-          textShadow:
-            '0 2px 28px rgba(0,0,0,0.9), 0 0 80px rgba(0,0,0,0.5)',
+          color: 'var(--player-text)',
+          textShadow: 'var(--player-caption-shadow)',
         }}
       >
         {words.map((word, i) => (

@@ -246,24 +246,7 @@ export function DocumentaryPlayer() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden player-root select-none" style={{ background: '#0d0b09' }}>
-      {/* View Transition CSS */}
-      <style>{`
-        ::view-transition-old(root) {
-          animation: 0.35s ease-in both fade-and-scale-out;
-        }
-        ::view-transition-new(root) {
-          animation: 0.35s ease-out both fade-and-scale-in;
-        }
-        @keyframes fade-and-scale-out {
-          to { opacity: 0; filter: brightness(0); transform: scale(1); }
-        }
-        @keyframes fade-and-scale-in {
-          from { opacity: 0; filter: brightness(0); transform: scale(1.03); }
-          to   { opacity: 1; filter: brightness(1); transform: scale(1); }
-        }
-      `}</style>
-
+    <div className="relative w-screen h-screen overflow-hidden player-root select-none" style={{ background: 'var(--player-bg)' }}>
       {/* Layer 1: Visual stage — Ken Burns / Map / Split */}
       <div className="absolute inset-0 flex">
         {/* Ken Burns panel */}
@@ -315,8 +298,8 @@ export function DocumentaryPlayer() {
             transition={{ duration: 0.4, delay: 0.8 }}
             className="absolute bottom-44 left-1/2 -translate-x-1/2 z-20"
             style={{
-              background: 'rgba(26,21,16,0.95)',
-              border: '1px solid rgba(196,149,106,0.3)',
+              background: 'var(--player-surface)',
+              border: '1px solid var(--player-border)',
               borderRadius: 10,
               padding: '14px 20px',
               maxWidth: 360,
@@ -325,7 +308,7 @@ export function DocumentaryPlayer() {
             <p style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--glow-primary)', marginBottom: 8 }}>
               Live Time Travel Map
             </p>
-            <ul style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'rgba(232,221,208,0.7)', lineHeight: 1.8, paddingLeft: 14, margin: 0 }}>
+            <ul style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--player-text-secondary)', lineHeight: 1.8, paddingLeft: 14, margin: 0 }}>
               <li><strong style={{ color: 'var(--glow-primary)' }}>M</strong> — cycle view: visuals / split / map</li>
               <li><strong style={{ color: 'var(--glow-primary)' }}>&larr; &rarr;</strong> — switch segments (map flies to new region)</li>
               <li><strong style={{ color: 'var(--glow-primary)' }}>Hover pins</strong> — see location name + era</li>
@@ -341,7 +324,7 @@ export function DocumentaryPlayer() {
                 textTransform: 'uppercase',
                 color: 'var(--muted)',
                 background: 'transparent',
-                border: '1px solid rgba(139,94,26,0.25)',
+                border: '1px solid var(--player-border)',
                 borderRadius: 4,
                 padding: '4px 12px',
                 cursor: 'pointer',
@@ -364,7 +347,7 @@ export function DocumentaryPlayer() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
             style={{
-              background: 'radial-gradient(circle at center, rgba(26,21,16,0.85) 0%, rgba(13,11,9,0.95) 70%)',
+              background: `radial-gradient(circle at center, color-mix(in srgb, var(--player-bg) 85%, transparent) 0%, color-mix(in srgb, var(--player-bg) 95%, transparent) 70%)`,
             }}
           >
             <HistorianAvatar
@@ -384,7 +367,7 @@ export function DocumentaryPlayer() {
           className="flex items-center justify-between px-8 py-5"
           style={{
             background:
-              'linear-gradient(to bottom, rgba(13,11,9,0.7) 0%, transparent 100%)',
+              'linear-gradient(to bottom, var(--player-overlay) 0%, transparent 100%)',
           }}
         >
           {/* Left: Back button */}
@@ -393,7 +376,7 @@ export function DocumentaryPlayer() {
               onClick={() => navigate('/workspace')}
               className="p-2 rounded transition-colors duration-200"
               style={{
-                color: 'rgba(232,221,208,0.6)',
+                color: 'var(--player-text-secondary)',
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
@@ -402,10 +385,10 @@ export function DocumentaryPlayer() {
                 justifyContent: 'center',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = 'rgba(232,221,208,0.9)';
+                e.currentTarget.style.color = 'var(--player-text)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'rgba(232,221,208,0.6)';
+                e.currentTarget.style.color = 'var(--player-text-secondary)';
               }}
               aria-label="Back to workspace"
             >
@@ -475,7 +458,7 @@ export function DocumentaryPlayer() {
                   fontSize: 11,
                   letterSpacing: '0.15em',
                   textTransform: 'uppercase',
-                  color: 'rgba(232,221,208,0.5)',
+                  color: 'var(--player-text-dim)',
                 }}
               >
                 {currentIndexInReady >= 0 ? currentIndexInReady + 1 : '-'}
@@ -491,12 +474,12 @@ export function DocumentaryPlayer() {
               style={{
                 color: mapViewMode !== 'ken-burns'
                   ? 'var(--glow-primary)'
-                  : 'rgba(232,221,208,0.6)',
+                  : 'var(--player-text-secondary)',
                 background: mapViewMode !== 'ken-burns'
                   ? 'rgba(196,149,106,0.15)'
                   : 'transparent',
                 border: mapViewMode !== 'ken-burns'
-                  ? '1px solid rgba(196,149,106,0.3)'
+                  ? '1px solid var(--player-border)'
                   : '1px solid transparent',
                 borderRadius: 6,
                 display: 'flex',
@@ -531,7 +514,7 @@ export function DocumentaryPlayer() {
                 onClick={() => setShortcutsOpen((o) => !o)}
                 className="p-2 rounded transition-colors duration-200"
                 style={{
-                  color: 'rgba(232,221,208,0.6)',
+                  color: 'var(--player-text-secondary)',
                   background: 'transparent',
                   fontFamily: 'var(--font-sans)',
                   fontWeight: 400,
@@ -552,11 +535,11 @@ export function DocumentaryPlayer() {
                   ref={shortcutsRef}
                   className="absolute top-full right-0 mt-2 rounded-lg p-3 z-50"
                   style={{
-                    background: 'var(--bg2)',
-                    border: '1px solid rgba(214,204,186,0.4)',
+                    background: 'var(--player-surface)',
+                    border: '1px solid var(--player-border)',
                     fontFamily: 'var(--font-sans)',
                     fontSize: 11,
-                    color: 'rgba(232,221,208,0.7)',
+                    color: 'var(--player-text-secondary)',
                     whiteSpace: 'pre',
                     lineHeight: 1.8,
                     minWidth: 200,
@@ -576,7 +559,7 @@ export function DocumentaryPlayer() {
               onClick={() => setSidebarOpen((o) => !o)}
               className="p-2 rounded transition-colors duration-200"
               style={{
-                color: 'rgba(232,221,208,0.6)',
+                color: 'var(--player-text-secondary)',
                 background: 'transparent',
               }}
               aria-label="Toggle segment sidebar"
@@ -625,7 +608,7 @@ export function DocumentaryPlayer() {
                 fontSize: 16,
                 letterSpacing: '0.03em',
                 color: 'var(--gold)',
-                textShadow: '0 1px 12px rgba(0,0,0,0.7)',
+                textShadow: 'var(--player-illustration-shadow)',
               }}
             >
               {liveIllustration.caption}
@@ -646,7 +629,7 @@ export function DocumentaryPlayer() {
           className="flex items-center justify-between px-8 py-5"
           style={{
             background:
-              'linear-gradient(to top, rgba(13,11,9,0.7) 0%, transparent 100%)',
+              'linear-gradient(to top, var(--player-overlay) 0%, transparent 100%)',
           }}
         >
           {/* Prev */}
@@ -660,7 +643,7 @@ export function DocumentaryPlayer() {
               fontSize: 11,
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
-              color: hasPrev ? 'rgba(232,221,208,0.7)' : 'rgba(232,221,208,0.2)',
+              color: hasPrev ? 'var(--player-text-secondary)' : 'var(--player-text-disabled)',
               cursor: hasPrev ? 'pointer' : 'default',
               background: 'transparent',
               border: 'none',
@@ -689,7 +672,7 @@ export function DocumentaryPlayer() {
               fontFamily: 'var(--font-serif)',
               fontWeight: 400,
               fontSize: 14,
-              color: 'rgba(232,221,208,0.6)',
+              color: 'var(--player-text-secondary)',
             }}
           >
             {currentSegment?.title ?? ''}
@@ -707,7 +690,7 @@ export function DocumentaryPlayer() {
                 fontSize: 11,
                 letterSpacing: '0.15em',
                 textTransform: 'uppercase',
-                color: hasNext ? 'rgba(232,221,208,0.7)' : 'rgba(232,221,208,0.2)',
+                color: hasNext ? 'var(--player-text-secondary)' : 'var(--player-text-disabled)',
                 cursor: hasNext ? 'pointer' : 'default',
                 background: 'transparent',
                 border: 'none',
@@ -739,7 +722,7 @@ export function DocumentaryPlayer() {
                 fontSize: 11,
                 letterSpacing: '0.15em',
                 textTransform: 'uppercase',
-                color: 'rgba(232,221,208,0.5)',
+                color: 'var(--player-text-dim)',
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',

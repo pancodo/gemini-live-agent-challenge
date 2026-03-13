@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
@@ -135,12 +135,48 @@ const router = createBrowserRouter([
   },
 ]);
 
+/** Static canvas noise — replaces feTurbulence SVG filter (same look, ~0% GPU). */
+function GrainOverlay() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const render = () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+      const img = ctx.createImageData(w, h);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = v;
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    render();
+    window.addEventListener('resize', render);
+    return () => window.removeEventListener('resize', render);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className="grain-overlay"
+    />
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeSync />
-      {/* Film grain overlay — always on */}
-      <div className="grain-overlay" aria-hidden="true" />
+      {/* Film grain overlay — static canvas noise, no SVG filter cost */}
+      <GrainOverlay />
       {/* Aurora blobs — parchment screens; invisible on dark landing bg */}
       <div className="aurora-blob" aria-hidden="true" />
       <div className="aurora-blob" aria-hidden="true" />

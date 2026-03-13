@@ -4,8 +4,14 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { usePlayerStore } from '../../store/playerStore';
 import { useSegmentGeo } from '../../hooks/useSegmentGeo';
-import mapStyle from '../../styles/map-style.json';
+import mapStyleDark from '../../styles/map-style.json';
+import mapStyleLight from '../../styles/map-style-light.json';
 import '../../styles/timeline-map.css';
+
+function getActiveMapStyle(): typeof mapStyleDark {
+  const theme = document.documentElement.getAttribute('data-theme');
+  return theme === 'light' ? mapStyleLight : mapStyleDark;
+}
 import type { GeoEvent, GeoRoute } from '../../types';
 
 const ROUTE_SOURCE_PREFIX = 'route-';
@@ -56,6 +62,7 @@ function TimelineMapInner({
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
   const geoEpochRef = useRef(0);
   const mapReadyRef = useRef(false);
+  const lastGeoRef = useRef<{ events: GeoEvent[]; routes: GeoRoute[] } | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{
     name: string;
     era: string;
@@ -78,7 +85,7 @@ function TimelineMapInner({
     container.addEventListener('wheel', preventBrowserZoom, { passive: false });
 
     const stadiaKey = import.meta.env.VITE_STADIA_API_KEY as string | undefined;
-    const style = JSON.parse(JSON.stringify(mapStyle)) as maplibregl.StyleSpecification;
+    const style = JSON.parse(JSON.stringify(getActiveMapStyle())) as maplibregl.StyleSpecification;
     if (stadiaKey) {
       const src = (style.sources as Record<string, { url?: string }>)['openmaptiles'];
       if (src?.url) src.url = `${src.url}?api_key=${stadiaKey}`;
@@ -108,6 +115,38 @@ function TimelineMapInner({
       mapRef.current = null;
       mapReadyRef.current = false;
     };
+  }, []);
+
+  // ── Swap map style when data-theme changes ──────────────
+  // Stored in a ref so the MutationObserver (registered once) always
+  // calls the latest versions without needing to re-observe.
+  const restoreGeoRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const observer = new MutationObserver(() => {
+      const newStyle = JSON.parse(JSON.stringify(getActiveMapStyle())) as maplibregl.StyleSpecification;
+      const stadiaKey = import.meta.env.VITE_STADIA_API_KEY as string | undefined;
+      if (stadiaKey) {
+        const src = (newStyle.sources as Record<string, { url?: string }>)['openmaptiles'];
+        if (src?.url) src.url = `${src.url}?api_key=${stadiaKey}`;
+        if (newStyle.glyphs) newStyle.glyphs = `${newStyle.glyphs}?api_key=${stadiaKey}`;
+      }
+
+      // setStyle removes all custom layers — re-add pins/routes once new style loads
+      map.once('style.load', () => restoreGeoRef.current());
+
+      map.setStyle(newStyle);
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   // ── Setup interaction handlers (once) ────────────────────
@@ -242,6 +281,8 @@ function TimelineMapInner({
     if (!map) return;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const pinStroke = isLight ? 'rgba(30,23,12,0.25)' : 'rgba(255,255,255,0.3)';
 
     map.addSource(PIN_SOURCE, {
       type: 'geojson',
@@ -337,7 +378,7 @@ function TimelineMapInner({
       paint: {
         'circle-radius': 7,
         'circle-color': '#c4956a',
-        'circle-stroke-color': 'rgba(255,255,255,0.3)',
+        'circle-stroke-color': pinStroke,
         'circle-stroke-width': 2,
       },
     });
@@ -350,7 +391,7 @@ function TimelineMapInner({
       paint: {
         'circle-radius': 7,
         'circle-color': '#c0392b',
-        'circle-stroke-color': 'rgba(255,255,255,0.3)',
+        'circle-stroke-color': pinStroke,
         'circle-stroke-width': 2,
       },
     });
@@ -393,6 +434,18 @@ function TimelineMapInner({
     });
   }, []);
 
+  // Keep restoreGeoRef in sync with latest callbacks
+  restoreGeoRef.current = () => {
+    const saved = lastGeoRef.current;
+    if (!saved) return;
+    clearPinLayers();
+    clearRoutes();
+    addPins(saved.events);
+    for (let i = 0; i < saved.routes.length; i++) {
+      addRoute(saved.routes[i], i);
+    }
+  };
+
   // ── React to geo changes ──────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -409,8 +462,12 @@ function TimelineMapInner({
       setTooltipInfo(null);
       geoEpochRef.current += 1;
 
-      if (!geo) return;
+      if (!geo) {
+        lastGeoRef.current = null;
+        return;
+      }
 
+      lastGeoRef.current = { events: geo.events, routes: geo.routes };
       const capturedEpoch = geoEpochRef.current;
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -477,7 +534,7 @@ function TimelineMapInner({
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(13,11,9,0.6) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 50%, color-mix(in srgb, var(--player-bg) 60%, transparent) 100%)',
         }}
       />
     </div>
@@ -504,7 +561,7 @@ class TimelineMapBoundary extends Component<
       return (
         <div
           className="w-full h-full flex items-center justify-center"
-          style={{ background: '#0d0b09', color: 'rgba(232,221,208,0.4)', fontFamily: 'var(--font-sans)', fontSize: 12 }}
+          style={{ background: 'var(--player-bg)', color: 'var(--player-text-dim)', fontFamily: 'var(--font-sans)', fontSize: 12 }}
         >
           Map unavailable
         </div>
