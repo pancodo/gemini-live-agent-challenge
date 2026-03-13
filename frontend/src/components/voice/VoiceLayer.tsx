@@ -36,9 +36,20 @@ export function VoiceLayer() {
 
   const playback = useAudioPlayback();
 
+  // Pending text to send once the WebSocket setup completes (replaces fragile setTimeout)
+  const pendingGreetingRef = useRef<string | null>(null);
+  const sendTextStableRef = useRef((_t: string) => {});
+
   const { sendPCM, sendText, connect, disconnect, reconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
+    onReady: () => {
+      const text = pendingGreetingRef.current;
+      if (text) {
+        pendingGreetingRef.current = null;
+        sendTextStableRef.current(text);
+      }
+    },
     onAudioChunk: (pcm: ArrayBuffer) => {
       playback.enqueue(pcm);
       // Push analyser to store for lip sync — created lazily on first enqueue,
@@ -93,6 +104,9 @@ export function VoiceLayer() {
       toast.info('Session refreshed — historian context reloaded');
     },
   });
+
+  // Keep sendText ref in sync so onReady always calls the latest version
+  sendTextStableRef.current = sendText;
 
   const capture = useAudioCapture(sendPCM);
 
@@ -162,14 +176,11 @@ export function VoiceLayer() {
     const currentState = useVoiceStore.getState().state;
     if (currentState !== 'idle') return;
 
+    // Queue greeting — sent reliably when onReady fires (no fragile setTimeout)
+    pendingGreetingRef.current = 'Hello! Please introduce yourself briefly and tell me about the document I uploaded.';
     connect();
     void capture.start();
     transition('listening');
-
-    // Send an initial greeting after a brief delay to allow setup to complete
-    setTimeout(() => {
-      sendText('Hello! Please introduce yourself briefly and tell me about the document I uploaded.');
-    }, 1500);
   };
 
   // Stable ref for sendTextToHistorian — same pattern as beginConsultation.
@@ -177,13 +188,13 @@ export function VoiceLayer() {
   sendTextRef.current = (text: string) => {
     const currentState = useVoiceStore.getState().state;
     if (currentState === 'idle') {
-      // Auto-connect if not yet connected, then send after setup delay
+      // Queue text — sent reliably when onReady fires (no fragile setTimeout)
+      pendingGreetingRef.current = text;
       connect();
       void capture.start();
       transition('listening');
-      setTimeout(() => sendText(text), 1500);
     } else {
-      sendText(text);
+      sendTextStableRef.current(text);
     }
   };
 
