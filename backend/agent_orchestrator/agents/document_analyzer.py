@@ -867,8 +867,14 @@ class DocumentAnalyzerAgent(BaseAgent):
         # ------------------------------------------------------------------
         chunks = semantic_chunk(ocr_text, session_id)
 
-        total_chunks = len(chunks)
         research_mode = ctx.session.state.get("research_mode", "normal")
+
+        # In test mode, only keep the first 6 chunks to minimise API calls
+        if research_mode == "test" and len(chunks) > 6:
+            logger.info("Test mode: trimming %d chunks to 6", len(chunks))
+            chunks = chunks[:6]
+
+        total_chunks = len(chunks)
         if research_mode == "test":
             recommended_scene_count = 1
         else:
