@@ -170,7 +170,7 @@ function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; 
     <div className="relative flex items-center justify-center" style={{ width: 240, height: 240 }}>
       {/* Living Portrait — always active so it loads eagerly and shows idle animation */}
       <LivingPortrait
-        size={240}
+        size={160}
         active
         simulateAudio={import.meta.env.DEV}
         onLoad={() => setAvatarReady(true)}
@@ -318,7 +318,7 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
         )}
       </AnimatePresence>
 
-      <div className="px-4 pt-4 pb-5 flex flex-col items-center gap-4">
+      <div className="px-4 pt-3 pb-3 flex flex-col items-center gap-2.5">
 
         {/* Header row */}
         <div className="flex items-center justify-between w-full">
@@ -372,7 +372,7 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
               transition={{ duration: 0.25, ease: 'easeOut' }}
             >
               <ConsultButton onClick={onSpeak ?? beginConsultation ?? undefined} />
-              <p className="text-center font-sans text-[9px] uppercase tracking-[0.15em] mt-2" style={{ color: 'var(--muted)', opacity: 0.6 }}>
+              <p className="text-center font-sans text-[9px] uppercase tracking-[0.15em] mt-1" style={{ color: 'var(--muted)', opacity: 0.6 }}>
                 Voice interaction &middot; Speak freely
               </p>
             </motion.div>
