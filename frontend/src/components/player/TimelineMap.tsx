@@ -11,13 +11,6 @@ const ROUTE_SOURCE_PREFIX = 'route-';
 const ROUTE_LAYER_PREFIX = 'route-layer-';
 const PIN_ANIMATION_DELAY = 200;
 
-/** Escape HTML entities to prevent XSS from LLM-generated geo data */
-function escapeHtml(str: string): string {
-  const el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
-}
-
 function TimelineMapInner({
   onPinClick,
 }: {
@@ -73,10 +66,7 @@ function TimelineMapInner({
   const clearMarkers = useCallback(() => {
     for (const id of pinTimeoutIds.current) clearTimeout(id);
     pinTimeoutIds.current = [];
-    for (const m of markersRef.current) {
-      m.getPopup()?.remove();
-      m.remove();
-    }
+    for (const m of markersRef.current) m.remove();
     markersRef.current = [];
   }, []);
 
@@ -97,17 +87,6 @@ function TimelineMapInner({
     }
   }, []);
 
-  /** Build popup HTML for a geo event */
-  const buildPopupHtml = useCallback((event: GeoEvent) => {
-    const era = event.era ? `<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px">${escapeHtml(event.era)}</span>` : '';
-    const desc = event.description ? `<div style="font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px">${escapeHtml(event.description)}</div>` : '';
-    return `
-      <div style="font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em">
-        ${escapeHtml(event.name)}${era}
-      </div>
-      ${desc}
-    `;
-  }, []);
 
   // ── Create a pin DOM element ──────────────────────────────
   const createPinElement = useCallback(
@@ -174,21 +153,51 @@ function TimelineMapInner({
       `;
       el.appendChild(hitArea);
 
-      // Store marker ref on the element so hover can toggle its popup
+      // Tooltip container attached directly to the pin element (no MapLibre Popup auto-pan)
+      const tooltip = document.createElement('div');
+      tooltip.className = 'timeline-map-tooltip';
+      tooltip.style.cssText = `
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(13,11,9,0.92);
+        border: 1px solid rgba(196,149,106,0.3);
+        border-radius: 8px;
+        padding: 8px 14px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        pointer-events: none;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        z-index: 20;
+      `;
+      const nameSpan = document.createElement('span');
+      nameSpan.style.cssText = 'font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em';
+      nameSpan.textContent = event.name;
+      tooltip.appendChild(nameSpan);
+      if (event.era) {
+        const eraSpan = document.createElement('span');
+        eraSpan.style.cssText = 'font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px';
+        eraSpan.textContent = event.era;
+        tooltip.appendChild(eraSpan);
+      }
+      if (event.description) {
+        const descDiv = document.createElement('div');
+        descDiv.style.cssText = 'font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px';
+        descDiv.textContent = event.description;
+        tooltip.appendChild(descDiv);
+      }
+      el.appendChild(tooltip);
+
       hitArea.addEventListener('mouseenter', () => {
-        const marker = (el as HTMLElement & { _marker?: maplibregl.Marker })._marker;
-        if (marker && !marker.getPopup()?.isOpen()) {
-          marker.togglePopup();
-        }
+        tooltip.style.opacity = '1';
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.4)`;
         el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
       });
 
       hitArea.addEventListener('mouseleave', () => {
-        const marker = (el as HTMLElement & { _marker?: maplibregl.Marker })._marker;
-        if (marker?.getPopup()?.isOpen()) {
-          marker.togglePopup();
-        }
+        tooltip.style.opacity = '0';
         el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1)`;
         el.style.boxShadow = `0 0 16px ${color}, 0 0 32px ${color}80`;
       });
@@ -271,20 +280,9 @@ function TimelineMapInner({
           const event = geo.events[i];
           const el = createPinElement(event, reducedMotion ? 0 : i);
 
-          const popup = new maplibregl.Popup({
-            closeButton: false,
-            closeOnClick: false,
-            offset: 14,
-            className: 'timeline-map-popup',
-          }).setHTML(buildPopupHtml(event));
-
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat([event.lng, event.lat])
-            .setPopup(popup)
             .addTo(map);
-
-          // Store marker ref on element so hover handlers can access it
-          (el as HTMLElement & { _marker?: maplibregl.Marker })._marker = marker;
           markersRef.current.push(marker);
         }
 
@@ -310,7 +308,7 @@ function TimelineMapInner({
     } else {
       map.once('load', proceed);
     }
-  }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute, buildPopupHtml]);
+  }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute]);
 
   return (
     <div className="relative w-full h-full">
@@ -332,16 +330,6 @@ function TimelineMapInner({
         }
         .maplibregl-ctrl-group button span {
           filter: invert(0.7) sepia(0.3) !important;
-        }
-        .timeline-map-popup .maplibregl-popup-content {
-          background: rgba(13,11,9,0.92) !important;
-          border: 1px solid rgba(196,149,106,0.3) !important;
-          border-radius: 8px !important;
-          padding: 8px 14px !important;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
-        }
-        .timeline-map-popup .maplibregl-popup-tip {
-          border-top-color: rgba(13,11,9,0.92) !important;
         }
       `}</style>
 
