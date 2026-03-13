@@ -449,6 +449,6 @@ cx_text(d, bottom, W//2, H-22, f_mono_sm, MUTED+"88")
 # ═══════════════════════════════════════════════════════════════════════════════
 # SAVE
 # ═══════════════════════════════════════════════════════════════════════════════
-OUT = "/Users/efecelik/gemini-live-hackathon-idea/docs/architecture-diagram.png"
+OUT = "/Users/efecelik/gemini-live-hackathon-idea/docs/architecture/architecture-diagram.png"
 img.save(OUT, "PNG", dpi=(144, 144))
 print(f"Saved → {OUT}  ({W}×{H})")

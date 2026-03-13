@@ -133,9 +133,9 @@ Owns everything that touches the Gemini Live API: live-relay Cloud Run service (
 **Efe** — Research Pipeline, Agent Visualization & Documentary Engine
 Owns everything that touches document processing and content generation: Document AI OCR, ADK Scan Agent, ADK Parallel Research Pipeline, Research Activity panel, Agent Session Modal, Script Generation Agent, Visual Director Agent (Imagen 3 + Veo 2), segment streaming, and the documentary player.
 
-**Detailed task breakdown:** See `TASKS.md`
-**Technology links and documentation:** See `RESOURCES.md`
-**Full frontend specification:** See `FRONTEND_PLAN.md`
+**Detailed task breakdown:** See `docs/project/TASKS.md`
+**Technology links and documentation:** See `docs/spec/RESOURCES.md`
+**Full frontend specification:** See `docs/spec/FRONTEND_PLAN.md`
 
 ---
 
@@ -406,7 +406,7 @@ text-shadow: 0 2px 28px rgba(0,0,0,0.9), 0 0 80px rgba(0,0,0,0.5);
 
 ### UI Polish & Micro-Interactions
 
-This section summarizes the key interaction patterns. Full implementation specs live in `FRONTEND_PLAN.md § UI & UX Polish Layer`.
+This section summarizes the key interaction patterns. Full implementation specs live in `docs/spec/FRONTEND_PLAN.md § UI & UX Polish Layer`.
 
 #### Global Atmosphere (always on)
 
@@ -595,12 +595,7 @@ Deploy ADK service: `adk deploy cloud_run --project=PROJECT --region=us-central1
 ```
 /
 ├── CLAUDE.md              ← This file — single source of truth for AI assistants
-├── FRONTEND_PLAN.md       ← Full frontend spec: components, state, animations, API
-├── TASKS.md               ← Per-task breakdown for Berkay and Efe
-├── RESOURCES.md           ← All documentation links
-├── PRD.md                 ← Product Requirements Document
-├── SRS.md                 ← Software Requirements Specification
-├── prototype.html         ← Interactive UX mockup (full design reference)
+├── README.md              ← Setup instructions and architecture for judges
 ├── frontend/              ← React 19 + TypeScript + Vite 6 + Tailwind v4
 │   ├── src/
 │   │   ├── components/    ← upload/, workspace/, player/, voice/, ui/
@@ -616,8 +611,15 @@ Deploy ADK service: `adk deploy cloud_run --project=PROJECT --region=us-central1
 │   ├── agent_orchestrator/ ← ADK pipeline service
 │   │   └── agents/        ← scan_agent, research_agents, script_agent, visual_director
 │   └── live_relay/        ← Node.js WebSocket relay
-└── terraform/             ← Infrastructure as Code (bonus +0.2 pts)
-    └── main.tf
+├── terraform/             ← Infrastructure as Code (bonus +0.2 pts)
+│   └── main.tf
+└── docs/
+    ├── spec/              ← PRD, SRS, FRONTEND_PLAN, RESOURCES
+    ├── project/           ← TASKS, UI_IMPROVEMENTS, IMPROVEMENT_IDEAS
+    ├── architecture/      ← Diagrams, generator script
+    ├── demo/              ← DEMO_SCRIPT, prototype.html
+    ├── blog/              ← Blog drafts and strategy
+    └── plans/             ← Dated engineering design documents
 ```
 
 ---
@@ -705,4 +707,4 @@ Deploy ADK service: `adk deploy cloud_run --project=PROJECT --region=us-central1
 | View Transitions API — MDN | https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API |
 | Web Audio API visualizations — MDN | https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Visualizations_with_Web_Audio_API |
 | CSS @property — MDN | https://developer.mozilla.org/en-US/docs/Web/CSS/@property |
-| All technology links | See RESOURCES.md |
+| All technology links | See docs/spec/RESOURCES.md |

@@ -253,12 +253,12 @@ In `visual_director_orchestrator.py`:
 **Research findings:** GitHub renders Mermaid natively in any Markdown file. `flowchart TD` is correct for this architecture (vertical hierarchy). Full + compact versions created.
 
 **Implementation plan:**
-- **COMPLETE:** File created at `docs/architecture-diagram.md` with both full (~35 nodes) and compact (~12 nodes) Mermaid diagrams
+- **COMPLETE:** File created at `docs/architecture/architecture-diagram.md` with both full (~35 nodes) and compact (~12 nodes) Mermaid diagrams
 - Action: Copy the `flowchart TD` block from that file into `README.md`
 - Edge labels: solid arrows for REST/RPC, dotted for async/SSE/WebSocket
 - Both versions avoid GitHub Mermaid limitations (no FontAwesome, no HTML in unquoted labels, no hyperlinks, under 40 nodes)
 
-**Files:** `README.md` — paste from `docs/architecture-diagram.md`
+**Files:** `README.md` — paste from `docs/architecture/architecture-diagram.md`
 
 **Effort:** 30min (copy-paste) | **Impact:** Disqualification risk
 
@@ -305,7 +305,7 @@ terraform init && terraform plan && terraform apply
 **Research findings:** Complete demo script created by the demo agent.
 
 **Implementation plan:**
-- **COMPLETE:** Full `docs/DEMO_SCRIPT.md` created with 7-shot sequence, exact timing, narration script, voiceover text
+- **COMPLETE:** Full `docs/demo/DEMO_SCRIPT.md` created with 7-shot sequence, exact timing, narration script, voiceover text
 - **Document choice:** Ottoman-era firman (non-Latin script proves multilingual OCR; rich historical surface for impressive Expedition Log)
 - **Key production rules:**
   1. Record voiceover separately, sync in post
@@ -324,7 +324,7 @@ terraform init && terraform plan && terraform apply
 | 6 | 2:55–3:25 | Technical proof — architecture diagram + GCP console |
 | 7 | 3:25–3:58 | Closing — product identity statement |
 
-**Files:** `docs/DEMO_SCRIPT.md` (complete)
+**Files:** `docs/demo/DEMO_SCRIPT.md` (complete)
 
 **Effort:** Filming + editing | **Impact:** 30% criterion
 
@@ -338,7 +338,7 @@ terraform init && terraform plan && terraform apply
 **Research findings:** Full blog strategy created. Dev.to (primary) + Medium (cross-post with canonical).
 
 **Implementation plan:**
-- **COMPLETE:** Blog strategy at `docs/plans/blog-post-strategy.md`
+- **COMPLETE:** Blog strategy at `docs/blog/blog-post-strategy.md`
 - **Required disclosure in every post:** "This post was written as part of my submission to the Gemini Live Agent Challenge hackathon, organized by Google LLC and administered by Devpost."
 - **Required tag:** `#GeminiLiveAgentChallenge` (Dev.to tag + social share)
 
@@ -523,7 +523,7 @@ In `visual_director_orchestrator.py`, add:
 
 | File | Contents | Status |
 |------|----------|--------|
-| `docs/architecture-diagram.md` | Full + compact Mermaid diagrams ready to paste into README | ✅ Created |
+| `docs/architecture/architecture-diagram.md` | Full + compact Mermaid diagrams ready to paste into README | ✅ Created |
 | `docs/DEMO_SCRIPT.md` | 7-shot script with timing, narration, voiceover | ✅ Created |
-| `docs/plans/blog-post-strategy.md` | Platform choice, required disclosures, both blog outlines | ✅ Created |
+| `docs/blog/blog-post-strategy.md` | Platform choice, required disclosures, both blog outlines | ✅ Created |
 | `terraform/main.tf` | Complete IaC for all 7 services, 18 resource types | ✅ Updated |
