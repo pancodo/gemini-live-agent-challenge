@@ -32,7 +32,7 @@ AI Historian is a real-time multimodal research and documentary engine. Drop any
 | **Grounding** | Every spoken question retrieves the 4 most relevant source passages via Firestore vector search — the historian cites actual document pages, not just scripted narration |
 | **Live Illustration** | User questions during the documentary trigger on-the-fly Imagen 3 illustrations with cinematic crossfade |
 | **Timeline Map** | Interactive antique-style map with animated pins, routes, and fly-to transitions for each documentary segment |
-| **Historian Avatar** | Live2D animated character with lip-sync driven by `AnalyserNode` frequency data |
+| **Historian Avatar** | AI-generated oil painting portrait (Gemini image generation) with canvas-based lip sync, blinking, and era-adaptive costumes |
 | **Adaptation** | Documentary branches based on your questions — no two sessions are identical |
 | **Light / Dark** | Full theme support across all screens including the cinematic player with antique map styles |
 
@@ -282,7 +282,7 @@ gcloud firestore indexes composite create \
 | Motion | 12 | All animations — springs, `AnimatePresence`, `layoutId` |
 | TanStack Query | v5 | Server state — REST polling, SSE stream management |
 | MapLibre GL | 5.x | Interactive antique-style timeline map with animated pins and routes |
-| pixi.js + pixi-live2d-display | 6.x / 0.4 | Live2D historian avatar with lip-sync |
+| Canvas API | native | Living Portrait avatar — layered canvas compositing with lip sync |
 | Radix UI | latest | Accessible headless components — Dialog, Tooltip, Collapsible |
 | react-resizable-panels | 4.x | Draggable split layout for PDF viewer + research panel |
 | Sonner | 2.x | Toast notifications — `toast.promise()` for async agent operations |
@@ -415,7 +415,7 @@ cd frontend && pnpm install && pnpm dev
 │       │   │                           CaptionTrack, PlayerSidebar, IrisOverlay,
 │       │   │                           SourcePanel, ShareButton, BranchTree
 │       │   ├── voice/                  VoiceButton, Waveform, VoiceLayer, LiveToast,
-│       │   │                           HistorianAvatar (Live2D)
+│       │   │                           LivingPortrait (canvas)
 │       │   └── ui/                     Button, InkButton, Badge, Spinner, Modal
 │       ├── hooks/
 │       │   ├── useSSE.ts               Adaptive drip SSE — 1/3/8 events per 150ms tick
@@ -424,8 +424,8 @@ cd frontend && pnpm install && pnpm dev
 │       │   ├── useAudioPlayback.ts     PCM chunk queue → Web Audio API
 │       │   ├── useAudioVisualSync.ts   AnalyserNode → CSS custom properties
 │       │   ├── useSegmentGeo.ts        Geo extraction via Gemini Flash for timeline map
-│       │   ├── useLive2DModel.ts       Lazy Live2D model loading + expression control
-│       │   ├── useLipSync.ts           AnalyserNode frequency → Live2D mouth parameters
+│       │   ├── usePortraitRenderer.ts   Canvas compositing engine for Living Portrait
+│       │   ├── useLipSync.ts           AnalyserNode frequency → mouth energy computation
 │       │   ├── useTextScramble.ts      Cipher/decode title reveal animation
 │       │   └── useVoiceState.ts        Voice button state machine with auto-reconnect
 │       ├── store/                      sessionStore · researchStore (sessionStorage) · voiceStore · playerStore
@@ -484,7 +484,7 @@ cd frontend && pnpm install && pnpm dev
 `live-relay` · Gemini Live API · browser audio pipeline (PCM encoding) · interruption handling · voice button state machine · session resumption · RAG context injection · transcript forwarding
 
 **Efe** — Research Pipeline, Agent Visualization & Documentary Engine
-ADK 7-phase agent pipeline · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal · Timeline Map · Live2D avatar · live illustration engine · light/dark theme
+ADK 7-phase agent pipeline · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal · Timeline Map · Living Portrait avatar · live illustration engine · light/dark theme
 
 ---
 

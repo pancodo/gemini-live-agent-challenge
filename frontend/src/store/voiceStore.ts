@@ -14,7 +14,7 @@ interface VoiceStore {
   beginConsultation: (() => void) | null;
   /** Set by VoiceLayer — sends a text message to the historian mid-session */
   sendTextToHistorian: ((text: string) => void) | null;
-  /** Playback AnalyserNode — used by HistorianAvatar for lip sync */
+  /** Playback AnalyserNode — used by LivingPortrait for lip sync */
   analyserNode: AnalyserNode | null;
   setState: (state: VoiceState) => void;
   setResume: (segmentId: string, offset: number) => void;

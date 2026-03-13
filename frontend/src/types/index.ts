@@ -68,6 +68,8 @@ export interface AgentState {
 // ── Segments ─────────────────────────────────────────────────
 export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending';
 
+export type PortraitEra = 'default' | 'ancient' | 'modern';
+
 export interface Segment {
   id: string;
   title: string;
@@ -78,6 +80,7 @@ export interface Segment {
   mood: string;
   sources: string[];
   graphEdges: string[];
+  era?: PortraitEra;
 }
 
 // ── Voice ────────────────────────────────────────────────────
