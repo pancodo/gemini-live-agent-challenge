@@ -7,11 +7,14 @@ import { AgentModal } from './AgentModal';
 import type { AgentState, AgentStatus } from '../../types';
 
 // ── Phase number → Roman numeral ────────────────────────
-const ROMAN: Record<1 | 2 | 3 | 4, string> = {
+const ROMAN: Record<number, string> = {
   1: 'I',
   2: 'II',
   3: 'III',
+  3.8: 'III.VIII',
   4: 'IV',
+  5: 'V',
+  6: 'VI',
 };
 
 // ── Motion Variants ─────────────────────────────────────
@@ -51,6 +54,7 @@ function agentBelongsToPhase(phase: number, agentId: string): boolean {
     case 1: return id.startsWith('scan') || id.startsWith('document');
     case 2: return id.startsWith('research') || id.startsWith('scene');
     case 3: return id.startsWith('aggregat') || id.startsWith('script');
+    case 3.8: return id.startsWith('geo');
     case 4: return id.startsWith('visual');
     default: return false;
   }
@@ -179,7 +183,7 @@ function PhaseBlock({
   );
 
   const headerLabel = entry.phase in ROMAN
-    ? `Phase ${ROMAN[entry.phase as 1 | 2 | 3 | 4]} — ${entry.label}`
+    ? `Phase ${ROMAN[entry.phase]} — ${entry.label}`
     : `Phase — ${entry.label}`;
 
   return (
@@ -300,8 +304,9 @@ export function ExpeditionLog() {
 
   const agentsByPhase = useMemo(() => {
     const map = new Map<number, AgentState[]>();
+    const phaseKeys = [1, 2, 3, 3.8, 4, 5, 6];
     for (const agent of agentList) {
-      for (let p = 1; p <= 5; p++) {
+      for (const p of phaseKeys) {
         if (agentBelongsToPhase(p, agent.id)) {
           const arr = map.get(p) ?? [];
           arr.push(agent);

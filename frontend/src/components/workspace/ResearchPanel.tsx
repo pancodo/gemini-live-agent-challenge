@@ -30,6 +30,7 @@ const PHASE_LABELS: [string, string][] = [
   ['I', 'Translation & Scan'],
   ['II', 'Field Research'],
   ['III', 'Synthesis'],
+  ['III.VIII', 'Geographic Mapping'],
   ['IV', 'Visual Composition'],
 ];
 
@@ -37,7 +38,8 @@ function agentPhase(id: string): number {
   if (id.startsWith('scan') || id.startsWith('document')) return 0;
   if (id.startsWith('research') || id.startsWith('scene')) return 1;
   if (id.startsWith('aggregat') || id.startsWith('script')) return 2;
-  if (id.startsWith('visual')) return 3;
+  if (id.startsWith('geo')) return 3;
+  if (id.startsWith('visual')) return 4;
   return 1;
 }
 
@@ -537,7 +539,7 @@ export function ResearchPanel() {
   }, [agents]);
 
   const activePhases = useMemo(() => {
-    const byPhase: AgentState[][] = [[], [], [], []];
+    const byPhase: AgentState[][] = [[], [], [], [], []];
     for (const agent of Object.values(agents)) {
       const phase = agentPhase(agent.id);
       byPhase[phase]?.push(agent);
