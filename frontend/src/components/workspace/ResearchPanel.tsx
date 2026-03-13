@@ -557,10 +557,10 @@ export function ResearchPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Scrollable content area */}
-      <div className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4">
+      <div className="flex-1 flex flex-col gap-2 overflow-y-auto px-4 py-3">
         {/* Section Header */}
         <div>
-          <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-2">
+          <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em] text-[var(--gold)] mb-1">
             Research Activity
           </h2>
         </div>

@@ -205,8 +205,8 @@ function PhaseBlock({
         aria-expanded={!collapsed}
       >
         <p
-          className="text-[11px] font-serif uppercase tracking-[0.35em] text-[var(--gold)] mb-0 flex-1"
-          style={{ fontWeight: 400 }}
+          className="text-[12px] font-serif uppercase tracking-[0.3em] text-[var(--gold)] mb-0 flex-1"
+          style={{ fontWeight: 700 }}
         >
           {headerLabel}
         </p>
@@ -327,8 +327,8 @@ export function ExpeditionLog() {
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
         <h2
-          className="text-[11px] font-serif uppercase tracking-[0.4em] text-[var(--gold)]"
-          style={{ fontWeight: 400 }}
+          className="text-[12px] font-serif uppercase tracking-[0.35em] text-[var(--gold)]"
+          style={{ fontWeight: 700 }}
         >
           Expedition Log
         </h2>
