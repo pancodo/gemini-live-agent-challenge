@@ -133,15 +133,15 @@ html {
 
 /* ── Dark Theme — Aurora Blob Overrides ───────────────── */
 [data-theme="dark"] .aurora-blob:nth-child(1) {
-  background: #c4956a;
+  --aurora-color: #c4956a;
   opacity: 0.05;
 }
 [data-theme="dark"] .aurora-blob:nth-child(2) {
-  background: #5a3e22;
+  --aurora-color: #5a3e22;
   opacity: 0.07;
 }
 [data-theme="dark"] .aurora-blob:nth-child(3) {
-  background: #3d2a14;
+  --aurora-color: #3d2a14;
   opacity: 0.06;
 }
 
@@ -201,7 +201,6 @@ body {
   pointer-events: none;
   z-index: 9998;
   opacity: 0.025;
-  filter: url(#grain);
   mix-blend-mode: multiply;
   animation: grain-shift 0.5s steps(4) infinite;
 }
@@ -218,21 +217,23 @@ body {
   position: fixed;
   width: 40vw; height: 40vw;
   border-radius: 50%;
-  filter: blur(80px);
+  /* Pre-blurred radial gradient — identical look, no GPU filter cost */
+  background: radial-gradient(circle, var(--aurora-color) 0%, transparent 70%);
   opacity: 0.08;
   pointer-events: none;
   z-index: -1;
+  will-change: transform;
 }
 .aurora-blob:nth-child(1) {
-  background: #8b6914; top: -10%; left: -10%;
+  --aurora-color: #8b6914; top: -10%; left: -10%;
   animation: drift 22s ease-in-out infinite alternate;
 }
 .aurora-blob:nth-child(2) {
-  background: #3d2e1a; bottom: -10%; right: -10%;
+  --aurora-color: #3d2e1a; bottom: -10%; right: -10%;
   animation: drift 28s ease-in-out infinite alternate-reverse;
 }
 .aurora-blob:nth-child(3) {
-  background: #2a1f14; top: 50%; left: 40%;
+  --aurora-color: #2a1f14; top: 50%; left: 40%;
   animation: drift 32s ease-in-out infinite alternate;
 }
 
