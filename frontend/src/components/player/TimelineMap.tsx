@@ -281,6 +281,8 @@ function TimelineMapInner({
     if (!map) return;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const pinStroke = isLight ? 'rgba(30,23,12,0.25)' : 'rgba(255,255,255,0.3)';
 
     map.addSource(PIN_SOURCE, {
       type: 'geojson',
@@ -376,7 +378,7 @@ function TimelineMapInner({
       paint: {
         'circle-radius': 7,
         'circle-color': '#c4956a',
-        'circle-stroke-color': 'rgba(255,255,255,0.3)',
+        'circle-stroke-color': pinStroke,
         'circle-stroke-width': 2,
       },
     });
@@ -389,7 +391,7 @@ function TimelineMapInner({
       paint: {
         'circle-radius': 7,
         'circle-color': '#c0392b',
-        'circle-stroke-color': 'rgba(255,255,255,0.3)',
+        'circle-stroke-color': pinStroke,
         'circle-stroke-width': 2,
       },
     });

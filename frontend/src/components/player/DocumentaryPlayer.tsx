@@ -247,23 +247,6 @@ export function DocumentaryPlayer() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden player-root select-none" style={{ background: 'var(--player-bg)' }}>
-      {/* View Transition CSS */}
-      <style>{`
-        ::view-transition-old(root) {
-          animation: 0.35s ease-in both fade-and-scale-out;
-        }
-        ::view-transition-new(root) {
-          animation: 0.35s ease-out both fade-and-scale-in;
-        }
-        @keyframes fade-and-scale-out {
-          to { opacity: 0; filter: brightness(0); transform: scale(1); }
-        }
-        @keyframes fade-and-scale-in {
-          from { opacity: 0; filter: brightness(0); transform: scale(1.03); }
-          to   { opacity: 1; filter: brightness(1); transform: scale(1); }
-        }
-      `}</style>
-
       {/* Layer 1: Visual stage — Ken Burns / Map / Split */}
       <div className="absolute inset-0 flex">
         {/* Ken Burns panel */}
@@ -552,7 +535,7 @@ export function DocumentaryPlayer() {
                   ref={shortcutsRef}
                   className="absolute top-full right-0 mt-2 rounded-lg p-3 z-50"
                   style={{
-                    background: 'var(--bg2)',
+                    background: 'var(--player-surface)',
                     border: '1px solid var(--player-border)',
                     fontFamily: 'var(--font-sans)',
                     fontSize: 11,
@@ -625,7 +608,7 @@ export function DocumentaryPlayer() {
                 fontSize: 16,
                 letterSpacing: '0.03em',
                 color: 'var(--gold)',
-                textShadow: '0 1px 12px rgba(0,0,0,0.7)',
+                textShadow: 'var(--player-illustration-shadow)',
               }}
             >
               {liveIllustration.caption}

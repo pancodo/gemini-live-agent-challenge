@@ -40,7 +40,7 @@ export function CaptionTrack() {
           fontStyle: 'italic',
           fontSize: 26,
           letterSpacing: '0.02em',
-          color: 'var(--text)',
+          color: 'var(--player-text)',
           textShadow: 'var(--player-caption-shadow)',
         }}
       >

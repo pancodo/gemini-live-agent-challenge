@@ -139,23 +139,27 @@ const router = createBrowserRouter([
 function GrainOverlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    // Match viewport so pixels are 1:1 — no scaling blur
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    c.width = w;
-    c.height = h;
-    const ctx = c.getContext('2d');
-    if (!ctx) return;
-    const img = ctx.createImageData(w, h);
-    const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = (Math.random() * 255) | 0;
-      d[i] = d[i + 1] = d[i + 2] = v;
-      d[i + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
+    const render = () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+      const img = ctx.createImageData(w, h);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = v;
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    render();
+    window.addEventListener('resize', render);
+    return () => window.removeEventListener('resize', render);
   }, []);
 
   return (

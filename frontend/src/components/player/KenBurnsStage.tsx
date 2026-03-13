@@ -160,7 +160,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
           }}
         />
       </div>
@@ -183,7 +183,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
           }}
         />
       </div>
@@ -261,7 +261,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+            'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
         }}
       />
     </div>
