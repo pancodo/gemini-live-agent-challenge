@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useLocation } from 'react-router-dom';
 import { VoiceButton } from './VoiceButton';
 import { useSessionStore } from '../../store/sessionStore';
@@ -20,29 +21,42 @@ import { useAudioVisualSync } from '../../hooks/useAudioVisualSync';
 
 export function VoiceLayer() {
   const sessionId = useSessionStore((s) => s.sessionId);
-  const resumptionToken = useVoiceStore((s) => s.resumptionToken);
-  const setResumptionToken = useVoiceStore((s) => s.setResumptionToken);
+  const { resumptionToken, setResumptionToken } = useVoiceStore(
+    useShallow((s) => ({ resumptionToken: s.resumptionToken, setResumptionToken: s.setResumptionToken })),
+  );
 
   const { state, transition, handleInterrupt, reset } = useVoiceState();
   const playback = useAudioPlayback();
 
-  const { sendPCM, connect, disconnect, isConnected } = useGeminiLive({
-    sessionId,
-    resumptionToken,
-    onAudioChunk: (pcm: ArrayBuffer) => {
+  const onAudioChunk = useCallback(
+    (pcm: ArrayBuffer) => {
       playback.enqueue(pcm);
       if (useVoiceStore.getState().state !== 'historian_speaking') {
         transition('historian_speaking');
       }
     },
-    onInterrupted: () => {
-      playback.stop();
-      const { resumeSegmentId, resumeOffset } = useVoiceStore.getState();
-      handleInterrupt(resumeSegmentId ?? '', resumeOffset);
-    },
-    onResumeToken: (token: string) => {
+    [playback, transition],
+  );
+
+  const onInterrupted = useCallback(() => {
+    playback.stop();
+    const { resumeSegmentId, resumeOffset } = useVoiceStore.getState();
+    handleInterrupt(resumeSegmentId ?? '', resumeOffset);
+  }, [playback, handleInterrupt]);
+
+  const onResumeToken = useCallback(
+    (token: string) => {
       setResumptionToken(token);
     },
+    [setResumptionToken],
+  );
+
+  const { sendPCM, connect, disconnect, isConnected } = useGeminiLive({
+    sessionId,
+    resumptionToken,
+    onAudioChunk,
+    onInterrupted,
+    onResumeToken,
   });
 
   const capture = useAudioCapture(sendPCM);

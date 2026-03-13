@@ -35,6 +35,31 @@ export interface VoiceButtonProps {
 
 const SPRING = { stiffness: 400, damping: 17 };
 
+const RING_COLORS: Partial<Record<string, string>> = {
+  listening: 'rgba(30, 94, 94, 0.5)',
+  historian_speaking: 'rgba(196, 149, 106, 0.5)',
+  interrupted: 'rgba(180, 60, 60, 0.6)',
+};
+
+// Module-level Motion animation constants — hoisted to avoid re-creating per render.
+const ICON_INITIAL = { opacity: 0, scale: 0.6 };
+const ICON_ANIMATE = { opacity: 1, scale: 1 };
+const ICON_EXIT = { opacity: 0, scale: 0.6 };
+const ICON_TRANSITION = { duration: 0.15 };
+
+const LABEL_INITIAL = { opacity: 0, y: 4 };
+const LABEL_ANIMATE = { opacity: 1, y: 0 };
+const LABEL_EXIT = { opacity: 0, y: 4 };
+const LABEL_TRANSITION = { duration: 0.2 };
+
+const WAVEFORM_INITIAL = { opacity: 0, scale: 0.8 };
+const WAVEFORM_ANIMATE = { opacity: 1, scale: 1 };
+const WAVEFORM_EXIT = { opacity: 0, scale: 0.8 };
+const WAVEFORM_TRANSITION = { type: 'spring' as const, ...SPRING };
+
+const PULSE_ANIMATE = { scale: [1, 1.3], opacity: [0.6, 0] };
+const PULSE_TRANSITION = { duration: 1.5, repeat: Infinity, ease: 'easeOut' as const };
+
 const ARIA_LABELS: Record<VoiceState, string> = {
   idle: 'Start voice conversation with historian',
   listening: 'Listening for your voice. Click to stop.',
@@ -73,19 +98,8 @@ export function VoiceButton({
   const prefersReducedMotion = useReducedMotion();
   const isActive = voiceState !== 'idle';
 
-  // Ring glow color per state
-  const ringColor = (() => {
-    switch (voiceState) {
-      case 'listening':
-        return 'rgba(30, 94, 94, 0.5)'; // teal
-      case 'historian_speaking':
-        return 'rgba(196, 149, 106, 0.5)'; // gold
-      case 'interrupted':
-        return 'rgba(180, 60, 60, 0.6)'; // red flash
-      default:
-        return 'transparent';
-    }
-  })();
+  // Ring glow color per state — looked up from module-level table.
+  const ringColor = RING_COLORS[voiceState] ?? 'transparent';
 
   return (
     <div className="fixed bottom-6 right-6 z-[9000] flex flex-col items-center gap-2">
@@ -93,10 +107,10 @@ export function VoiceButton({
       {voiceState === 'historian_speaking' && (
         <motion.div
           className="absolute -inset-4"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ type: 'spring', ...SPRING }}
+          initial={WAVEFORM_INITIAL}
+          animate={WAVEFORM_ANIMATE}
+          exit={WAVEFORM_EXIT}
+          transition={WAVEFORM_TRANSITION}
         >
           <Waveform analyser={playbackAnalyser} height={80} />
         </motion.div>
@@ -109,8 +123,8 @@ export function VoiceButton({
           style={{
             border: '2px solid rgba(30, 94, 94, 0.4)',
           }}
-          animate={{ scale: [1, 1.3], opacity: [0.6, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' }}
+          animate={PULSE_ANIMATE}
+          transition={PULSE_TRANSITION}
         />
       )}
 
@@ -144,20 +158,20 @@ export function VoiceButton({
           {voiceState === 'processing' ? (
             <motion.div
               key="spinner"
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.6 }}
-              transition={{ duration: 0.15 }}
+              initial={ICON_INITIAL}
+              animate={ICON_ANIMATE}
+              exit={ICON_EXIT}
+              transition={ICON_TRANSITION}
             >
               <Spinner size="sm" />
             </motion.div>
           ) : (
             <motion.div
               key="mic"
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.6 }}
-              transition={{ duration: 0.15 }}
+              initial={ICON_INITIAL}
+              animate={ICON_ANIMATE}
+              exit={ICON_EXIT}
+              transition={ICON_TRANSITION}
             >
               <MicIcon muted={voiceState === 'idle'} />
             </motion.div>
@@ -174,10 +188,10 @@ export function VoiceButton({
               fontFamily: 'var(--font-sans)',
               color: 'var(--teal)',
             }}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.2 }}
+            initial={LABEL_INITIAL}
+            animate={LABEL_ANIMATE}
+            exit={LABEL_EXIT}
+            transition={LABEL_TRANSITION}
           >
             Listening...
           </motion.span>
@@ -189,10 +203,10 @@ export function VoiceButton({
               fontFamily: 'var(--font-sans)',
               color: 'var(--gold)',
             }}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.2 }}
+            initial={LABEL_INITIAL}
+            animate={LABEL_ANIMATE}
+            exit={LABEL_EXIT}
+            transition={LABEL_TRANSITION}
           >
             Speaking
           </motion.span>
