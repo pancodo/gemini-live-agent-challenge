@@ -710,7 +710,7 @@ Visual Bible Seed:
 
 YOUR TASK:
 Select approximately {recommended_scene_count} cinematically compelling moments
-(guidance based on document length; stay within 2–6 scenes total). Prioritise:
+(guidance based on document length; stay within 2–4 scenes total). Prioritise:
   - Narrative turning points that create dramatic tension
   - High-contrast scenes (conflict, transformation, revelation)
   - Visually specific moments (described settings, objects, weather, light)
@@ -748,7 +748,7 @@ def _make_narrative_curator() -> Agent:
         name="narrative_curator",
         model="gemini-2.0-flash",
         description=(
-            "Reads the full Document Map and selects 4-8 cinematically compelling "
+            "Reads the full Document Map and selects 2-4 cinematically compelling "
             "scenes, producing structured SceneBriefs and a Visual Bible."
         ),
         instruction=_NARRATIVE_CURATOR_INSTRUCTION,
@@ -868,9 +868,13 @@ class DocumentAnalyzerAgent(BaseAgent):
         chunks = semantic_chunk(ocr_text, session_id)
 
         total_chunks = len(chunks)
-        recommended_scene_count = min(max(2, total_chunks // 3), 6)
+        research_mode = ctx.session.state.get("research_mode", "normal")
+        if research_mode == "test":
+            recommended_scene_count = 1
+        else:
+            recommended_scene_count = min(max(2, total_chunks // 3), 4)
         ctx.session.state["recommended_scene_count"] = recommended_scene_count
-        logger.info("Dynamic scene count: %d chunks -> %d recommended scenes", total_chunks, recommended_scene_count)
+        logger.info("Dynamic scene count: %d chunks -> %d recommended scenes (mode=%s)", total_chunks, recommended_scene_count, research_mode)
 
         if self.emitter is not None:
             await self.emitter.emit(
