@@ -129,17 +129,9 @@ export function DocumentaryPlayer() {
     };
   }, [setIdle]);
 
-  // ── Auto-start narration on player entry ───────────────────────
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const { state } = useVoiceStore.getState();
-      const begin = useVoiceStore.getState().beginConsultation;
-      if (state === 'idle' && begin) {
-        begin();
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-start narration is intentionally disabled — voice activation
+  // should be an explicit user action (press Space or click voice button).
+  // The voice button is always visible in the bottom-right corner.
 
   // ── Auto-show keyboard shortcuts on first visit ────────────────
   useEffect(() => {
