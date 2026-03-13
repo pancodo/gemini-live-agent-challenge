@@ -185,6 +185,17 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
   const isReady = segment.status === 'ready' || segment.status === 'complete' || segment.status === 'visual_ready';
   const [hasBeenReady, setHasBeenReady] = useState(isReady);
   const [scriptExpanded, setScriptExpanded] = useState(false);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const imageCount = segment.imageUrls?.length ?? 0;
+
+  // Auto-cycle images every 4s
+  useEffect(() => {
+    if (imageCount <= 1) return;
+    const timer = setInterval(() => {
+      setCarouselIdx((prev) => (prev + 1) % imageCount);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [imageCount]);
 
   // Track transition to ready/complete for cipher reveal
   useEffect(() => {
@@ -286,80 +297,70 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
             : scrambledTitle}
         </h3>
 
-        {/* Hero image + thumbnail strip */}
-        {segment.imageUrls?.length > 0 && (
-          <div className="mb-3">
-            {/* Hero: first image as a wide banner */}
+        {/* Image carousel — single image with crossfade + dot navigation */}
+        {imageCount > 0 && (
+          <div className="relative mb-3">
             <div
               role="button"
               tabIndex={0}
-              aria-label="View scene full size"
-              className="w-full h-36 rounded-md bg-[var(--bg3)] overflow-hidden cursor-pointer transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 mb-1.5"
+              aria-label={`View scene ${carouselIdx + 1} of ${imageCount} full size`}
+              className="w-full h-40 rounded-md bg-[var(--bg3)] overflow-hidden cursor-pointer relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
               style={{ outlineColor: 'var(--gold)' }}
-              onClick={(e) => handleThumbnailClick(e, 0)}
+              onClick={(e) => handleThumbnailClick(e, carouselIdx)}
               onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   e.stopPropagation();
-                  setLightboxIndex(0);
+                  setLightboxIndex(carouselIdx);
                 }
               }}
             >
-              <img
-                src={segment.imageUrls[0]}
-                alt={`${segment.title} — scene 1`}
-                className="w-full h-full object-cover pointer-events-none"
-                loading="lazy"
-              />
+              {segment.imageUrls.map((url, i) => (
+                <img
+                  key={i}
+                  src={url}
+                  alt={`${segment.title} — scene ${i + 1}`}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                  loading="lazy"
+                  style={{
+                    opacity: i === carouselIdx ? 1 : 0,
+                    transition: 'opacity 0.8s ease-in-out',
+                  }}
+                />
+              ))}
+              {/* Frame counter */}
+              <span
+                className="absolute top-2 right-2 font-sans text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+                style={{
+                  background: 'rgba(0,0,0,0.5)',
+                  color: 'rgba(255,255,255,0.8)',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                {carouselIdx + 1} / {imageCount}
+              </span>
             </div>
-            {/* Secondary thumbnails */}
-            {segment.imageUrls.length > 1 && (
-              <div className="flex gap-1.5 overflow-hidden">
-                {segment.imageUrls.slice(1, 4).map((url, i) => (
-                  <div
-                    key={i + 1}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`View scene ${i + 2} full size`}
-                    className="flex-1 h-14 rounded bg-[var(--bg3)] overflow-hidden cursor-pointer transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
-                    style={{ outlineColor: 'var(--gold)' }}
-                    onClick={(e) => handleThumbnailClick(e, i + 1)}
-                    onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setLightboxIndex(i + 1);
-                      }
-                    }}
+            {/* Dot indicators */}
+            {imageCount > 1 && (
+              <div className="flex justify-center gap-1.5 mt-2">
+                {segment.imageUrls.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Go to scene ${i + 1}`}
+                    className="p-0 border-none bg-transparent cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); setCarouselIdx(i); }}
                   >
-                    <img
-                      src={url}
-                      alt={`Scene ${i + 2}`}
-                      className="w-full h-full object-cover pointer-events-none"
-                      loading="lazy"
+                    <span
+                      className="block rounded-full transition-all duration-300"
+                      style={{
+                        width: i === carouselIdx ? 16 : 6,
+                        height: 6,
+                        background: i === carouselIdx ? 'var(--gold)' : 'var(--bg4)',
+                      }}
                     />
-                  </div>
+                  </button>
                 ))}
-                {segment.imageUrls.length > 4 && (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`View ${segment.imageUrls.length - 4} more images`}
-                    className="flex-1 h-14 rounded bg-[var(--bg3)] flex items-center justify-center cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
-                    onClick={(e) => handleThumbnailClick(e, 4)}
-                    onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setLightboxIndex(4);
-                      }
-                    }}
-                  >
-                    <span className="font-sans text-[10px] text-[var(--muted)]">
-                      +{segment.imageUrls.length - 4}
-                    </span>
-                  </div>
-                )}
               </div>
             )}
           </div>
