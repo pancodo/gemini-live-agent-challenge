@@ -131,12 +131,34 @@ async def get_session_status(session_id: str) -> SessionStatusResponse:
         raise HTTPException(status_code=404, detail="Session not found")
 
     data = doc.to_dict() or {}
+
+    # Generate a fresh signed URL for the PDF on every status call so it
+    # never expires between page refreshes (1-hour expiry, regenerated each poll).
+    document_url: str | None = None
+    if data.get("gcsPath"):
+        try:
+            gs_path = data["gcsPath"]  # e.g. gs://bucket/session_id/document.pdf
+            without_scheme = gs_path[5:]  # strip "gs://"
+            bucket_name, _, blob_name = without_scheme.partition("/")
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            blob = get_gcs().bucket(bucket_name).blob(blob_name)
+            document_url = blob.generate_signed_url(
+                credentials=credentials,
+                version="v4",
+                expiration=timedelta(hours=1),
+                method="GET",
+            )
+        except Exception:
+            logger.debug("Could not generate fresh document URL for %s", session_id)
+
     return SessionStatusResponse(
         sessionId=session_id,
         status=data.get("status", "idle"),
         language=data.get("language"),
         visualBible=data.get("visualBible"),
-        documentUrl=data.get("documentUrl"),
+        documentUrl=document_url,
     )
 
 
