@@ -1606,10 +1606,18 @@ class VisualDirectorOrchestrator(BaseAgent):
             )
             return
 
+        # Test mode: 1 frame per segment (force "opening" role), skip Veo 2
+        research_mode: str = ctx.session.state.get("research_mode", "normal")
+        is_test_mode = research_mode == "test"
+        if is_test_mode:
+            narrative_role_map = {k: "opening" for k in narrative_role_map}
+            logger.info("Phase V test mode: 1 frame per segment, no Veo 2")
+
         logger.info(
-            "Phase V: generating visuals for %d segments, %d manifests available",
+            "Phase V: generating visuals for %d segments, %d manifests available (mode=%s)",
             len(script_raw),
             len(manifests),
+            research_mode,
         )
 
         # ------------------------------------------------------------------
