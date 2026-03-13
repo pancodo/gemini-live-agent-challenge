@@ -10,7 +10,8 @@ import { KenBurnsStage } from './KenBurnsStage';
 import { CaptionTrack } from './CaptionTrack';
 import { PlayerSidebar } from './PlayerSidebar';
 import { ShareButton } from './ShareButton';
-import { HistorianAvatar } from '../voice/HistorianAvatar';
+import { LivingPortrait } from '../voice/LivingPortrait';
+import { resolveEra } from '../../utils/eraMapping';
 import { useSessionStore } from '../../store/sessionStore';
 import { TimelineMap } from './TimelineMap';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
@@ -350,9 +351,10 @@ export function DocumentaryPlayer() {
               background: `radial-gradient(circle at center, color-mix(in srgb, var(--player-bg) 85%, transparent) 0%, color-mix(in srgb, var(--player-bg) 95%, transparent) 70%)`,
             }}
           >
-            <HistorianAvatar
+            <LivingPortrait
               size={400}
               active={true}
+              era={currentSegment ? resolveEra(currentSegment) : 'default'}
             />
           </motion.div>
         )}

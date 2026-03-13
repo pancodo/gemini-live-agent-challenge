@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useVoiceStore } from '../../store/voiceStore';
-import { HistorianAvatar } from '../voice/HistorianAvatar';
+import { LivingPortrait } from '../voice/LivingPortrait';
 import type { VoiceState } from '../../types';
 
 // ── Props ────────────────────────────────────────────────────────
@@ -167,11 +167,12 @@ function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; 
   const [avatarReady, setAvatarReady] = useState(false);
 
   return (
-    <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
-      {/* Live2D Avatar — always active so it loads eagerly and shows idle animation */}
-      <HistorianAvatar
-        size={160}
+    <div className="relative flex items-center justify-center" style={{ width: 240, height: 240 }}>
+      {/* Living Portrait — always active so it loads eagerly and shows idle animation */}
+      <LivingPortrait
+        size={240}
         active
+        simulateAudio
         onLoad={() => setAvatarReady(true)}
       />
 
