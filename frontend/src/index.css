@@ -306,23 +306,12 @@ body {
   --mouse-x: 50%;
   --mouse-y: 50%;
   position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.agent-card::after {
-  content: '';
-  position: absolute;
-  inset: -8px;
-  background: radial-gradient(
-    400px circle at var(--mouse-x) var(--mouse-y),
-    rgba(196, 149, 106, 0.12),
-    transparent 40%
-  );
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-  border-radius: 12px;
-  z-index: -1;
+.agent-card:hover {
+  border-color: rgba(139, 94, 26, 0.35) !important;
+  box-shadow: 0 2px 12px rgba(139, 94, 26, 0.10), 0 0 0 1px rgba(139, 94, 26, 0.08);
 }
-.agent-card:hover::after { opacity: 1; }
 
 /* ── Skeleton Animations ───────────────────────────────── */
 @keyframes shimmer {
