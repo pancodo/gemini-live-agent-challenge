@@ -623,7 +623,7 @@ body {
   inset: 0;
   pointer-events: none;
   background: radial-gradient(ellipse 80% 80% at 50% 50%,
-    transparent 30%, rgba(13,11,9,0.35) 65%, rgba(13,11,9,0.8) 100%);
+    transparent 30%, color-mix(in srgb, var(--player-vignette) 45%, transparent) 65%, var(--player-vignette) 100%);
   z-index: 1;
 }
 
@@ -648,6 +648,11 @@ body {
   --player-card:            rgba(232,221,208,0.06);
   --player-border:          rgba(196,149,106,0.3);
   --player-caption-shadow:  0 2px 28px rgba(0,0,0,0.9), 0 0 80px rgba(0,0,0,0.5);
+  --player-vignette:        rgba(0,0,0,0.85);
+  --player-illustration-shadow: 0 1px 12px rgba(0,0,0,0.7);
+  --player-tooltip-shadow:  0 4px 20px rgba(0,0,0,0.5);
+  --player-ctrl-filter:     invert(0.7) sepia(0.3);
+  --player-pin-stroke:      rgba(255,255,255,0.3);
 
   background: var(--player-bg);
   color: var(--player-text);
@@ -666,6 +671,11 @@ body {
   --player-card:            rgba(30,23,12,0.05);
   --player-border:          rgba(139,94,26,0.25);
   --player-caption-shadow:  0 2px 16px rgba(0,0,0,0.15);
+  --player-vignette:        rgba(30,23,12,0.25);
+  --player-illustration-shadow: 0 1px 8px rgba(0,0,0,0.15);
+  --player-tooltip-shadow:  0 4px 12px rgba(0,0,0,0.12);
+  --player-ctrl-filter:     none;
+  --player-pin-stroke:      rgba(30,23,12,0.25);
 }
 
 /* ── Ambient Color Glow (YouTube ambient mode) ─────────── */
