@@ -5,8 +5,8 @@
   position: absolute;
   pointer-events: none;
   white-space: nowrap;
-  background: rgba(13,11,9,0.92);
-  border: 1px solid rgba(196,149,106,0.3);
+  background: var(--player-surface, rgba(13,11,9,0.92));
+  border: 1px solid var(--player-border, rgba(196,149,106,0.3));
   border-radius: 8px;
   padding: 8px 14px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
@@ -39,14 +39,14 @@
 
 .timeline-map-tooltip-desc {
   font-size: 10px;
-  color: rgba(232,221,208,0.6);
+  color: var(--player-text-secondary, rgba(232,221,208,0.6));
   margin-top: 2px;
 }
 
 /* ── Map control theming ── */
 .timeline-map .maplibregl-ctrl-group {
-  background: rgba(26,21,16,0.8) !important;
-  border: 1px solid rgba(139,94,26,0.2) !important;
+  background: var(--player-surface, rgba(26,21,16,0.8)) !important;
+  border: 1px solid var(--player-border, rgba(139,94,26,0.2)) !important;
   border-radius: 6px !important;
 }
 
