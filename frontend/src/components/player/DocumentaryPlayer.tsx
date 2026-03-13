@@ -409,6 +409,7 @@ export function DocumentaryPlayer() {
 
           {/* Center: Logo */}
           <span
+            className="flex items-center gap-2"
             style={{
               fontFamily: 'var(--font-serif)',
               fontWeight: 400,
@@ -418,6 +419,7 @@ export function DocumentaryPlayer() {
               color: 'var(--glow-primary)',
             }}
           >
+            <img src="/logo.png" alt="AI Historian" className="h-5 w-auto brightness-90" />
             AI Historian
           </span>
 

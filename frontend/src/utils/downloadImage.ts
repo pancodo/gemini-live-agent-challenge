@@ -5,7 +5,7 @@
  * Falls back to opening in a new tab if everything fails.
  */
 
-const BACKEND_BASE = import.meta.env.VITE_API_URL ?? '';
+const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 function isGcsUrl(url: string): boolean {
   return (
