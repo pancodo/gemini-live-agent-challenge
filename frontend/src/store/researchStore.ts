@@ -6,7 +6,7 @@ import type { AgentState, EntityHighlight, EvaluatedSource, Segment } from '../t
 const MAX_EVALUATED_SOURCES = 50;
 
 export interface PhaseEntry {
-  phase: 1 | 2 | 3 | 4 | 5;
+  phase: number;
   label: string;
   messages: string[];
   startedAt: number;
@@ -25,7 +25,7 @@ interface ResearchStore {
   setSegment: (segmentId: string, state: Partial<Segment>) => void;
   appendSegmentImage: (segmentId: string, imageUrl: string) => void;
   updateStats: (stats: Partial<ResearchStore['stats']>) => void;
-  addPhaseMessage: (phase: 1 | 2 | 3 | 4 | 5, label: string, message: string) => void;
+  addPhaseMessage: (phase: number, label: string, message: string) => void;
   addEvaluatedSource: (agentId: string, source: EvaluatedSource) => void;
   setScanEntities: (entities: string[]) => void;
   setEntityHighlights: (segmentId: string, highlights: EntityHighlight[]) => void;
