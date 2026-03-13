@@ -34,8 +34,8 @@ const PHASE_LABELS: [string, string][] = [
 ];
 
 function agentPhase(id: string): number {
-  if (id.startsWith('scan')) return 0;
-  if (id.startsWith('research')) return 1;
+  if (id.startsWith('scan') || id.startsWith('document')) return 0;
+  if (id.startsWith('research') || id.startsWith('scene')) return 1;
   if (id.startsWith('aggregat') || id.startsWith('script')) return 2;
   if (id.startsWith('visual')) return 3;
   return 1;
@@ -126,11 +126,11 @@ function StatButton({ label, value, popover }: StatButtonProps) {
         {open && (
           <motion.div
             key="popover"
-            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            exit={{ opacity: 0, y: 4, scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-            className="absolute left-0 top-[calc(100%+8px)] z-50 w-72 max-h-72 overflow-y-auto rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] shadow-lg p-3"
+            className="absolute left-0 bottom-[calc(100%+8px)] z-[200] w-72 max-h-72 overflow-y-auto rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] shadow-lg p-3"
           >
             {popover}
           </motion.div>
