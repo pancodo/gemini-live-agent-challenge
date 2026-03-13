@@ -237,9 +237,11 @@ export function VoiceLayer() {
     setConversationMode(isConversing);
   }, [state, isPlayerOpen, setConversationMode]);
 
-  // Hide on upload page (after all hooks per React rules)
+  // Hide on landing page and during pipeline processing (voice is useless until documentary is ready)
   const location = useLocation();
+  const sessionStatus = useSessionStore((s) => s.status);
   if (location.pathname === '/') return null;
+  if (location.pathname === '/workspace' && (sessionStatus === 'processing' || sessionStatus === 'uploading')) return null;
 
   return (
     <VoiceButton
