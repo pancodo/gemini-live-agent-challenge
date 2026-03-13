@@ -122,7 +122,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     return (
       <div
         className="absolute inset-0"
-        style={{ background: '#0d0b09' }}
+        style={{ background: 'var(--player-bg)' }}
       />
     );
   }
@@ -131,7 +131,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     return (
       <div
         className="absolute inset-0 flex flex-col items-center justify-center"
-        style={{ background: '#0d0b09' }}
+        style={{ background: 'var(--player-bg)' }}
       >
         {/* Ornamental pulse ring */}
         <div
@@ -150,7 +150,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             fontSize: 11,
             textTransform: 'uppercase',
             letterSpacing: '0.3em',
-            color: 'rgba(232,221,208,0.3)',
+            color: 'var(--player-text-dim)',
           }}
         >
           Loading visuals…
@@ -160,7 +160,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
           }}
         />
       </div>
@@ -183,7 +183,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
           }}
         />
       </div>
@@ -261,7 +261,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, rgba(0,0,0,0.85) 100%)',
+            'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
         }}
       />
     </div>

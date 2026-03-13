@@ -175,11 +175,11 @@ export function TestMapPage() {
   }, [lastPinClicked]);
 
   return (
-    <div className="w-screen h-screen flex flex-col" style={{ background: '#0d0b09' }}>
+    <div className="w-screen h-screen flex flex-col player-root" style={{ background: 'var(--player-bg)' }}>
       {/* Toolbar */}
       <div
         className="flex items-center gap-3 px-5 py-3 z-10 flex-shrink-0"
-        style={{ background: 'rgba(26,21,16,0.95)', borderBottom: '1px solid rgba(139,94,26,0.15)' }}
+        style={{ background: 'var(--player-surface)', borderBottom: '1px solid var(--player-border)' }}
       >
         {/* Mode switcher */}
         <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--muted)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
@@ -250,7 +250,7 @@ export function TestMapPage() {
             className="h-full flex items-center justify-center"
             style={{
               width: mapViewMode === 'split' ? '50%' : '100%',
-              background: 'linear-gradient(135deg, #1a1510 0%, #0d0b09 100%)',
+              background: 'var(--player-bg)',
               transition: 'width 0.5s ease',
             }}
           >
@@ -291,8 +291,8 @@ export function TestMapPage() {
         <div
           className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30"
           style={{
-            background: 'rgba(26,21,16,0.95)',
-            border: '1px solid rgba(196,149,106,0.4)',
+            background: 'var(--player-surface)',
+            border: '1px solid var(--player-border)',
             borderRadius: 8,
             padding: '10px 20px',
             fontFamily: 'var(--font-sans)',

@@ -65,7 +65,7 @@ export function BranchTree({
                   height: 5,
                   backgroundColor: isActive
                     ? 'var(--gold)'
-                    : 'rgba(232, 221, 208, 0.3)',
+                    : 'var(--player-text-dim)',
                   marginLeft: branch.depth * 8,
                 }}
               />
@@ -75,8 +75,8 @@ export function BranchTree({
                 className="line-clamp-2 text-[11px] leading-[1.4] font-sans"
                 style={{
                   color: isActive
-                    ? 'rgba(232, 221, 208, 0.9)'
-                    : 'rgba(232, 221, 208, 0.6)',
+                    ? 'var(--player-text)'
+                    : 'var(--player-text-secondary)',
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
