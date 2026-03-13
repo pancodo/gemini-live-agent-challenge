@@ -109,14 +109,14 @@ const router = createBrowserRouter([
       },
       { path: '/workspace', element: <WorkspaceGuard /> },
       { path: '/player/:segmentId', element: <PlayerGuard /> },
-      {
+      ...(import.meta.env.DEV ? [{
         path: '/test-map',
         element: (
           <Suspense fallback={<PageFallback />}>
             <TestMapPage />
           </Suspense>
         ),
-      },
+      }] : []),
       {
         path: '*',
         element: (

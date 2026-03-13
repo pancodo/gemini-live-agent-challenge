@@ -295,7 +295,7 @@ export function DocumentaryPlayer() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.5 }}
-              className="relative h-full"
+              className="absolute top-0 right-0 h-full"
               style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
             >
               <TimelineMap onPinClick={handlePinClick} />
@@ -313,7 +313,7 @@ export function DocumentaryPlayer() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.4, delay: 0.8 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20"
+            className="absolute bottom-44 left-1/2 -translate-x-1/2 z-20"
             style={{
               background: 'rgba(26,21,16,0.95)',
               border: '1px solid rgba(196,149,106,0.3)',
