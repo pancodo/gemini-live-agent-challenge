@@ -38,6 +38,8 @@ export function LivingPortrait({
   simulateAudio = false,
 }: LivingPortraitProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
   const analyserNode = useVoiceStore((s) => s.analyserNode);
   const voiceState = useVoiceStore((s) => s.state);
   const reducedMotion = useReducedMotion();
@@ -51,10 +53,10 @@ export function LivingPortrait({
     simulateAudio,
   });
 
-  // Notify parent when loaded
+  // Notify parent when loaded (ref pattern avoids re-firing on unstable callbacks)
   useEffect(() => {
-    if (isLoaded) onLoad?.();
-  }, [isLoaded, onLoad]);
+    if (isLoaded) onLoadRef.current?.();
+  }, [isLoaded]);
 
   const isSpeaking = voiceState === 'historian_speaking';
   const isListening = voiceState === 'listening';
