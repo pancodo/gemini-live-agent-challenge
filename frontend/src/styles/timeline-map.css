@@ -1,0 +1,24 @@
+/* Timeline Map — static styles extracted from TimelineMap.tsx */
+
+@keyframes pin-pulse {
+  0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+}
+
+.timeline-map .maplibregl-ctrl-group {
+  background: rgba(26,21,16,0.8) !important;
+  border: 1px solid rgba(139,94,26,0.2) !important;
+  border-radius: 6px !important;
+}
+
+.timeline-map .maplibregl-ctrl-group button {
+  border: none !important;
+}
+
+.timeline-map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid rgba(139,94,26,0.15) !important;
+}
+
+.timeline-map .maplibregl-ctrl-group button span {
+  filter: invert(0.7) sepia(0.3) !important;
+}

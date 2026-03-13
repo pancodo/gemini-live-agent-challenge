@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { usePlayerStore } from '../../store/playerStore';
 import { useSegmentGeo } from '../../hooks/useSegmentGeo';
 import mapStyle from '../../styles/map-style.json';
+import '../../styles/timeline-map.css';
 import type { GeoEvent, GeoRoute } from '../../types';
 
 const ROUTE_SOURCE_PREFIX = 'route-';
@@ -38,13 +39,22 @@ function TimelineMapInner({
     };
     container.addEventListener('wheel', preventBrowserZoom, { passive: false });
 
+    // Inject Stadia Maps API key into tile URLs if available
+    const stadiaKey = import.meta.env.VITE_STADIA_API_KEY as string | undefined;
+    const style = JSON.parse(JSON.stringify(mapStyle)) as maplibregl.StyleSpecification;
+    if (stadiaKey) {
+      const src = (style.sources as Record<string, { url?: string }>)['openmaptiles'];
+      if (src?.url) src.url = `${src.url}?api_key=${stadiaKey}`;
+      if (style.glyphs) style.glyphs = `${style.glyphs}?api_key=${stadiaKey}`;
+    }
+
     const map = new maplibregl.Map({
       container,
-      style: mapStyle as maplibregl.StyleSpecification,
+      style,
       center: [30, 35],
       zoom: 3,
       attributionControl: false,
-      fadeDuration: 0,
+      fadeDuration: 200,
     });
 
     map.addControl(
@@ -309,28 +319,7 @@ function TimelineMapInner({
   }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute]);
 
   return (
-    <div className="relative w-full h-full">
-      <style>{`
-        @keyframes pin-pulse {
-          0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
-          100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
-        }
-        .maplibregl-ctrl-group {
-          background: rgba(26,21,16,0.8) !important;
-          border: 1px solid rgba(139,94,26,0.2) !important;
-          border-radius: 6px !important;
-        }
-        .maplibregl-ctrl-group button {
-          border: none !important;
-        }
-        .maplibregl-ctrl-group button + button {
-          border-top: 1px solid rgba(139,94,26,0.15) !important;
-        }
-        .maplibregl-ctrl-group button span {
-          filter: invert(0.7) sepia(0.3) !important;
-        }
-      `}</style>
-
+    <div className="relative w-full h-full timeline-map">
       <div
         ref={containerRef}
         className="w-full h-full"
