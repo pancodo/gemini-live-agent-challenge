@@ -302,8 +302,8 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
       onMouseMove={handleMouseMove}
       onClick={() => onClick(agent.id)}
       className={`agent-card ${statusClass} relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-3 cursor-pointer hover:z-10`}
-      whileHover={reducedMotion ? undefined : { scale: 1.01 }}
-      whileTap={reducedMotion ? undefined : { scale: 0.98 }}
+      whileHover={reducedMotion ? undefined : { y: -1 }}
+      whileTap={reducedMotion ? undefined : { scale: 0.99 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       role="button"
       tabIndex={0}
@@ -557,7 +557,7 @@ export function ResearchPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Scrollable content area */}
-      <div className="flex-1 flex flex-col gap-2 overflow-y-auto px-4 pt-3 pb-16">
+      <div className="flex-1 flex flex-col gap-2 overflow-y-auto overflow-x-hidden px-5 pt-3 pb-16">
         {/* Section Header */}
         <div>
           <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em] text-[var(--gold)] mb-1 text-center">
