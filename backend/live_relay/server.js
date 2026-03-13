@@ -259,6 +259,7 @@ async function maybeGenerateIllustration(sessionId, transcript, clientWs) {
         type: 'live_illustration',
         imageUrl,
         caption,
+        query: transcript,
       }));
     }
   } catch (err) {
