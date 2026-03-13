@@ -154,9 +154,13 @@ function PhaseBlock({
   onAgentClick,
 }: PhaseBlockProps) {
   const [collapsed, setCollapsed] = useState(false);
+  // Track whether the user manually toggled this phase open/closed.
+  // When true, auto-collapse is suppressed so the user can read at their pace.
+  const userToggledRef = useRef(false);
 
-  // Auto-collapse completed phases after 2 seconds
+  // Auto-collapse completed phases after 2 seconds — unless user manually opened it
   useEffect(() => {
+    if (userToggledRef.current) return;
     if (!isActive) {
       const allDone = phaseAgents.length > 0 && phaseAgents.every(
         (a) => a.status === 'done' || a.status === 'error',
@@ -196,7 +200,7 @@ function PhaseBlock({
       {/* Phase header — clickable to toggle collapse */}
       <button
         type="button"
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={() => { userToggledRef.current = true; setCollapsed((c) => !c); }}
         className="w-full flex items-center gap-2 text-left cursor-pointer bg-transparent border-none p-0 mb-0"
         aria-expanded={!collapsed}
       >
