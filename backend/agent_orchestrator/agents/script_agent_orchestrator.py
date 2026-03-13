@@ -1,6 +1,6 @@
 """Phase III of the AI Historian documentary pipeline: Script Generation.
 
-Wraps the Script Agent (gemini-2.0-pro) in a custom ``BaseAgent`` orchestrator
+Wraps the Script Agent (gemini-2.5-flash) in a custom ``BaseAgent`` orchestrator
 that handles SSE emission, output parsing, and Firestore persistence.
 
 Architecture
@@ -312,7 +312,7 @@ def _make_inner_script_agent() -> Agent:
     """Create a fresh script Agent per pipeline run — ADK agents cannot be reused."""
     return Agent(
         name="script_agent",
-        model="gemini-2.0-flash",  # Was gemini-2.0-pro — switch back to pro before submission
+        model="gemini-2.5-flash",
         description=(
             "Generates documentary segments grounded in scene briefs and "
             "aggregated research. One segment per SceneBrief."
@@ -451,7 +451,7 @@ async def _write_segments_to_firestore(
 class ScriptAgentOrchestrator(BaseAgent):
     """Phase III orchestrator: run Script Agent → parse → store → emit events.
 
-    Wraps the inner ``_INNER_SCRIPT_AGENT`` (gemini-2.0-pro ADK Agent) in the
+    Wraps the inner ``_INNER_SCRIPT_AGENT`` (gemini-2.5-flash ADK Agent) in the
     same BaseAgent orchestrator pattern used by Phases I and II. This gives
     Phase III full SSE visibility without requiring the inner ADK Agent to know
     anything about the SSE transport.
@@ -556,6 +556,7 @@ class ScriptAgentOrchestrator(BaseAgent):
                     build_agent_status_event(
                         agent_id="script_agent",
                         status="error",
+                        query="Generating documentary narration and visual descriptions",
                         elapsed=round(t_script_elapsed, 1),
                     ),
                 )
@@ -586,6 +587,7 @@ class ScriptAgentOrchestrator(BaseAgent):
                     build_agent_status_event(
                         agent_id="script_agent",
                         status="error",
+                        query="Generating documentary narration and visual descriptions",
                         elapsed=round(t_script_elapsed, 1),
                     ),
                 )
@@ -675,6 +677,7 @@ class ScriptAgentOrchestrator(BaseAgent):
                 build_agent_status_event(
                     agent_id="script_agent",
                     status="done",
+                    query="Generating documentary narration and visual descriptions",
                     elapsed=round(t_total_elapsed, 1),
                     facts=[
                         f"{len(segments)} segment(s) scripted and written to Firestore",
@@ -713,7 +716,7 @@ def build_script_agent_orchestrator(
     return ScriptAgentOrchestrator(
         name="script_agent_orchestrator",
         description=(
-            "Phase III: Runs the Script Agent (gemini-2.0-pro) to generate "
+            "Phase III: Runs the Script Agent (gemini-2.5-flash) to generate "
             "narration and visual descriptions for each SceneBrief, then "
             "validates the output, writes segments to Firestore, and emits "
             "segment_update SSE events so the frontend Expedition Log updates."
