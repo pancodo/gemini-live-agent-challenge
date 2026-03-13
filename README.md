@@ -441,9 +441,15 @@ cd frontend && pnpm install && pnpm dev
 │                                       + RAG injection on inputTranscript events
 │
 └── docs/
-    ├── architecture-diagram.md         Full + compact Mermaid diagrams
-    ├── DEMO_SCRIPT.md                  7-shot demo video shot list with timing
-    └── IMPROVEMENT_IDEAS.md            Research-backed feature backlog
+    ├── spec/                            Product specs (PRD, SRS, FRONTEND_PLAN, RESOURCES)
+    ├── project/                         Tasks, UI improvements, feature backlog
+    ├── architecture/                    Diagrams and generator script
+    │   ├── architecture-diagram.md      Full + compact Mermaid diagrams
+    │   └── architecture-diagram.png     Generated PNG
+    ├── demo/                            Demo script and interactive prototype
+    │   └── DEMO_SCRIPT.md              7-shot demo video shot list with timing
+    ├── blog/                            Blog drafts and posting strategy
+    └── plans/                           Dated engineering design documents
 ```
 
 ---

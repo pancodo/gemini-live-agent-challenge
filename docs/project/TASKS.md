@@ -441,7 +441,7 @@ Must include:
   5. `cd frontend && pnpm install && pnpm dev`
 
 ### S7 · Demo Video (4 minutes max — required submission artifact)
-Follow the script in `PRD.md §10`. Record together. Show only real working software — no mockups or slides in the demo portion. Captions/subtitles required if any non-English speech.
+Follow the script in `docs/spec/PRD.md §10`. Record together. Show only real working software — no mockups or slides in the demo portion. Captions/subtitles required if any non-English speech.
 
 ### S8 · Google Developer Group Membership (+0.2 bonus)
 Both Berkay and Efe join GDG. Include both public profile links in the Devpost submission form.
