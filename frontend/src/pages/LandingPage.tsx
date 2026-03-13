@@ -171,6 +171,7 @@ function LandingNav() {
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
       >
+        <img src="/logo.png" alt="AI Historian" className="h-7 w-auto" />
         <span
           className="text-[13px] tracking-[0.35em] uppercase"
           style={{ fontFamily: 'var(--font-serif)', color: C.goldBright, fontWeight: 300 }}
@@ -310,6 +311,16 @@ function HeroSection() {
         style={{ opacity: heroOpacity }}
         className="relative z-10 flex flex-col items-center text-center px-6 pt-24 pb-16 max-w-4xl mx-auto"
       >
+        {/* Logo */}
+        <motion.img
+          src="/logo.png"
+          alt="AI Historian"
+          className="h-20 w-auto mb-6"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.1, ease: EASE }}
+        />
+
         {/* Label */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
