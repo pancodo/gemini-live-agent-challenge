@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, useCallback } from 'react';
+import { Component, useEffect, useRef, useCallback, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -10,7 +10,41 @@ import type { GeoEvent, GeoRoute } from '../../types';
 
 const ROUTE_SOURCE_PREFIX = 'route-';
 const ROUTE_LAYER_PREFIX = 'route-layer-';
-const PIN_ANIMATION_DELAY = 200;
+const PIN_SOURCE = 'pin-source';
+const PIN_GLOW_CIRCLE = 'pin-glow-circles';
+const PIN_GLOW_DIAMOND = 'pin-glow-diamonds';
+const PIN_PULSE_CIRCLE = 'pin-pulse-circles';
+const PIN_PULSE_DIAMOND = 'pin-pulse-diamonds';
+const PIN_CIRCLE_LAYER = 'pin-circles';
+const PIN_DIAMOND_LAYER = 'pin-diamonds';
+
+const ALL_PIN_LAYERS = [
+  PIN_DIAMOND_LAYER, PIN_CIRCLE_LAYER,
+  PIN_PULSE_DIAMOND, PIN_PULSE_CIRCLE,
+  PIN_GLOW_DIAMOND, PIN_GLOW_CIRCLE,
+];
+
+/** Build a GeoJSON FeatureCollection from geo events */
+function eventsToGeoJSON(events: GeoEvent[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: events.map((e, i) => ({
+      type: 'Feature' as const,
+      properties: {
+        name: e.name,
+        era: e.era ?? '',
+        description: e.description ?? '',
+        type: e.type,
+        index: i,
+        isBattle: e.type === 'battle' ? 1 : 0,
+      },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [e.lng, e.lat],
+      },
+    })),
+  };
+}
 
 function TimelineMapInner({
   onPinClick,
@@ -19,11 +53,16 @@ function TimelineMapInner({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
-  const pinTimeoutIds = useRef<ReturnType<typeof setTimeout>[]>([]);
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
   const geoEpochRef = useRef(0);
   const mapReadyRef = useRef(false);
+  const [tooltipInfo, setTooltipInfo] = useState<{
+    name: string;
+    era: string;
+    description: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const { geo } = useSegmentGeo(currentSegmentId);
@@ -32,14 +71,12 @@ function TimelineMapInner({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Prevent ctrl+scroll from triggering browser zoom on the map
     const container = containerRef.current;
     const preventBrowserZoom = (e: WheelEvent) => {
       if (e.ctrlKey) e.preventDefault();
     };
     container.addEventListener('wheel', preventBrowserZoom, { passive: false });
 
-    // Inject Stadia Maps API key into tile URLs if available
     const stadiaKey = import.meta.env.VITE_STADIA_API_KEY as string | undefined;
     const style = JSON.parse(JSON.stringify(mapStyle)) as maplibregl.StyleSpecification;
     if (stadiaKey) {
@@ -73,11 +110,114 @@ function TimelineMapInner({
     };
   }, []);
 
-  const clearMarkers = useCallback(() => {
-    for (const id of pinTimeoutIds.current) clearTimeout(id);
-    pinTimeoutIds.current = [];
-    for (const m of markersRef.current) m.remove();
-    markersRef.current = [];
+  // ── Setup interaction handlers (once) ────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const pinLayers = [PIN_CIRCLE_LAYER, PIN_DIAMOND_LAYER];
+
+    const setGlowIntensity = (intense: boolean) => {
+      const opacity = intense ? 0.35 : 0.15;
+      const radius = intense ? 26 : 20;
+      for (const id of [PIN_GLOW_CIRCLE, PIN_GLOW_DIAMOND]) {
+        try {
+          map.setPaintProperty(id, 'circle-opacity', opacity);
+          map.setPaintProperty(id, 'circle-radius', radius);
+        } catch { /* layer may not exist yet */ }
+      }
+    };
+
+    const onMouseEnter = (e: maplibregl.MapMouseEvent) => {
+      map.getCanvas().style.cursor = 'pointer';
+      setGlowIntensity(true);
+      const f = map.queryRenderedFeatures(e.point, { layers: pinLayers })[0];
+      if (f) {
+        const props = f.properties as Record<string, string>;
+        setTooltipInfo({
+          name: props.name ?? '',
+          era: props.era ?? '',
+          description: props.description ?? '',
+          x: e.point.x,
+          y: e.point.y,
+        });
+      }
+    };
+
+    const onMouseLeave = () => {
+      map.getCanvas().style.cursor = '';
+      setGlowIntensity(false);
+      setTooltipInfo(null);
+    };
+
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      const f = map.queryRenderedFeatures(e.point, { layers: pinLayers })[0];
+      if (f) {
+        const props = f.properties as Record<string, string>;
+        setTooltipInfo({
+          name: props.name ?? '',
+          era: props.era ?? '',
+          description: props.description ?? '',
+          x: e.point.x,
+          y: e.point.y,
+        });
+      } else {
+        setTooltipInfo(null);
+      }
+    };
+
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      const f = map.queryRenderedFeatures(e.point, { layers: pinLayers })[0];
+      if (f) {
+        const name = (f.properties as Record<string, string>).name;
+        if (name) onPinClick?.(name);
+      }
+    };
+
+    const setupListeners = () => {
+      for (const layer of pinLayers) {
+        map.on('mouseenter', layer, onMouseEnter);
+        map.on('mouseleave', layer, onMouseLeave);
+        map.on('mousemove', layer, onMouseMove);
+        map.on('click', layer, onClick);
+      }
+    };
+
+    // Listeners need layers to exist; set up after first geo render
+    // We use a one-time 'sourcedata' listener as fallback
+    if (map.getLayer(PIN_CIRCLE_LAYER)) {
+      setupListeners();
+    } else {
+      const onSource = () => {
+        if (map.getLayer(PIN_CIRCLE_LAYER)) {
+          map.off('sourcedata', onSource);
+          setupListeners();
+        }
+      };
+      map.on('sourcedata', onSource);
+    }
+
+    return () => {
+      for (const layer of pinLayers) {
+        try { map.off('mouseenter', layer, onMouseEnter); } catch { /* ok */ }
+        try { map.off('mouseleave', layer, onMouseLeave); } catch { /* ok */ }
+        try { map.off('mousemove', layer, onMouseMove); } catch { /* ok */ }
+        try { map.off('click', layer, onClick); } catch { /* ok */ }
+      }
+    };
+  }, [onPinClick]);
+
+  const pulseRafRef = useRef<number>(0);
+
+  const clearPinLayers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (pulseRafRef.current) cancelAnimationFrame(pulseRafRef.current);
+    pulseRafRef.current = 0;
+    for (const id of ALL_PIN_LAYERS) {
+      try { map.removeLayer(id); } catch { /* ok */ }
+    }
+    try { map.removeSource(PIN_SOURCE); } catch { /* ok */ }
   }, []);
 
   const clearRoutes = useCallback(() => {
@@ -87,138 +227,134 @@ function TimelineMapInner({
     if (!style?.layers) return;
     for (const layer of style.layers) {
       if (layer.id.startsWith(ROUTE_LAYER_PREFIX)) {
-        try { map.removeLayer(layer.id); } catch { /* already removed */ }
+        try { map.removeLayer(layer.id); } catch { /* ok */ }
       }
     }
     for (const sourceId of Object.keys(style.sources ?? {})) {
       if (sourceId.startsWith(ROUTE_SOURCE_PREFIX)) {
-        try { map.removeSource(sourceId); } catch { /* already removed */ }
+        try { map.removeSource(sourceId); } catch { /* ok */ }
       }
     }
   }, []);
 
+  const addPins = useCallback((events: GeoEvent[]) => {
+    const map = mapRef.current;
+    if (!map) return;
 
-  // ── Create a pin DOM element ──────────────────────────────
-  const createPinElement = useCallback(
-    (event: GeoEvent, index: number) => {
-      const el = document.createElement('div');
-      el.className = 'timeline-map-pin';
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      const isBattle = event.type === 'battle';
-      const size = isBattle ? 18 : 16;
-      const color = isBattle ? '#c0392b' : '#c4956a';
+    map.addSource(PIN_SOURCE, {
+      type: 'geojson',
+      data: eventsToGeoJSON(events),
+    });
 
-      el.style.cssText = `
-        width: ${size}px;
-        height: ${size}px;
-        border-radius: ${isBattle ? '3px' : '50%'};
-        background: ${color};
-        border: 2px solid rgba(255,255,255,0.3);
-        box-shadow: 0 0 16px ${color}, 0 0 32px ${color}80;
-        cursor: pointer;
-        transition: box-shadow 0.2s ease;
-        ${isBattle ? 'rotate: 45deg;' : ''}
-        position: relative;
-        z-index: 10;
-      `;
+    // ── Glow layers (large blurred circles behind the pins) ──
+    map.addLayer({
+      id: PIN_GLOW_CIRCLE,
+      type: 'circle',
+      source: PIN_SOURCE,
+      filter: ['==', ['get', 'isBattle'], 0],
+      paint: {
+        'circle-radius': 20,
+        'circle-color': '#c4956a',
+        'circle-opacity': 0.15,
+        'circle-blur': 1,
+      },
+    });
 
-      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    map.addLayer({
+      id: PIN_GLOW_DIAMOND,
+      type: 'circle',
+      source: PIN_SOURCE,
+      filter: ['==', ['get', 'isBattle'], 1],
+      paint: {
+        'circle-radius': 20,
+        'circle-color': '#c0392b',
+        'circle-opacity': 0.15,
+        'circle-blur': 1,
+      },
+    });
 
-      if (prefersReduced) {
-        el.style.opacity = '1';
-      } else {
-        el.style.opacity = '0';
-        const tid = setTimeout(() => {
-          el.style.transition = 'opacity 0.4s ease, box-shadow 0.2s ease';
-          el.style.opacity = '1';
-        }, index * PIN_ANIMATION_DELAY);
-        pinTimeoutIds.current.push(tid);
-
-        const pulse = document.createElement('div');
-        pulse.style.cssText = `
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: ${size * 3}px;
-          height: ${size * 3}px;
-          border-radius: 50%;
-          border: 1px solid ${color}60;
-          transform: translate(-50%, -50%);
-          animation: pin-pulse 2s ease-out infinite;
-          animation-delay: ${index * PIN_ANIMATION_DELAY + 400}ms;
-          pointer-events: none;
-        `;
-        el.appendChild(pulse);
-      }
-
-      // Invisible hit area so hover doesn't flicker from scale transform
-      const hitArea = document.createElement('div');
-      hitArea.style.cssText = `
-        position: absolute;
-        top: 50%; left: 50%;
-        width: ${size * 3}px; height: ${size * 3}px;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        pointer-events: auto;
-      `;
-      el.appendChild(hitArea);
-
-      // Tooltip container attached directly to the pin element (no MapLibre Popup auto-pan)
-      const tooltip = document.createElement('div');
-      tooltip.className = 'timeline-map-tooltip';
-      tooltip.style.cssText = `
-        position: absolute;
-        bottom: calc(100% + 10px);
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(13,11,9,0.92);
-        border: 1px solid rgba(196,149,106,0.3);
-        border-radius: 8px;
-        padding: 8px 14px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-        pointer-events: none;
-        white-space: nowrap;
-        opacity: 0;
-        transition: opacity 0.15s ease;
-        z-index: 20;
-      `;
-      const nameSpan = document.createElement('span');
-      nameSpan.style.cssText = 'font-family:var(--font-serif);font-size:14px;color:#c4956a;letter-spacing:0.04em';
-      nameSpan.textContent = event.name;
-      tooltip.appendChild(nameSpan);
-      if (event.era) {
-        const eraSpan = document.createElement('span');
-        eraSpan.style.cssText = 'font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#8A7A62;margin-left:6px';
-        eraSpan.textContent = event.era;
-        tooltip.appendChild(eraSpan);
-      }
-      if (event.description) {
-        const descDiv = document.createElement('div');
-        descDiv.style.cssText = 'font-size:10px;color:rgba(232,221,208,0.6);margin-top:2px';
-        descDiv.textContent = event.description;
-        tooltip.appendChild(descDiv);
-      }
-      el.appendChild(tooltip);
-
-      hitArea.addEventListener('mouseenter', () => {
-        tooltip.style.opacity = '1';
-        el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
+    // ── Pulse layers (expanding rings) ──
+    if (!reducedMotion) {
+      map.addLayer({
+        id: PIN_PULSE_CIRCLE,
+        type: 'circle',
+        source: PIN_SOURCE,
+        filter: ['==', ['get', 'isBattle'], 0],
+        paint: {
+          'circle-radius': 8,
+          'circle-color': 'transparent',
+          'circle-stroke-color': '#c4956a',
+          'circle-stroke-width': 1,
+          'circle-opacity': 0.6,
+          'circle-stroke-opacity': 0.6,
+        },
       });
 
-      hitArea.addEventListener('mouseleave', () => {
-        tooltip.style.opacity = '0';
-        el.style.boxShadow = `0 0 16px ${color}, 0 0 32px ${color}80`;
+      map.addLayer({
+        id: PIN_PULSE_DIAMOND,
+        type: 'circle',
+        source: PIN_SOURCE,
+        filter: ['==', ['get', 'isBattle'], 1],
+        paint: {
+          'circle-radius': 8,
+          'circle-color': 'transparent',
+          'circle-stroke-color': '#c0392b',
+          'circle-stroke-width': 1,
+          'circle-opacity': 0.6,
+          'circle-stroke-opacity': 0.6,
+        },
       });
 
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onPinClick?.(event.name);
-      });
+      // Animate pulse rings
+      const PULSE_DURATION = 2000;
+      const startTime = performance.now();
+      const animatePulse = () => {
+        if (!mapRef.current) return;
+        const elapsed = (performance.now() - startTime) % PULSE_DURATION;
+        const t = elapsed / PULSE_DURATION;
+        const radius = 8 + t * 22;          // 8 → 30
+        const opacity = 0.6 * (1 - t);      // 0.6 → 0
 
-      return el;
-    },
-    [onPinClick],
-  );
+        for (const id of [PIN_PULSE_CIRCLE, PIN_PULSE_DIAMOND]) {
+          try {
+            map.setPaintProperty(id, 'circle-radius', radius);
+            map.setPaintProperty(id, 'circle-stroke-opacity', opacity);
+          } catch { /* layer removed */ }
+        }
+        pulseRafRef.current = requestAnimationFrame(animatePulse);
+      };
+      pulseRafRef.current = requestAnimationFrame(animatePulse);
+    }
+
+    // ── Main pin layers (solid circles on top) ──
+    map.addLayer({
+      id: PIN_CIRCLE_LAYER,
+      type: 'circle',
+      source: PIN_SOURCE,
+      filter: ['==', ['get', 'isBattle'], 0],
+      paint: {
+        'circle-radius': 7,
+        'circle-color': '#c4956a',
+        'circle-stroke-color': 'rgba(255,255,255,0.3)',
+        'circle-stroke-width': 2,
+      },
+    });
+
+    map.addLayer({
+      id: PIN_DIAMOND_LAYER,
+      type: 'circle',
+      source: PIN_SOURCE,
+      filter: ['==', ['get', 'isBattle'], 1],
+      paint: {
+        'circle-radius': 7,
+        'circle-color': '#c0392b',
+        'circle-stroke-color': 'rgba(255,255,255,0.3)',
+        'circle-stroke-width': 2,
+      },
+    });
+  }, []);
 
   const addRoute = useCallback((route: GeoRoute, index: number) => {
     const map = mapRef.current;
@@ -268,8 +404,9 @@ function TimelineMapInner({
         pendingMoveEndRef.current = null;
       }
 
-      clearMarkers();
+      clearPinLayers();
       clearRoutes();
+      setTooltipInfo(null);
       geoEpochRef.current += 1;
 
       if (!geo) return;
@@ -281,18 +418,9 @@ function TimelineMapInner({
         map.off('moveend', onMoveEnd);
         pendingMoveEndRef.current = null;
 
-        // Guard against stale callback from a previous segment's fly-to
         if (geoEpochRef.current !== capturedEpoch) return;
 
-        for (let i = 0; i < geo.events.length; i++) {
-          const event = geo.events[i];
-          const el = createPinElement(event, reducedMotion ? 0 : i);
-
-          const marker = new maplibregl.Marker({ element: el })
-            .setLngLat([event.lng, event.lat])
-            .addTo(map);
-          markersRef.current.push(marker);
-        }
+        addPins(geo.events);
 
         for (let i = 0; i < geo.routes.length; i++) {
           addRoute(geo.routes[i], i);
@@ -310,13 +438,12 @@ function TimelineMapInner({
       });
     };
 
-    // Defer until map style is loaded (addSource/addLayer require it)
     if (mapReadyRef.current) {
       proceed();
     } else {
       map.once('load', proceed);
     }
-  }, [geo, clearMarkers, clearRoutes, createPinElement, addRoute]);
+  }, [geo, clearPinLayers, clearRoutes, addPins, addRoute]);
 
   return (
     <div className="relative w-full h-full timeline-map">
@@ -326,6 +453,25 @@ function TimelineMapInner({
         role="img"
         aria-label="Historical timeline map showing locations and routes for the current segment"
       />
+
+      {/* React-rendered tooltip (follows cursor, no DOM inside marker) */}
+      {tooltipInfo && (
+        <div
+          className="timeline-map-tooltip timeline-map-tooltip--visible"
+          style={{
+            left: tooltipInfo.x,
+            top: tooltipInfo.y,
+          }}
+        >
+          <span className="timeline-map-tooltip-name">{tooltipInfo.name}</span>
+          {tooltipInfo.era && (
+            <span className="timeline-map-tooltip-era">{tooltipInfo.era}</span>
+          )}
+          {tooltipInfo.description && (
+            <div className="timeline-map-tooltip-desc">{tooltipInfo.description}</div>
+          )}
+        </div>
+      )}
 
       {/* Vignette overlay */}
       <div
