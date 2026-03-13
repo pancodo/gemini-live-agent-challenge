@@ -12,7 +12,10 @@ import { PlayerSidebar } from './PlayerSidebar';
 import { ShareButton } from './ShareButton';
 import { HistorianAvatar } from '../voice/HistorianAvatar';
 import { useSessionStore } from '../../store/sessionStore';
+import { TimelineMap } from './TimelineMap';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
+import { toast } from 'sonner';
+import type { MapViewMode } from '../../types';
 
 /**
  * DocumentaryPlayer — Full-screen cinematic player.
@@ -27,6 +30,7 @@ import { downloadImage, downloadImages, downloadVideo } from '../../utils/downlo
 export function DocumentaryPlayer() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mapHintDismissed, setMapHintDismissed] = useState(false);
   const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
@@ -43,6 +47,26 @@ export function DocumentaryPlayer() {
   const isIdle = usePlayerStore((s) => s.isIdle);
   const setIdle = usePlayerStore((s) => s.setIdle);
   const open = usePlayerStore((s) => s.open);
+
+  const mapViewMode = usePlayerStore((s) => s.mapViewMode);
+  const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
+
+  const handlePinClick = useCallback((locationName: string) => {
+    const send = useVoiceStore.getState().sendTextToHistorian;
+    if (send) {
+      send(`Tell me more about ${locationName} and its historical significance.`);
+    } else {
+      toast('Connect voice to ask about locations', {
+        description: `Press Space or tap the voice button to ask about ${locationName}.`,
+      });
+    }
+  }, []);
+
+  const cycleMapMode = useCallback(() => {
+    const modes: MapViewMode[] = ['ken-burns', 'split', 'map'];
+    const idx = modes.indexOf(mapViewMode);
+    setMapViewMode(modes[(idx + 1) % modes.length]);
+  }, [mapViewMode, setMapViewMode]);
 
   const segmentsRecord = useResearchStore((s) => s.segments);
 
@@ -162,6 +186,9 @@ export function DocumentaryPlayer() {
   // ── Keyboard navigation ──────────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+
       if (e.key === 'ArrowLeft' && hasPrev) {
         navigateSegment('prev');
       } else if (e.key === 'ArrowRight' && hasNext) {
@@ -180,6 +207,8 @@ export function DocumentaryPlayer() {
             document.documentElement.requestFullscreen();
           }
         }
+      } else if (e.key === 'm' || e.key === 'M') {
+        cycleMapMode();
       } else if (e.key === ' ') {
         e.preventDefault();
         if (voiceState === 'idle') {
@@ -191,7 +220,7 @@ export function DocumentaryPlayer() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate, voiceState, setVoiceState]);
+  }, [hasPrev, hasNext, navigateSegment, sidebarOpen, navigate, voiceState, setVoiceState, cycleMapMode]);
 
   // ── Click-outside to close shortcuts tooltip ────────────────
   useEffect(() => {
@@ -235,21 +264,93 @@ export function DocumentaryPlayer() {
         }
       `}</style>
 
-      {/* Layer 1: Ken Burns Stage */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentSegmentId ?? 'empty'}
-          initial={{ opacity: 0, scale: 1.03 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: 'easeInOut' }}
-          className="absolute inset-0"
-        >
-          <KenBurnsStage
-            segment={currentSegment}
-            onActiveImageChange={handleActiveImageChange}
-          />
-        </motion.div>
+      {/* Layer 1: Visual stage — Ken Burns / Map / Split */}
+      <div className="absolute inset-0 flex">
+        {/* Ken Burns panel */}
+        <AnimatePresence mode="wait">
+          {mapViewMode !== 'map' && (
+            <motion.div
+              key={`kb-${currentSegmentId ?? 'empty'}`}
+              initial={{ opacity: 0, scale: 1.03 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="relative h-full"
+              style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
+            >
+              <KenBurnsStage
+                segment={currentSegment}
+                onActiveImageChange={handleActiveImageChange}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Map panel */}
+        <AnimatePresence>
+          {mapViewMode !== 'ken-burns' && (
+            <motion.div
+              key="map-panel"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="absolute top-0 right-0 h-full"
+              style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
+            >
+              <TimelineMap onPinClick={handlePinClick} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Map onboarding hint */}
+      <AnimatePresence>
+        {mapViewMode !== 'ken-burns' && !mapHintDismissed && (
+          <motion.div
+            key="map-hint"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.4, delay: 0.8 }}
+            className="absolute bottom-44 left-1/2 -translate-x-1/2 z-20"
+            style={{
+              background: 'rgba(26,21,16,0.95)',
+              border: '1px solid rgba(196,149,106,0.3)',
+              borderRadius: 10,
+              padding: '14px 20px',
+              maxWidth: 360,
+            }}
+          >
+            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--glow-primary)', marginBottom: 8 }}>
+              Live Time Travel Map
+            </p>
+            <ul style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'rgba(232,221,208,0.7)', lineHeight: 1.8, paddingLeft: 14, margin: 0 }}>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>M</strong> — cycle view: visuals / split / map</li>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>&larr; &rarr;</strong> — switch segments (map flies to new region)</li>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>Hover pins</strong> — see location name + era</li>
+              <li><strong style={{ color: 'var(--glow-primary)' }}>Click a pin</strong> — ask the historian about that place</li>
+            </ul>
+            <button
+              onClick={() => setMapHintDismissed(true)}
+              style={{
+                marginTop: 10,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 10,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                color: 'var(--muted)',
+                background: 'transparent',
+                border: '1px solid rgba(139,94,26,0.25)',
+                borderRadius: 4,
+                padding: '4px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              Got it
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Layer 1.5: Conversation mode — Historian avatar overlay */}
@@ -383,6 +484,46 @@ export function DocumentaryPlayer() {
               </span>
             )}
 
+            {/* Map view toggle */}
+            <button
+              onClick={cycleMapMode}
+              className="p-2 rounded transition-colors duration-200"
+              style={{
+                color: mapViewMode !== 'ken-burns'
+                  ? 'var(--glow-primary)'
+                  : 'rgba(232,221,208,0.6)',
+                background: mapViewMode !== 'ken-burns'
+                  ? 'rgba(196,149,106,0.15)'
+                  : 'transparent',
+                border: mapViewMode !== 'ken-burns'
+                  ? '1px solid rgba(196,149,106,0.3)'
+                  : '1px solid transparent',
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              aria-label={`Map view: ${mapViewMode}`}
+              title={`Map: ${mapViewMode === 'ken-burns' ? 'off' : mapViewMode} (M)`}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Globe/map icon */}
+                <circle cx="8" cy="8" r="6" />
+                <path d="M2 8h12" />
+                <path d="M8 2c-2 2-2 4 0 6s2 4 0 6" />
+              </svg>
+            </button>
+
             {/* Shortcuts hint */}
             <div className="relative">
               <button
@@ -423,6 +564,7 @@ export function DocumentaryPlayer() {
                 >
                   {'← →   Previous / Next chapter\n'}
                   {'Space  Toggle voice\n'}
+                  {'M      Cycle map view\n'}
                   {'F      Fullscreen\n'}
                   {'Esc    Back to workspace'}
                 </div>

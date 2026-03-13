@@ -1,0 +1,63 @@
+/* Timeline Map — styles for tooltips and map controls */
+
+/* ── Tooltip (React-rendered, follows cursor) ── */
+.timeline-map-tooltip {
+  position: absolute;
+  pointer-events: none;
+  white-space: nowrap;
+  background: rgba(13,11,9,0.92);
+  border: 1px solid rgba(196,149,106,0.3);
+  border-radius: 8px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  /* Offset from cursor so it doesn't block the pin */
+  margin-left: 12px;
+  margin-top: -40px;
+}
+
+.timeline-map-tooltip--visible {
+  opacity: 1;
+}
+
+.timeline-map-tooltip-name {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: #c4956a;
+  letter-spacing: 0.04em;
+}
+
+.timeline-map-tooltip-era {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8A7A62;
+  margin-left: 6px;
+}
+
+.timeline-map-tooltip-desc {
+  font-size: 10px;
+  color: rgba(232,221,208,0.6);
+  margin-top: 2px;
+}
+
+/* ── Map control theming ── */
+.timeline-map .maplibregl-ctrl-group {
+  background: rgba(26,21,16,0.8) !important;
+  border: 1px solid rgba(139,94,26,0.2) !important;
+  border-radius: 6px !important;
+}
+
+.timeline-map .maplibregl-ctrl-group button {
+  border: none !important;
+}
+
+.timeline-map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid rgba(139,94,26,0.15) !important;
+}
+
+.timeline-map .maplibregl-ctrl-group button span {
+  filter: invert(0.7) sepia(0.3) !important;
+}
