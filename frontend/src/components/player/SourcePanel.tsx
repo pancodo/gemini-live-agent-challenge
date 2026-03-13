@@ -127,7 +127,7 @@ export function SourcePanel({ sources }: SourcePanelProps) {
                       style={{
                         fontFamily: 'var(--font-sans)',
                         fontSize: 12,
-                        color: 'rgba(232,221,208,0.8)',
+                        color: 'var(--player-text)',
                         lineHeight: 1.4,
                       }}
                     >
@@ -138,7 +138,7 @@ export function SourcePanel({ sources }: SourcePanelProps) {
                       style={{
                         fontFamily: 'var(--font-sans)',
                         fontSize: 10,
-                        color: 'rgba(232,221,208,0.4)',
+                        color: 'var(--player-text-dim)',
                         lineHeight: 1.5,
                       }}
                     >
@@ -166,7 +166,7 @@ export function SourcePanel({ sources }: SourcePanelProps) {
                         style={{
                           fontFamily: 'var(--font-sans)',
                           fontSize: 10,
-                          color: 'rgba(232,221,208,0.35)',
+                          color: 'var(--player-text-dim)',
                         }}
                       >
                         x{src.acceptedBy.length} agent{src.acceptedBy.length !== 1 ? 's' : ''}
@@ -185,7 +185,7 @@ export function SourcePanel({ sources }: SourcePanelProps) {
             style={{
               fontFamily: 'var(--font-sans)',
               fontSize: 10,
-              color: 'rgba(232,221,208,0.35)',
+              color: 'var(--player-text-dim)',
             }}
           >
             + {overflow} more
