@@ -264,7 +264,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
             ) : (
               <span />
             )}
-            {segment.sources.length > 0 && (
+            {segment.sources?.length > 0 && (
               <Badge variant="muted">
                 {segment.sources.length} src
               </Badge>
@@ -286,7 +286,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         </h3>
 
         {/* Image thumbnails row */}
-        {segment.imageUrls.length > 0 && (
+        {segment.imageUrls?.length > 0 && (
           <div className="flex gap-1.5 mb-3 overflow-hidden">
             {segment.imageUrls.slice(0, 3).map((url, i) => (
               <div
