@@ -223,7 +223,10 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
-  const [zoom, setZoom] = useState(1.0);
+  // Base zoom offset so the PDF fills the panel better at "100%".
+  // The UI displays (zoom - ZOOM_BASE_OFFSET) so the user sees "100%".
+  const ZOOM_BASE_OFFSET = 0.25;
+  const [zoom, setZoom] = useState(1.0 + ZOOM_BASE_OFFSET);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -523,11 +526,11 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
               −
             </button>
             <button
-              onClick={() => setZoom(1.0)}
+              onClick={() => setZoom(1.0 + ZOOM_BASE_OFFSET)}
               aria-label="Reset zoom"
               className="px-2.5 py-1.5 text-[11px] font-sans tabular-nums text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)] transition-colors border-r border-[var(--bg4)] min-w-[3.5rem] text-center"
             >
-              {Math.round(zoom * 100)}%
+              {Math.round((zoom - ZOOM_BASE_OFFSET) * 100)}%
             </button>
             <button
               onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
