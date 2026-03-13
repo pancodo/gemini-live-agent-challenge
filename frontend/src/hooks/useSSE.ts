@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, startTransition } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useResearchStore } from '../store/researchStore';
+import { usePlayerStore } from '../store/playerStore';
 import type { SSEEvent } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
@@ -42,6 +43,8 @@ export function useSSE(sessionId: string | null): void {
       addEvaluatedSource: s.addEvaluatedSource,
     }))
   );
+
+  const setSegmentGeo = usePlayerStore((s) => s.setSegmentGeo);
 
   const processEvent = useCallback(
     (event: SSEEvent) => {
@@ -106,6 +109,15 @@ export function useSSE(sessionId: string | null): void {
           break;
         }
 
+        case 'geo_update':
+          if ('segmentId' in event && 'geo' in event) {
+            setSegmentGeo(
+              (event as import('../types').GeoUpdateEvent).segmentId,
+              (event as import('../types').GeoUpdateEvent).geo,
+            );
+          }
+          break;
+
         case 'error':
           // If error targets a specific agent, mark it as errored with message
           if (event.agentId) {
@@ -117,7 +129,7 @@ export function useSSE(sessionId: string | null): void {
           break;
       }
     },
-    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource],
+    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo],
   );
 
   const processEventRef = useRef(processEvent);
