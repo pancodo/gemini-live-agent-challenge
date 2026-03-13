@@ -173,9 +173,10 @@ export function TopNav() {
       <Link
         to="/"
         onClick={reset}
-        className="text-[11px] uppercase tracking-[0.4em] text-[var(--gold-d)] no-underline hover:no-underline"
+        className="flex items-center gap-2 text-[11px] uppercase tracking-[0.4em] text-[var(--gold-d)] no-underline hover:no-underline"
         style={{ fontFamily: 'var(--font-serif)' }}
       >
+        <img src="/logo.png" alt="AI Historian" className="h-6 w-auto" />
         AI Historian
       </Link>
 

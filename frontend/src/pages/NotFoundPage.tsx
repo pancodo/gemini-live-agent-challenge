@@ -3,13 +3,15 @@ import { motion } from 'motion/react';
 
 export function NotFoundPage() {
   return (
-    <main className="min-h-[calc(100vh-44px)] flex flex-col items-center justify-center gap-4 bg-[var(--bg)]">
+    <main className="h-full flex flex-col items-center justify-center gap-4 bg-[var(--bg)]">
       <motion.div
         className="flex flex-col items-center gap-4"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 260, damping: 22 }}
       >
+        <img src="/logo.png" alt="AI Historian" className="h-12 w-auto opacity-60 mb-2" />
+
         <span
           className="text-[72px] text-[var(--gold)] opacity-40 leading-none"
           style={{ fontFamily: 'var(--font-serif)', fontWeight: 400 }}

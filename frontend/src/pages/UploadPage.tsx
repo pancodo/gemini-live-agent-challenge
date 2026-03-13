@@ -327,8 +327,9 @@ export function UploadPage() {
   const setSession = useSessionStore((s) => s.setSession);
 
   return (
-    <main className="min-h-screen bg-[var(--bg)] flex flex-col">
+    <main className="h-full bg-[var(--bg)] flex flex-col overflow-y-auto">
       <section className="flex-1 flex flex-col items-center justify-center px-8 pb-8 pt-8">
+        <img src="/logo.png" alt="AI Historian" className="h-14 w-auto mb-5" />
         <h1
           className="text-[22px] text-[var(--text)] text-center mb-2"
           style={{ fontFamily: 'var(--font-serif)', fontWeight: 400 }}
