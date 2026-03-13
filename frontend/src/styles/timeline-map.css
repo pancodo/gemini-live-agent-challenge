@@ -43,6 +43,54 @@
   margin-top: 2px;
 }
 
+.timeline-map-tooltip-action {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gold, #8B5E1A);
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* ── Legend ── */
+.timeline-map-legend {
+  position: absolute;
+  bottom: 48px;
+  left: 12px;
+  z-index: 10;
+  background: var(--player-surface, rgba(13,11,9,0.85));
+  border: 1px solid var(--player-border, rgba(196,149,106,0.2));
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--player-text-secondary, rgba(232,221,208,0.6));
+  pointer-events: none;
+}
+
+.timeline-map-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.8;
+}
+
+.timeline-map-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.timeline-map-legend-line {
+  width: 14px;
+  height: 0;
+  border-top: 2px dashed;
+  flex-shrink: 0;
+}
+
 /* ── Map control theming ── */
 .timeline-map .maplibregl-ctrl-group {
   background: var(--player-surface, rgba(26,21,16,0.8)) !important;
