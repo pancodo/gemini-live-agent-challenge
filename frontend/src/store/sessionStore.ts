@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { SessionStatus, PersonaType } from '../types';
+import type { SessionStatus, PersonaType, ResearchMode } from '../types';
 
 export interface RecentSession {
   sessionId: string;
@@ -17,6 +17,7 @@ interface SessionStore {
   status: SessionStatus;
   language: string | null;
   persona: PersonaType;
+  researchMode: ResearchMode;
   visualBible: string | null;
   documentUrl: string | null;
   recentSessions: RecentSession[];
@@ -37,6 +38,7 @@ const initialState = {
   status: 'idle' as SessionStatus,
   language: null as string | null,
   persona: 'professor' as PersonaType,
+  researchMode: 'normal' as ResearchMode,
   visualBible: null as string | null,
   documentUrl: null as string | null,
   recentSessions: [] as RecentSession[],
@@ -93,6 +95,7 @@ export const useSessionStore = create<SessionStore>()(
         documentUrl: state.documentUrl,
         language: state.language,
         persona: state.persona,
+        researchMode: state.researchMode,
         recentSessions: state.recentSessions,
       }),
     },
