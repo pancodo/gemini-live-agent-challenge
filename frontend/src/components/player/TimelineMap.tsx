@@ -62,6 +62,7 @@ function TimelineMapInner({
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
   const geoEpochRef = useRef(0);
   const mapReadyRef = useRef(false);
+  const lastGeoRef = useRef<{ events: GeoEvent[]; routes: GeoRoute[] } | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{
     name: string;
     era: string;
@@ -117,6 +118,10 @@ function TimelineMapInner({
   }, []);
 
   // ── Swap map style when data-theme changes ──────────────
+  // Stored in a ref so the MutationObserver (registered once) always
+  // calls the latest versions without needing to re-observe.
+  const restoreGeoRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -129,6 +134,10 @@ function TimelineMapInner({
         if (src?.url) src.url = `${src.url}?api_key=${stadiaKey}`;
         if (newStyle.glyphs) newStyle.glyphs = `${newStyle.glyphs}?api_key=${stadiaKey}`;
       }
+
+      // setStyle removes all custom layers — re-add pins/routes once new style loads
+      map.once('style.load', () => restoreGeoRef.current());
+
       map.setStyle(newStyle);
     });
 
@@ -423,6 +432,18 @@ function TimelineMapInner({
     });
   }, []);
 
+  // Keep restoreGeoRef in sync with latest callbacks
+  restoreGeoRef.current = () => {
+    const saved = lastGeoRef.current;
+    if (!saved) return;
+    clearPinLayers();
+    clearRoutes();
+    addPins(saved.events);
+    for (let i = 0; i < saved.routes.length; i++) {
+      addRoute(saved.routes[i], i);
+    }
+  };
+
   // ── React to geo changes ──────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -439,8 +460,12 @@ function TimelineMapInner({
       setTooltipInfo(null);
       geoEpochRef.current += 1;
 
-      if (!geo) return;
+      if (!geo) {
+        lastGeoRef.current = null;
+        return;
+      }
 
+      lastGeoRef.current = { events: geo.events, routes: geo.routes };
       const capturedEpoch = geoEpochRef.current;
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
