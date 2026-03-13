@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { AgentState, EntityHighlight, EvaluatedSource, Segment } from '../types';
 
@@ -31,7 +32,7 @@ interface ResearchStore {
   reset: () => void;
 }
 
-export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((set) => ({
+export const useResearchStore = create<ResearchStore>()(persist(subscribeWithSelector((set) => ({
   agents: {},
   segments: {},
   stats: { sourcesFound: 0, factsVerified: 0, segmentsReady: 0 },
@@ -49,7 +50,7 @@ export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((s
     set((s) => ({
       segments: {
         ...s.segments,
-        [segmentId]: { ...s.segments[segmentId], ...partial },
+        [segmentId]: { ...{ id: segmentId, title: '', status: 'generating' as const, imageUrls: [], script: '', mood: '', sources: [], graphEdges: [] }, ...s.segments[segmentId], ...partial },
       },
     })),
   appendSegmentImage: (segmentId, imageUrl) =>
@@ -122,4 +123,21 @@ export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((s
       scanEntities: [],
       entityHighlights: {},
     }),
-})));
+})), {
+  name: 'ai-historian-research',
+  storage: {
+    getItem: (name) => {
+      const str = sessionStorage.getItem(name);
+      return str ? JSON.parse(str) : null;
+    },
+    setItem: (name, value) => sessionStorage.setItem(name, JSON.stringify(value)),
+    removeItem: (name) => sessionStorage.removeItem(name),
+  },
+  partialize: (state) => ({
+    agents: state.agents,
+    segments: state.segments,
+    stats: state.stats,
+    phases: state.phases,
+    scanEntities: state.scanEntities,
+  }) as unknown as ResearchStore,
+}));
