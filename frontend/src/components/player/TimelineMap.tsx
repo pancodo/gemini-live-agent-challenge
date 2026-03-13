@@ -106,8 +106,9 @@ function TimelineMapInner({
         border: 2px solid rgba(255,255,255,0.3);
         box-shadow: 0 0 16px ${color}, 0 0 32px ${color}80;
         cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        transform: ${isBattle ? 'rotate(45deg)' : ''} scale(1);
+        transition: scale 0.2s ease, box-shadow 0.2s ease;
+        scale: 1;
+        ${isBattle ? 'rotate: 45deg;' : ''}
         position: relative;
         z-index: 10;
       `;
@@ -119,7 +120,7 @@ function TimelineMapInner({
       } else {
         el.style.opacity = '0';
         const tid = setTimeout(() => {
-          el.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.2s ease';
+          el.style.transition = 'opacity 0.4s ease, scale 0.2s ease, box-shadow 0.2s ease';
           el.style.opacity = '1';
         }, index * PIN_ANIMATION_DELAY);
         pinTimeoutIds.current.push(tid);
@@ -192,13 +193,13 @@ function TimelineMapInner({
 
       hitArea.addEventListener('mouseenter', () => {
         tooltip.style.opacity = '1';
-        el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1.4)`;
+        el.style.scale = '1.4';
         el.style.boxShadow = `0 0 24px ${color}, 0 0 48px ${color}aa`;
       });
 
       hitArea.addEventListener('mouseleave', () => {
         tooltip.style.opacity = '0';
-        el.style.transform = `${isBattle ? 'rotate(45deg) ' : ''}scale(1)`;
+        el.style.scale = '1';
         el.style.boxShadow = `0 0 16px ${color}, 0 0 32px ${color}80`;
       });
 
