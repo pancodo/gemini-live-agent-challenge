@@ -59,10 +59,9 @@
   }
 }
 
-/* Reduced motion: disable breathing */
+/* Reduced motion: disable CSS keyframe animations (breathing handled by Motion's useReducedMotion) */
 @media (prefers-reduced-motion: reduce) {
-  .portrait-container {
+  .portrait-listening .portrait-frame {
     animation: none !important;
-    transform: none !important;
   }
 }
