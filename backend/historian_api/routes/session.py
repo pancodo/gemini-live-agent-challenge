@@ -70,6 +70,7 @@ async def create_session(
     filename: str = "document.pdf",
     language: str | None = None,
     persona: str = "professor",
+    mode: str = "normal",
 ) -> CreateSessionResponse:
     """Create a new session: write Firestore doc + generate signed GCS upload URL."""
     session_id = str(uuid.uuid4())
@@ -101,6 +102,7 @@ async def create_session(
             "gcsPath": gcs_path,
             "language": language,
             "persona": persona,
+            "mode": mode,
             "visualBible": None,
             "createdAt": firestore.SERVER_TIMESTAMP,
         })
