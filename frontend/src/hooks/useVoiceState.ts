@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore } from '../store/voiceStore';
 import type { VoiceState } from '../types';
 
@@ -23,7 +24,16 @@ const VALID_TRANSITIONS: Record<VoiceState, readonly VoiceState[]> = {
 } as const;
 
 export function useVoiceState() {
-  const { state, setState, setResume, clearResume } = useVoiceStore();
+  const { state, setState, setResume, clearResume } = useVoiceStore(
+    useShallow((s) => ({
+      state: s.state,
+      setState: s.setState,
+      setResume: s.setResume,
+      clearResume: s.clearResume,
+    }))
+  );
+
+  const interruptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const transition = useCallback(
     (next: VoiceState) => {
@@ -41,7 +51,11 @@ export function useVoiceState() {
       setResume(segmentId, offset);
       setState('interrupted');
       // Flash interrupted state, then immediately transition to listening
-      setTimeout(() => {
+      if (interruptTimerRef.current !== null) {
+        clearTimeout(interruptTimerRef.current);
+      }
+      interruptTimerRef.current = setTimeout(() => {
+        interruptTimerRef.current = null;
         setState('listening');
       }, 250);
     },
@@ -49,6 +63,10 @@ export function useVoiceState() {
   );
 
   const reset = useCallback(() => {
+    if (interruptTimerRef.current !== null) {
+      clearTimeout(interruptTimerRef.current);
+      interruptTimerRef.current = null;
+    }
     clearResume();
     setState('idle');
   }, [setState, clearResume]);

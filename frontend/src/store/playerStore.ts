@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 import type { BranchNode, LiveIllustration } from '../types';
 
+let _illustrationTimerHandle: ReturnType<typeof setTimeout> | null = null;
+
 interface PlayerStore {
   isOpen: boolean;
   currentSegmentId: string | null;
@@ -23,7 +25,6 @@ interface PlayerStore {
   addBranchNode: (node: BranchNode) => void;
   setActiveBranch: (segmentId: string | null) => void;
   liveIllustration: LiveIllustration | null;
-  _illustrationTimer: ReturnType<typeof setTimeout> | null;
   setLiveIllustration: (ill: LiveIllustration | null) => void;
 }
 
@@ -49,23 +50,17 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
     set((state) => ({ branchGraph: [...state.branchGraph, node] })),
   setActiveBranch: (segmentId) => set({ activeBranchId: segmentId }),
   liveIllustration: null,
-  _illustrationTimer: null,
   setLiveIllustration: (ill) => {
-    set((state) => {
-      // Clear existing timer
-      if (state._illustrationTimer) {
-        clearTimeout(state._illustrationTimer);
-      }
-
-      if (ill) {
-        // Auto-clear after 25 seconds
-        const timer = setTimeout(() => {
-          set({ liveIllustration: null, _illustrationTimer: null });
-        }, 25_000);
-        return { liveIllustration: ill, _illustrationTimer: timer };
-      }
-
-      return { liveIllustration: null, _illustrationTimer: null };
-    });
+    if (_illustrationTimerHandle !== null) {
+      clearTimeout(_illustrationTimerHandle);
+      _illustrationTimerHandle = null;
+    }
+    if (ill) {
+      _illustrationTimerHandle = setTimeout(() => {
+        _illustrationTimerHandle = null;
+        set({ liveIllustration: null });
+      }, 25_000);
+    }
+    set({ liveIllustration: ill ?? null });
   },
 }));

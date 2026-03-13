@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, startTransition } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useResearchStore } from '../store/researchStore';
 import type { SSEEvent } from '../types';
 
@@ -28,12 +29,19 @@ export function useSSE(sessionId: string | null): void {
   const esRef = useRef<EventSource | null>(null);
   const lastProcessedIdRef = useRef<number>(-1);
 
-  const setAgent = useResearchStore((s) => s.setAgent);
-  const setSegment = useResearchStore((s) => s.setSegment);
-  const updateStats = useResearchStore((s) => s.updateStats);
-  const addPhaseMessage = useResearchStore((s) => s.addPhaseMessage);
-  const setScanEntities = useResearchStore((s) => s.setScanEntities);
-  const addEvaluatedSource = useResearchStore((s) => s.addEvaluatedSource);
+  const {
+    setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource,
+  } = useResearchStore(
+    useShallow((s) => ({
+      setAgent: s.setAgent,
+      setSegment: s.setSegment,
+      appendSegmentImage: s.appendSegmentImage,
+      updateStats: s.updateStats,
+      addPhaseMessage: s.addPhaseMessage,
+      setScanEntities: s.setScanEntities,
+      addEvaluatedSource: s.addEvaluatedSource,
+    }))
+  );
 
   const processEvent = useCallback(
     (event: SSEEvent) => {
@@ -93,12 +101,7 @@ export function useSSE(sessionId: string | null): void {
 
         case 'live_illustration': {
           if ('segmentId' in event && 'imageUrl' in event) {
-            const existingSegment = useResearchStore.getState().segments[event.segmentId];
-            if (existingSegment) {
-              setSegment(event.segmentId, {
-                imageUrls: [...existingSegment.imageUrls, event.imageUrl],
-              });
-            }
+            appendSegmentImage(event.segmentId as string, event.imageUrl as string);
           }
           break;
         }
@@ -114,8 +117,11 @@ export function useSSE(sessionId: string | null): void {
           break;
       }
     },
-    [setAgent, setSegment, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource],
+    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource],
   );
+
+  const processEventRef = useRef(processEvent);
+  useEffect(() => { processEventRef.current = processEvent; });
 
   useEffect(() => {
     if (!sessionId) return;
@@ -180,7 +186,7 @@ export function useSSE(sessionId: string | null): void {
 
       startTransition(() => {
         for (const event of batch) {
-          processEvent(event);
+          processEventRef.current(event);
         }
       });
     }, 150);
@@ -203,5 +209,5 @@ export function useSSE(sessionId: string | null): void {
       retryCountRef.current = 0;
       lastProcessedIdRef.current = -1;
     };
-  }, [sessionId, processEvent]);
+  }, [sessionId]);
 }
