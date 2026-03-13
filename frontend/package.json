@@ -30,8 +30,6 @@
     "maplibre-gl": "^5.20.0",
     "motion": "^12",
     "pdfjs-dist": "^5.5.207",
-    "pixi-live2d-display": "^0.4.0",
-    "pixi.js": "^6.5.10",
     "react": "^19",
     "react-dom": "^19",
     "react-resizable-panels": "^4.7.2",
