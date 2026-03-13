@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
-import { Badge, Button } from '../ui';
+import { Button } from '../ui';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTextScramble } from '../../hooks/useTextScramble';
 import { downloadImage } from '../../utils/downloadImage';
@@ -268,20 +268,9 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         onMouseMove={handleMouseMove}
         className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-4 cursor-pointer`}
       >
-        {/* Header row: mood badge + source count + index */}
+        {/* Header row: segment index */}
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            {segment.mood ? (
-              <Badge variant="gold">{segment.mood}</Badge>
-            ) : (
-              <span />
-            )}
-            {segment.sources?.length > 0 && (
-              <Badge variant="muted">
-                {segment.sources.length} src
-              </Badge>
-            )}
-          </div>
+          <span />
           <span
             className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em]"
             style={{ fontVariantNumeric: 'tabular-nums' }}
