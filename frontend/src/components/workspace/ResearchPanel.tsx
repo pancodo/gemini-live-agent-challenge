@@ -5,7 +5,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { useResearchStore } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { usePlayerStore } from '../../store/playerStore';
-import { HistorianPanel } from './HistorianPanel';
 import { AgentModal } from './AgentModal';
 import { SegmentCard } from './SegmentCard';
 import { usePDFViewer } from './PDFViewerContext';
@@ -557,9 +556,6 @@ export function ResearchPanel() {
     <div className="flex flex-col h-full">
       {/* Scrollable content area */}
       <div className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4">
-        {/* Historian Panel */}
-        <HistorianPanel />
-
         {/* Section Header */}
         <div>
           <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-2">

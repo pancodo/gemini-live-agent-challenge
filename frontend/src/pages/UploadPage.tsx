@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { DropZone, PersonaSelector } from '../components/upload';
 import { Badge } from '../components/ui';
 import { useSessionStore } from '../store/sessionStore';
@@ -65,8 +66,11 @@ function SampleDocuments() {
         resetResearch();
         setSession({ sessionId, gcsPath, status: 'processing' });
         navigate('/workspace');
-      } catch {
+      } catch (err) {
         setLoading(null);
+        toast.error('Failed to load sample document', {
+          description: err instanceof Error ? err.message : 'Is the backend running?',
+        });
       }
     },
     [navigate, setSession, persona, resetResearch]
@@ -213,11 +217,50 @@ function DevSeedBar() {
     navigate('/workspace');
   }, [setSession, setAgent, setSegment, updateStats, addPhaseMessage, navigate]);
 
+  const setSegmentGeo = usePlayerStore((s) => s.setSegmentGeo);
+  const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
+
   const seedPlayer = useCallback(() => {
     seedWorkspace();
+    // Pre-seed geo data so the map works without a Gemini API key
+    setSegmentGeo('seg_01', {
+      segmentId: 'seg_01',
+      center: [41.0, 29.0],
+      zoom: 6,
+      events: [
+        { name: 'Constantinople', lat: 41.0082, lng: 28.9784, type: 'city', era: '1566', description: 'Seat of the Ottoman Empire' },
+        { name: 'Topkapi Palace', lat: 41.0115, lng: 28.9833, type: 'city', era: '16th c.', description: 'Imperial residence and chancery' },
+        { name: 'Edirne', lat: 41.6818, lng: 26.5623, type: 'city', era: '1570s', description: 'Second capital, site of Selimiye Mosque' },
+      ],
+      routes: [
+        {
+          name: 'Imperial Road',
+          points: [[41.01, 28.98], [41.28, 28.02], [41.68, 26.56]],
+          style: 'military',
+        },
+      ],
+    });
+    setSegmentGeo('seg_02', {
+      segmentId: 'seg_02',
+      center: [41.4, 27.5],
+      zoom: 7,
+      events: [
+        { name: 'Edirne', lat: 41.6818, lng: 26.5623, type: 'city', era: '1575', description: 'Selimiye Mosque completed' },
+        { name: 'Lüleburgaz', lat: 41.4036, lng: 27.3569, type: 'city', era: '16th c.', description: 'Waypoint on the imperial road' },
+        { name: 'Constantinople', lat: 41.0082, lng: 28.9784, type: 'city', era: '16th c.', description: 'Starting point of the journey' },
+      ],
+      routes: [
+        {
+          name: 'Road to Edirne',
+          points: [[41.01, 28.98], [41.20, 28.30], [41.40, 27.36], [41.68, 26.56]],
+          style: 'trade',
+        },
+      ],
+    });
+    setMapViewMode('split');
     openPlayer('seg_01');
     navigate('/player/seg_01');
-  }, [seedWorkspace, openPlayer, navigate]);
+  }, [seedWorkspace, openPlayer, navigate, setSegmentGeo, setMapViewMode]);
 
   if (!import.meta.env.DEV) return null;
 
@@ -234,6 +277,12 @@ function DevSeedBar() {
         className="px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.1em] bg-[var(--bg4)] border border-[var(--gold)]/40 text-[var(--gold)] rounded hover:bg-[var(--gold)]/10 transition-colors"
       >
         Dev → Player
+      </button>
+      <button
+        onClick={() => navigate('/test-map')}
+        className="px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.1em] bg-[var(--bg4)] border border-[var(--teal)]/40 text-[var(--teal)] rounded hover:bg-[var(--teal)]/10 transition-colors"
+      >
+        Dev → Map
       </button>
     </div>
   );

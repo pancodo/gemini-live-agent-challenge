@@ -83,7 +83,8 @@ export type VoiceState =
   | 'listening'
   | 'processing'
   | 'historian_speaking'
-  | 'interrupted';
+  | 'interrupted'
+  | 'reconnecting';
 
 // ── SSE Events ───────────────────────────────────────────────
 export type SSEEventType =
@@ -197,6 +198,32 @@ export interface ClipStatus {
   downloadUrl?: string;
   segmentId: string;
 }
+
+// ── Geographic / Timeline Map ─────────────────────────────────
+export interface GeoEvent {
+  name: string;
+  lat: number;
+  lng: number;
+  type: 'city' | 'battle' | 'route' | 'region';
+  era?: string;
+  description?: string;
+}
+
+export interface GeoRoute {
+  name: string;
+  points: [number, number][];
+  style: 'trade' | 'military' | 'migration';
+}
+
+export interface SegmentGeo {
+  segmentId: string;
+  center: [number, number];
+  zoom: number;
+  events: GeoEvent[];
+  routes: GeoRoute[];
+}
+
+export type MapViewMode = 'ken-burns' | 'map' | 'split';
 
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {

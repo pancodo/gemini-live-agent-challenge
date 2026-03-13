@@ -313,6 +313,7 @@ export function TopNav() {
                 </div>
                 <Toggle on={settings.reducedMotion} onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)} />
               </div>
+
             </div>
           )}
         </div>
