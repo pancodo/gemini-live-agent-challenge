@@ -97,8 +97,8 @@ export function usePortraitRenderer({
 
       imagesRef.current = imgs;
       setIsLoaded(true);
-    }).catch(() => {
-      // Silent fail — keep showing previous era
+    }).catch((err) => {
+      console.warn(`[LivingPortrait] Failed to load era "${era}":`, err);
     });
 
     return () => { cancelled = true; };
