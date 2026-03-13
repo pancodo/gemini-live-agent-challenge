@@ -22,6 +22,7 @@ interface ResearchStore {
   entityHighlights: Record<string, EntityHighlight[]>;
   setAgent: (agentId: string, state: Partial<AgentState>) => void;
   setSegment: (segmentId: string, state: Partial<Segment>) => void;
+  appendSegmentImage: (segmentId: string, imageUrl: string) => void;
   updateStats: (stats: Partial<ResearchStore['stats']>) => void;
   addPhaseMessage: (phase: 1 | 2 | 3 | 4 | 5, label: string, message: string) => void;
   addEvaluatedSource: (agentId: string, source: EvaluatedSource) => void;
@@ -51,6 +52,20 @@ export const useResearchStore = create<ResearchStore>()(subscribeWithSelector((s
         [segmentId]: { ...s.segments[segmentId], ...partial },
       },
     })),
+  appendSegmentImage: (segmentId, imageUrl) =>
+    set((s) => {
+      const seg = s.segments[segmentId];
+      if (!seg) return s;
+      return {
+        segments: {
+          ...s.segments,
+          [segmentId]: {
+            ...seg,
+            imageUrls: [...seg.imageUrls, imageUrl],
+          },
+        },
+      };
+    }),
   updateStats: (partial) =>
     set((s) => ({ stats: { ...s.stats, ...partial } })),
   addPhaseMessage: (phase, label, message) =>

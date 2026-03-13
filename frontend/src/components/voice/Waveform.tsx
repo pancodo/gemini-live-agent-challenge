@@ -1,6 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 
+// Module-level Motion constants for the fallback bars.
+const BAR_ANIMATE = { scaleY: [0.4, 1.0, 0.4] };
+function barTransition(i: number) {
+  return {
+    duration: 0.8,
+    delay: i * 0.12,
+    repeat: Infinity,
+    ease: 'easeInOut',
+  } as const;
+}
+// Pre-computed transitions for the three bars (indices 0, 1, 2).
+const BAR_TRANSITIONS = [0, 1, 2].map(barTransition);
+
 export interface WaveformProps {
   analyser: AnalyserNode | null;
   height?: number;
@@ -18,11 +31,27 @@ export interface WaveformProps {
 export function Waveform({ analyser, height = 48 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
-  // Track last-rendered pixel dimensions to avoid resetting the canvas
-  // backing store on every frame (a canvas width/height assignment flushes
-  // the bitmap and resets the entire 2D context state).
-  const canvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Dimensions maintained by ResizeObserver — not queried inside the draw loop.
+  const canvasSizeRef = useRef<{ w: number; h: number; cssW: number; cssH: number }>({
+    w: 0, h: 0, cssW: 0, cssH: 0,
+  });
   const prefersReducedMotion = useReducedMotion();
+
+  // ResizeObserver: update dimension ref whenever the canvas CSS size changes.
+  // The draw loop reads from the ref — never calls getBoundingClientRect().
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height: h } = entry.contentRect;
+      canvasSizeRef.current = { w: width * dpr, h: h * dpr, cssW: width, cssH: h };
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -36,24 +65,17 @@ export function Waveform({ analyser, height = 48 }: WaveformProps) {
     function draw() {
       if (!canvas || !ctx) return;
 
-      // Resize canvas backing store only when the CSS layout dimensions
-      // actually change. Assigning canvas.width or canvas.height — even to
-      // the same value — flushes the bitmap and resets all 2D context state
-      // (transform, strokeStyle, shadowBlur, etc.), forcing a full re-setup
-      // on every frame. Guard with a ref comparison to avoid that cost.
-      const rect = canvas.getBoundingClientRect();
+      // Resize canvas backing store only when ResizeObserver reports a change.
+      const { w: newW, h: newH, cssW, cssH } = canvasSizeRef.current;
       const dpr = window.devicePixelRatio || 1;
-      const newW = rect.width * dpr;
-      const newH = rect.height * dpr;
-      if (newW !== canvasSizeRef.current.w || newH !== canvasSizeRef.current.h) {
+      if (newW > 0 && (canvas.width !== newW || canvas.height !== newH)) {
         canvas.width = newW;
         canvas.height = newH;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        canvasSizeRef.current = { w: newW, h: newH };
       }
 
-      const width = rect.width;
-      const h = rect.height;
+      const width = cssW || canvas.clientWidth;
+      const h = cssH || canvas.clientHeight;
 
       analyser!.getByteTimeDomainData(dataArray);
 
@@ -97,7 +119,7 @@ export function Waveform({ analyser, height = 48 }: WaveformProps) {
     return () => {
       cancelAnimationFrame(rafRef.current);
       // Reset tracked size so the next effect run always performs the first resize.
-      canvasSizeRef.current = { w: 0, h: 0 };
+      canvasSizeRef.current = { w: 0, h: 0, cssW: 0, cssH: 0 };
     };
   }, [analyser, prefersReducedMotion]);
 
@@ -115,13 +137,8 @@ export function Waveform({ analyser, height = 48 }: WaveformProps) {
             key={i}
             className="w-0.5 rounded-full bg-[#c4956a]"
             style={{ height: height * 0.6 }}
-            animate={{ scaleY: [0.4, 1.0, 0.4] }}
-            transition={{
-              duration: 0.8,
-              delay: i * 0.12,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
+            animate={BAR_ANIMATE}
+            transition={BAR_TRANSITIONS[i]}
           />
         ))}
       </div>

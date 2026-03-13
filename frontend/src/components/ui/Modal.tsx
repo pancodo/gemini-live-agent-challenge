@@ -12,14 +12,16 @@ interface ModalProps {
   className?: string;
 }
 
+const MODAL_TRANSITION = { type: 'spring' as const, stiffness: 320, damping: 28 } as const;
+
 export function Modal({ open, onOpenChange, title, description, children, className = '' }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <Dialog.Portal forceMount>
         <AnimatePresence>
           {open && (
             <>
-              <Dialog.Overlay asChild>
+              <Dialog.Overlay asChild forceMount>
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -27,12 +29,12 @@ export function Modal({ open, onOpenChange, title, description, children, classN
                   className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
                 />
               </Dialog.Overlay>
-              <Dialog.Content asChild>
+              <Dialog.Content asChild forceMount>
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: 8 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97, y: 4 }}
-                  transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                  transition={MODAL_TRANSITION}
                   className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-[var(--bg2)] border border-[var(--bg4)] rounded-xl shadow-xl max-h-[85vh] overflow-auto ${className}`}
                 >
                   <Dialog.Title className="font-serif text-lg font-normal text-[var(--text)] px-6 pt-5 pb-2">

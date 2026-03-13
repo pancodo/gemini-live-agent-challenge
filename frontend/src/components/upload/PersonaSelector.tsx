@@ -1,3 +1,4 @@
+import { memo, useCallback } from 'react';
 import { motion } from 'motion/react';
 import type { PersonaType } from '../../types';
 
@@ -44,7 +45,14 @@ const PERSONAS = [
 
 const spring = { type: 'spring' as const, stiffness: 400, damping: 17 };
 
-export function PersonaSelector({ value, onChange }: PersonaSelectorProps) {
+const SERIF_STYLE = { fontFamily: 'var(--font-serif)' } as const;
+
+export const PersonaSelector = memo(function PersonaSelector({ value, onChange }: PersonaSelectorProps) {
+  const handlePersonaClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const type = e.currentTarget.dataset.persona as PersonaType;
+    onChange(type);
+  }, [onChange]);
+
   return (
     <div className="flex gap-3 justify-center" role="radiogroup" aria-label="Choose historian persona">
       {PERSONAS.map((persona) => {
@@ -55,7 +63,8 @@ export function PersonaSelector({ value, onChange }: PersonaSelectorProps) {
             type="button"
             role="radio"
             aria-checked={selected}
-            onClick={() => onChange(persona.type)}
+            data-persona={persona.type}
+            onClick={handlePersonaClick}
             className={`relative w-[120px] rounded-lg border p-3 cursor-pointer text-center transition-colors ${
               selected
                 ? 'border-[var(--gold)] bg-[var(--bg3)]'
@@ -80,7 +89,7 @@ export function PersonaSelector({ value, onChange }: PersonaSelectorProps) {
 
             <p
               className={`text-[14px] leading-tight ${selected ? 'text-[var(--text)]' : 'text-[var(--text)]'}`}
-              style={{ fontFamily: 'var(--font-serif)' }}
+              style={SERIF_STYLE}
             >
               {persona.name}
             </p>
@@ -93,4 +102,4 @@ export function PersonaSelector({ value, onChange }: PersonaSelectorProps) {
       })}
     </div>
   );
-}
+});

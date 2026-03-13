@@ -10,6 +10,15 @@ import type { PersonaType } from '../../types';
 
 type DropState = 'idle' | 'drag-active' | 'uploading' | 'error';
 
+const BORDER_CLASS: Record<DropState, string> = {
+  'drag-active': 'border-solid border-[var(--gold)]',
+  'error': 'border-dashed border-red-400',
+  'idle': 'border-dashed border-[var(--gold)]/40',
+  'uploading': 'border-dashed border-[var(--gold)]/40',
+} as const;
+
+const SERIF_STYLE = { fontFamily: 'var(--font-serif)' } as const;
+
 const ACCEPTED_TYPES = [
   'application/pdf',
   'image/jpeg',
@@ -140,12 +149,18 @@ export function DropZone() {
     if (inputRef.current) inputRef.current.value = '';
   }, []);
 
-  const borderClass =
-    dropState === 'drag-active'
-      ? 'border-solid border-[var(--gold)]'
-      : dropState === 'error'
-        ? 'border-dashed border-red-400'
-        : 'border-dashed border-[var(--gold)]/40';
+  const handleZoneClick = useCallback(() => {
+    if (dropState === 'idle') inputRef.current?.click();
+  }, [dropState]);
+
+  const handleZoneKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (dropState === 'idle') inputRef.current?.click();
+    }
+  }, [dropState]);
+
+  const borderClass = BORDER_CLASS[dropState];
 
   return (
     <motion.div
@@ -158,18 +173,11 @@ export function DropZone() {
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onClick={() => {
-        if (dropState === 'idle') inputRef.current?.click();
-      }}
+      onClick={handleZoneClick}
       role="button"
       tabIndex={0}
       aria-label="Upload a historical document"
-      onKeyDown={(e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          if (dropState === 'idle') inputRef.current?.click();
-        }
-      }}
+      onKeyDown={handleZoneKeyDown}
     >
       <input
         ref={inputRef}
@@ -253,7 +261,7 @@ export function DropZone() {
             <div className="text-center">
               <p
                 className="text-[22px] text-[var(--text)]"
-                style={{ fontFamily: 'var(--font-serif)' }}
+                style={SERIF_STYLE}
               >
                 {dropState === 'drag-active'
                   ? 'Release to upload'
@@ -306,7 +314,7 @@ export function DropZone() {
           >
             <p
               className="text-[18px] text-[var(--text)]"
-              style={{ fontFamily: 'var(--font-serif)' }}
+              style={SERIF_STYLE}
             >
               Uploading document...
             </p>

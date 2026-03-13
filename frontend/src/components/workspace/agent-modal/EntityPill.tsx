@@ -7,6 +7,8 @@
 // plain <span> or a colored <EntityPill>.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useMemo } from 'react';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type EntityType = 'year' | 'person' | 'place' | 'other';
@@ -91,6 +93,12 @@ const KNOWN_PLACES: readonly string[] = [
 // Sort longest first so multi-word names are matched before their substrings.
 const PLACES_SORTED = [...KNOWN_PLACES].sort((a, b) => b.length - a.length);
 
+// Pre-compiled regexes — created once at module init, not on every parseEntities call.
+const PLACE_REGEXES: [string, RegExp][] = PLACES_SORTED.map((p) => [
+  p,
+  new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
+]);
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -128,10 +136,9 @@ export function parseEntities(text: string): TextSegment[] {
   }
 
   // ── Pass 2: Known places ────────────────────────────────────────────────────
-  for (const place of PLACES_SORTED) {
-    // Escape special regex chars in the place name and wrap with word boundaries.
-    const escaped = place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const placeRe = new RegExp(`\\b${escaped}\\b`, 'gi');
+  for (const [, placeRe] of PLACE_REGEXES) {
+    // Reset lastIndex since these are module-level regexes with 'g' flag.
+    placeRe.lastIndex = 0;
     while ((m = placeRe.exec(text)) !== null) {
       const start = m.index;
       const end = start + m[0].length;
@@ -223,7 +230,7 @@ interface FactTextProps {
 }
 
 export function FactText({ fact }: FactTextProps) {
-  const segments = parseEntities(fact);
+  const segments = useMemo(() => parseEntities(fact), [fact]);
 
   // Fallback: if no entity segments found, render as plain text.
   const hasEntities = segments.some((s) => s.type !== 'plain');

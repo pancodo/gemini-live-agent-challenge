@@ -29,7 +29,19 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
 
     const data = new Uint8Array(analyser.frequencyBinCount);
 
+    // Cache DOM queries once at effect setup — not per frame.
+    const kenEl = document.querySelector('.ken-burns-stage');
+    const container = document.getElementById('player-container');
+    // Cache the animation reference once; it won't change while the stage is mounted.
+    const kenAnim = kenEl?.getAnimations()[0] ?? null;
+
     function tick() {
+      // Skip all work when the tab is hidden — saves GPU and CPU entirely.
+      if (document.visibilityState === 'hidden') {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       analyser!.getByteFrequencyData(data);
 
       // Compute normalized average energy (0..1)
@@ -41,15 +53,13 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
 
       // Control Ken Burns animation speed via playbackRate (no CSS jump)
       // Maps: 0.7x at silence -> 1.3x at narration peak
-      const kenEl = document.querySelector('.ken-burns-stage');
-      const kenAnim = kenEl?.getAnimations()[0];
       if (kenAnim) {
         kenAnim.playbackRate = 0.7 + energy * 0.6;
       }
 
       // Scope all CSS custom property writes to the player container
-      // to avoid invalidating the entire document style tree
-      const container = document.getElementById('player-container');
+      // to avoid invalidating the entire document style tree.
+      // Guard: container may be null on non-player routes — keep rAF alive regardless.
       if (container) {
         container.style.setProperty('--glow-opacity', `${0.5 + energy * 0.5}`);
         container.style.setProperty('--vig-spread', `${110 + energy * 30}%`);
@@ -65,14 +75,11 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
       cancelAnimationFrame(rafRef.current);
 
       // Reset Ken Burns playback rate
-      const kenEl = document.querySelector('.ken-burns-stage');
-      const kenAnim = kenEl?.getAnimations()[0];
       if (kenAnim) {
         kenAnim.playbackRate = 1.0;
       }
 
       // Reset CSS custom properties on the scoped container
-      const container = document.getElementById('player-container');
       if (container) {
         container.style.setProperty('--glow-opacity', '0.5');
         container.style.setProperty('--vig-spread', '110%');
