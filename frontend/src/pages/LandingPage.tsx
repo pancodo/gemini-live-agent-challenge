@@ -286,8 +286,8 @@ function HeroSection() {
           background: resolvedTheme === 'dark'
             ? 'radial-gradient(circle, rgba(139,94,26,0.06), transparent 70%)'
             : 'radial-gradient(circle, rgba(139,94,26,0.04), transparent 70%)',
-          filter: 'blur(100px)',
           animation: 'drift 30s ease-in-out infinite alternate',
+          willChange: 'transform',
         }}
       />
       <div
@@ -297,8 +297,8 @@ function HeroSection() {
           background: resolvedTheme === 'dark'
             ? 'radial-gradient(circle, rgba(30,94,94,0.05), transparent 70%)'
             : 'radial-gradient(circle, rgba(30,94,94,0.04), transparent 70%)',
-          filter: 'blur(80px)',
           animation: 'drift 38s ease-in-out infinite alternate-reverse',
+          willChange: 'transform',
         }}
       />
 
@@ -1497,18 +1497,6 @@ function FooterCTAButtons({ navigate }: { navigate: ReturnType<typeof useNavigat
 export function LandingPage() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh' }}>
-      {/* Film grain overlay — mix-blend-mode adapts to theme naturally */}
-      <div
-        className="pointer-events-none fixed inset-0 z-[9997]"
-        style={{
-          opacity: 0.035,
-          filter: 'url(#grain)',
-          mixBlendMode: 'soft-light',
-          animation: 'grain-shift 0.5s steps(4) infinite',
-        }}
-        aria-hidden="true"
-      />
-
       <LandingNav />
       <HeroSection />
       <TrustStrip />
