@@ -83,8 +83,12 @@ function RootLayout() {
 
   return (
     <>
-      {!isPlayer && <TopNav />}
-      <Outlet />
+      <div className={isPlayer ? '' : 'flex flex-col h-screen'}>
+        {!isPlayer && <TopNav />}
+        <div className={isPlayer ? '' : 'flex-1 min-h-0'}>
+          <Outlet />
+        </div>
+      </div>
       <VoiceLayer />
       <IrisOverlay />
     </>

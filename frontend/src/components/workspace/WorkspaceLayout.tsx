@@ -22,7 +22,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
 
   return (
     <PDFViewerProvider value={pdfHandle}>
-      <div className="h-[calc(100vh-44px)] bg-[var(--bg)] overflow-hidden">
+      <div className="h-full bg-[var(--bg)] overflow-hidden">
         <Group
           orientation="horizontal"
           defaultLayout={defaultLayout ?? { pdf: 52, research: 48 }}
