@@ -7,14 +7,14 @@ and 3.8 geographic mapping):
     2. scene_research_orch          — Parallel scene research (one google_search agent
                                       per SceneBrief) → research_0 … research_N
     3. aggregator_agent             — Merges all research_N outputs into unified context
-    4. script_orch                  — Script Agent (gemini-2.0-pro) → SegmentScript list,
+    4. script_orch                  — Script Agent (gemini-2.5-flash) → SegmentScript list,
                                       Firestore write, segment_update SSE (Phase III)
    4b. fact_validator               — Hallucination firewall: cross-references narration
                                       claims against research evidence (Phase III.5)
    4c. geo_location                 — Extracts geographic locations and routes from scripts,
                                       geocodes via Gemini, produces SegmentGeo metadata
                                       for frontend timeline map (Phase 3.8)
-    5. narrative_visual_planner     — Single Gemini Pro call producing VisualStoryboard
+    5. narrative_visual_planner     — Single Gemini 2.5 Flash call producing VisualStoryboard
                                       with per-scene primary subjects, avoid lists,
                                       targeted searches, and 4 frame concepts (Phase 4.0)
     6. visual_research_orch         — Per-scene 6-stage micro-pipeline → VisualDetailManifest
@@ -219,7 +219,7 @@ def _make_aggregator_agent() -> Agent:
 # ---------------------------------------------------------------------------
 script_agent = Agent(
     name="script_agent",
-    model="gemini-2.0-pro",
+    model="gemini-2.5-flash",
     description="Generates documentary segments grounded in scene briefs and aggregated research.",
     instruction="""\
 You are the scriptwriter for an AI-generated historical documentary.

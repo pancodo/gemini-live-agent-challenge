@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _MAX_RETRIES: int = 3
-_MODEL: str = "gemini-2.0-pro"
+_MODEL: str = "gemini-2.5-flash"
 
 # Default frame concept used when the model produces an invalid entry.
 _DEFAULT_FRAME_CONCEPT: str = (
@@ -400,6 +400,7 @@ class NarrativeVisualPlanner(BaseAgent):
                     build_agent_status_event(
                         agent_id="narrative_visual_planner",
                         status="error",
+                        query="Planning visual storyboard for documentary scenes",
                         elapsed=round(time.monotonic() - t_start, 1),
                     ),
                 )
@@ -483,6 +484,7 @@ class NarrativeVisualPlanner(BaseAgent):
                     build_agent_status_event(
                         agent_id="narrative_visual_planner",
                         status="error",
+                        query="Planning visual storyboard for documentary scenes",
                         elapsed=round(time.monotonic() - t_start, 1),
                     ),
                 )
@@ -510,6 +512,7 @@ class NarrativeVisualPlanner(BaseAgent):
                     build_agent_status_event(
                         agent_id="narrative_visual_planner",
                         status="error",
+                        query="Planning visual storyboard for documentary scenes",
                         elapsed=round(time.monotonic() - t_start, 1),
                     ),
                 )
@@ -618,6 +621,7 @@ class NarrativeVisualPlanner(BaseAgent):
                 build_agent_status_event(
                     agent_id="narrative_visual_planner",
                     status="done",
+                    query="Planning visual storyboard for documentary scenes",
                     elapsed=t_elapsed,
                     facts=[
                         f"{len(validated_scenes)} scene visual plans created",

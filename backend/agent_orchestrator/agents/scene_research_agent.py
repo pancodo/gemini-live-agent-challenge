@@ -661,6 +661,7 @@ class SceneResearchOrchestrator(BaseAgent):
                         build_agent_status_event(
                             agent_id=f"scene_researcher_{i}",
                             status="done",
+                            query=f"Researching: {brief.title}",
                             elapsed=round(t_research_elapsed, 1),
                         ),
                     )
@@ -678,6 +679,7 @@ class SceneResearchOrchestrator(BaseAgent):
                         build_agent_status_event(
                             agent_id=f"scene_researcher_{i}",
                             status="error",
+                            query=f"Researching: {brief.title}",
                             elapsed=round(t_research_elapsed, 1),
                         ),
                     )
@@ -718,6 +720,7 @@ class SceneResearchOrchestrator(BaseAgent):
                 build_agent_status_event(
                     agent_id="scene_research_orchestrator",
                     status="done",
+                    query=f"Coordinating parallel research for {num_scenes} scenes",
                     elapsed=round(t_total_elapsed, 1),
                     facts=[
                         f"{completed}/{num_scenes} scenes researched successfully",
