@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useVoiceStore } from '../../store/voiceStore';
 import { LivingPortrait } from '../voice/LivingPortrait';
@@ -167,10 +167,10 @@ function HistorianAvatarWithFallback({ active, voiceState }: { active: boolean; 
   const [avatarReady, setAvatarReady] = useState(false);
 
   return (
-    <div className="relative flex items-center justify-center" style={{ width: 120, height: 120 }}>
+    <div className="relative flex items-center justify-center" style={{ width: 170, height: 170 }}>
       {/* Living Portrait — always active so it loads eagerly and shows idle animation */}
       <LivingPortrait
-        size={80}
+        size={150}
         active
         simulateAudio={import.meta.env.DEV}
         onLoad={() => setAvatarReady(true)}
@@ -273,6 +273,20 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
   const reducedMotion = useReducedMotion();
   const active = isVoiceActive(voiceState);
   const isIdle = voiceState === 'idle';
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Auto-expand when voice activates, auto-collapse when idle after a conversation
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    if (active) {
+      setCollapsed(false);
+      wasActiveRef.current = true;
+    } else if (wasActiveRef.current) {
+      // Was active, now idle — auto-collapse after a brief delay
+      const t = setTimeout(() => setCollapsed(true), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [active]);
 
   const borderColor = active
     ? voiceState === 'historian_speaking'
@@ -318,69 +332,90 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
         )}
       </AnimatePresence>
 
-      <div className="px-4 pt-2.5 pb-2.5 flex items-center gap-4">
-
-        {/* Avatar / Emblem — left side */}
-        <div className="shrink-0">
-          <HistorianAvatarWithFallback active={active} voiceState={voiceState} />
+      {/* Header row — always visible, clickable to toggle */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-transparent border-none cursor-pointer"
+      >
+        <div className="flex items-center gap-2">
+          <span style={{ color: 'var(--gold)', fontSize: 8, opacity: 0.7 }}>{'\u2666'}</span>
+          <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em]" style={{ color: 'var(--gold)' }}>
+            The Historian
+          </h2>
         </div>
-
-        {/* Right side: header, caption, CTA */}
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          {/* Header row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span style={{ color: 'var(--gold)', fontSize: 8, opacity: 0.7 }}>{'\u2666'}</span>
-              <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em]" style={{ color: 'var(--gold)' }}>
-                The Historian
-              </h2>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <motion.div
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: active ? (voiceState === 'listening' ? 'var(--teal)' : 'var(--gold)') : 'var(--muted)' }}
-                animate={active && !reducedMotion ? { scale: [1, 1.5, 1], opacity: [1, 0.4, 1] } : { scale: 1, opacity: 1 }}
-                transition={active ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
-              />
-              <span className="font-sans text-[9px] uppercase tracking-[0.2em]" style={{ color: 'var(--muted)' }}>
-                {active ? (voiceState === 'listening' ? 'Listening' : voiceState === 'historian_speaking' ? 'Speaking' : 'Active') : 'Standby'}
-              </span>
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <motion.div
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: active ? (voiceState === 'listening' ? 'var(--teal)' : 'var(--gold)') : 'var(--muted)' }}
+              animate={active && !reducedMotion ? { scale: [1, 1.5, 1], opacity: [1, 0.4, 1] } : { scale: 1, opacity: 1 }}
+              transition={active ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+            />
+            <span className="font-sans text-[9px] uppercase tracking-[0.2em]" style={{ color: 'var(--muted)' }}>
+              {active ? (voiceState === 'listening' ? 'Listening' : voiceState === 'historian_speaking' ? 'Speaking' : 'Active') : 'Standby'}
+            </span>
           </div>
-
-          {/* Voice status message / live caption */}
-          <motion.p
-            key={voiceState === 'historian_speaking' && caption ? caption.slice(-60) : voiceState}
-            initial={reducedMotion ? false : { opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
-            className="font-serif text-[13px] italic leading-snug max-h-[3em] overflow-hidden truncate"
-            style={{ color: active ? 'var(--text)' : 'var(--muted)' }}
-          >
-            &ldquo;{voiceState === 'historian_speaking' && caption
-              ? caption
-              : voiceState === 'listening' && userTranscript
-                ? userTranscript
-                : VOICE_MESSAGES[voiceState]}&rdquo;
-          </motion.p>
-
-          {/* CTA button — only in standby */}
-          <AnimatePresence mode="wait">
-            {isIdle && (
-              <motion.div
-                key="cta"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
-              >
-                <ConsultButton onClick={onSpeak ?? beginConsultation ?? undefined} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <span className="text-[9px] text-[var(--muted)] opacity-40 select-none">
+            {collapsed ? '\u25B6' : '\u25BC'}
+          </span>
         </div>
+      </button>
 
-      </div>
+      {/* Collapsible body */}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            key="historian-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="px-4 pt-1 pb-3 flex items-center gap-4">
+              {/* Avatar / Emblem — left side */}
+              <div className="shrink-0">
+                <HistorianAvatarWithFallback active={active} voiceState={voiceState} />
+              </div>
+
+              {/* Right side: caption, CTA */}
+              <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                {/* Voice status message / live caption */}
+                <motion.p
+                  key={voiceState === 'historian_speaking' && caption ? caption.slice(-60) : voiceState}
+                  initial={reducedMotion ? false : { opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                  className="font-serif text-[16px] italic leading-snug max-h-[3em] overflow-hidden truncate"
+                  style={{ color: active ? 'var(--text)' : 'var(--muted)' }}
+                >
+                  &ldquo;{voiceState === 'historian_speaking' && caption
+                    ? caption
+                    : voiceState === 'listening' && userTranscript
+                      ? userTranscript
+                      : VOICE_MESSAGES[voiceState]}&rdquo;
+                </motion.p>
+
+                {/* CTA button — only in standby */}
+                <AnimatePresence mode="wait">
+                  {isIdle && (
+                    <motion.div
+                      key="cta"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.25, ease: 'easeOut' }}
+                    >
+                      <ConsultButton onClick={onSpeak ?? beginConsultation ?? undefined} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
