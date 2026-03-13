@@ -1,4 +1,4 @@
-import { useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { memo, useCallback, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 
 interface InkButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -8,12 +8,14 @@ interface InkButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 interface Ripple { id: number; x: number; y: number; }
 
-export function InkButton({ children, className = '', onClick, ...props }: InkButtonProps) {
+const SPRING = { type: 'spring' as const, stiffness: 400, damping: 17 } as const;
+
+export const InkButton = memo(function InkButton({ children, className = '', onClick, ...props }: InkButtonProps) {
   const rippleRef = useRef<Ripple[]>([]);
   const containerRef = useRef<HTMLButtonElement>(null);
   const forceUpdate = useRef(0);
 
-  function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
+  const handleClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const x = e.clientX - rect.left;
@@ -25,14 +27,14 @@ export function InkButton({ children, className = '', onClick, ...props }: InkBu
       forceUpdate.current++;
     }, 700);
     onClick?.(e);
-  }
+  }, [onClick]);
 
   return (
     <motion.button
       ref={containerRef}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+      transition={SPRING}
       onClick={handleClick}
       className={`relative overflow-hidden inline-flex items-center justify-center bg-[var(--gold)] text-[var(--bg)] font-sans font-medium tracking-wide px-6 py-3 rounded-lg cursor-pointer ${className}`}
       {...(props as object)}
@@ -56,4 +58,4 @@ export function InkButton({ children, className = '', onClick, ...props }: InkBu
       ))}
     </motion.button>
   );
-}
+});
