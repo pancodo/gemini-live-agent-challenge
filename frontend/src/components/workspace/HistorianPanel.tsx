@@ -318,13 +318,13 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
         )}
       </AnimatePresence>
 
-      <div className="px-4 pt-3 pb-3 flex flex-col items-center gap-2.5">
+      <div className="px-4 pt-2.5 pb-2.5 flex flex-col items-center gap-1.5">
 
         {/* Header row */}
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
             <span style={{ color: 'var(--gold)', fontSize: 8, opacity: 0.7 }}>{'\u2666'}</span>
-            <h2 className="font-serif text-[10px] uppercase tracking-[0.4em]" style={{ color: 'var(--gold)' }}>
+            <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em]" style={{ color: 'var(--gold)' }}>
               The Historian
             </h2>
           </div>
