@@ -84,9 +84,11 @@ export function LivingPortrait({
           <canvas
             ref={canvasRef}
             className="portrait-canvas"
+            role="img"
+            aria-label="AI Historian portrait"
             style={{ width: size, height: size }}
           />
-          {/* Oval vignette — soft darkened edges */}
+          {/* Vignette — soft darkened edges */}
           <div className="portrait-vignette" />
           {/* Gold ornamental frame */}
           <div className="portrait-frame" />
