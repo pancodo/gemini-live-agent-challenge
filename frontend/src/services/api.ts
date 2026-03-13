@@ -2,10 +2,11 @@ import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, S
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-export async function createSession(filename: string, language?: string, persona?: string): Promise<CreateSessionResponse> {
+export async function createSession(filename: string, language?: string, persona?: string, mode?: string): Promise<CreateSessionResponse> {
   const params = new URLSearchParams({ filename });
   if (language) params.set('language', language);
   if (persona) params.set('persona', persona);
+  if (mode) params.set('mode', mode);
   const res = await fetch(`${BASE_URL}/api/session/create?${params}`);
   if (!res.ok) throw new Error(`Session create failed: ${res.status}`);
   return res.json() as Promise<CreateSessionResponse>;

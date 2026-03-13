@@ -6,9 +6,10 @@ export async function uploadDocument(
   file: File,
   language?: string,
   persona?: string,
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
+  mode?: string,
 ): Promise<{ sessionId: string; gcsPath: string }> {
-  const { sessionId, uploadUrl, gcsPath } = await createSession(file.name, language, persona);
+  const { sessionId, uploadUrl, gcsPath } = await createSession(file.name, language, persona, mode);
 
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -26,7 +27,7 @@ export async function uploadDocument(
   const res = await fetch(`${BASE_URL}/api/session/${sessionId}/process`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gcsPath }),
+    body: JSON.stringify({ gcsPath, mode: mode || 'normal' }),
   });
   if (!res.ok) throw new Error(`Pipeline trigger failed: ${res.status}`);
 
