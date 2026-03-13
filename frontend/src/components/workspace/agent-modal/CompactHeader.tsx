@@ -76,28 +76,28 @@ function StatusDot({ status, isLive }: { status: AgentStatus; isLive: boolean })
 // Status badge (inline, no external Badge component dependency)
 // ─────────────────────────────────────────────────────────────
 
+const STATUS_BADGE_STYLES: Record<AgentStatus, string> = {
+  searching:  'bg-[var(--teal)]/15  text-[var(--teal)]  border-[var(--teal)]/30',
+  evaluating: 'bg-[var(--gold)]/15  text-[var(--gold)]  border-[var(--gold)]/30',
+  done:       'bg-[var(--green)]/15 text-[var(--green)] border-[var(--green)]/30',
+  error:      'bg-red-500/10        text-red-400         border-red-500/25',
+  queued:     'bg-[var(--muted)]/10 text-[var(--muted)] border-[var(--muted)]/20',
+};
+
+const STATUS_BADGE_LABELS: Record<AgentStatus, string> = {
+  searching:  'Searching',
+  evaluating: 'Evaluating',
+  done:       'Done',
+  error:      'Error',
+  queued:     'Queued',
+};
+
 function StatusBadge({ status }: { status: AgentStatus }) {
-  const styles: Record<AgentStatus, string> = {
-    searching:  'bg-[var(--teal)]/15  text-[var(--teal)]  border-[var(--teal)]/30',
-    evaluating: 'bg-[var(--gold)]/15  text-[var(--gold)]  border-[var(--gold)]/30',
-    done:       'bg-[var(--green)]/15 text-[var(--green)] border-[var(--green)]/30',
-    error:      'bg-red-500/10        text-red-400         border-red-500/25',
-    queued:     'bg-[var(--muted)]/10 text-[var(--muted)] border-[var(--muted)]/20',
-  };
-
-  const labels: Record<AgentStatus, string> = {
-    searching:  'Searching',
-    evaluating: 'Evaluating',
-    done:       'Done',
-    error:      'Error',
-    queued:     'Queued',
-  };
-
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full font-sans text-[9px] uppercase tracking-[0.12em] border ${styles[status]}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full font-sans text-[9px] uppercase tracking-[0.12em] border ${STATUS_BADGE_STYLES[status]}`}
     >
-      {labels[status]}
+      {STATUS_BADGE_LABELS[status]}
     </span>
   );
 }

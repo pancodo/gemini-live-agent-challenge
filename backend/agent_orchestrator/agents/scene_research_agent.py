@@ -149,7 +149,7 @@ async def _fetch_chunk_texts(
 # Agent instruction builder
 # ---------------------------------------------------------------------------
 
-def _build_researcher_instruction(scene_index: int) -> str:
+def _build_researcher_instruction(scene_index: int, research_mode: str = "normal") -> str:
     """Build the instruction string for scene research agent ``scene_index``.
 
     Uses f-string escaping to embed ADK template variable references:
@@ -169,6 +169,54 @@ def _build_researcher_instruction(scene_index: int) -> str:
         Full instruction string for the ADK ``Agent``.
     """
     i = scene_index
+
+    if research_mode == "test":
+        search_section = """\
+You have a STRICT BUDGET of exactly 1 search. ONE single search only.
+Combine the scene's primary subject + era + location into ONE comprehensive query.
+Example: "grain trade Thessaloniki 1760s Ottoman regulations"
+
+MANDATORY QUERY RULES:
+  • The query MUST include: a named entity + a date or era + a location.
+  • DO NOT perform more than 1 search. This is a test run."""
+
+        claim_section = """\
+  Rules:
+  • Extract ONLY explicitly stated claims — never infer or generalise.
+  • Extract 1–2 key facts only. Keep it minimal for testing."""
+    else:
+        search_section = """\
+You have a STRICT BUDGET of exactly 3 searches. No more. Each search must
+be maximally informative. Combine multiple entities into a single query.
+
+── SEARCH 1: Core verification ──
+  Combine the scene's primary subject + era + location + key entity into ONE
+  comprehensive query.
+  Example: "grain trade Thessaloniki 1760s Ottoman Halil Pasha regulations"
+
+── SEARCH 2: Visual and material detail ──
+  Search for visual reference: architecture, clothing, objects, setting.
+  Example: "Thessaloniki harbour 18th century Ottoman architecture engraving"
+
+── SEARCH 3: Secondary corroboration ──
+  Target the most important uncorroborated claim from search 1-2 results.
+  Example: "Ottoman grain tax 1763 decree Thessaloniki archival source"
+
+MANDATORY QUERY RULES:
+  • Every query MUST include: a named entity + a date or era + a location.
+  • GOOD: "grain trade Thessaloniki 1760s Ottoman regulations archival"
+  • BAD:  "Ottoman Empire history"
+  • DO NOT exceed 3 searches. Quality over quantity."""
+
+        claim_section = """\
+  Rules:
+  • Extract ONLY explicitly stated claims — never infer or generalise.
+  • Mark hedged claims ("possibly", "believed to be", "some scholars argue")
+    with the label UNVERIFIED.
+  • Extract 3–5 high-quality facts per scene. Prefer fewer, stronger facts.
+  • Every fact must be different from what is already stated in the source
+    excerpt — you are adding NEW corroborated knowledge."""
+
     return f"""\
 You are a historical research specialist embedded in an AI-generated cinematic
 documentary pipeline. Your mission is to corroborate and enrich the SPECIFIC
@@ -264,40 +312,14 @@ Read the SOURCE DOCUMENT EXCERPT carefully. Identify every specific claim,
 named person, named place, event, date, and quantity. These are your research
 targets — not broad historical topics.
 
-── ROUND 1: Broad verification ──
-  For the scene's primary subject, search: "[subject] [era] [location] history"
-  Example: "grain trade Thessaloniki 1760s Ottoman regulations archival"
-
-── ROUND 2: Entity-specific deep dives ──
-  For each named person, place, or event, search:
-  "[named person/place] [date] [specific action or role]"
-  Example: "Halil Pasha Ottoman governor Thessaloniki 1762 trade reforms"
-
-── ROUND 3: Visual detail gathering ──
-  Search for visual reference material:
-  "[location] [era] [visual subject] archival photograph museum catalogue"
-  Example: "Thessaloniki harbour 18th century Ottoman engraving museum"
-
-MANDATORY QUERY RULES:
-  • Every query MUST include: a named entity + a date or era + a location.
-  • GOOD: "grain trade Thessaloniki 1760s Ottoman regulations archival"
-  • BAD:  "Ottoman Empire history"
-  • GOOD: "Halil Pasha governor Thessaloniki 1762"
-  • BAD:  "Ottoman governors 18th century"
-  • Perform at minimum 5 searches total across the three rounds. More is better.
+{search_section}
 
 ── CLAIM EXTRACTION PRIORITY ──
   From accepted sources only, extract claims in this priority order:
     dates > named individuals > named places > quantities >
     material/visual details > causal relationships
 
-  Rules:
-  • Extract ONLY explicitly stated claims — never infer or generalise.
-  • Mark hedged claims ("possibly", "believed to be", "some scholars argue")
-    with the label UNVERIFIED.
-  • Extract minimum 3, preferably 5–8 facts per scene.
-  • Every fact must be different from what is already stated in the source
-    excerpt — you are adding NEW corroborated knowledge.
+{claim_section}
 
 ── CROSS-REFERENCE CONFIDENCE LABELS ──
   Apply exactly one label to each fact:
@@ -396,7 +418,7 @@ commentary before or after the JSON.
 # ---------------------------------------------------------------------------
 
 
-def _build_parallel_research(num_scenes: int) -> ParallelAgent:
+def _build_parallel_research(num_scenes: int, research_mode: str = "normal") -> ParallelAgent:
     """Construct a ``ParallelAgent`` with one ``google_search`` agent per scene.
 
     Each sub-agent reads its scene brief and chunk texts from ``session.state``
@@ -420,7 +442,7 @@ def _build_parallel_research(num_scenes: int) -> ParallelAgent:
                 f"Researches scene {i}: corroborates specific historical claims "
                 f"from the source document excerpt using google_search."
             ),
-            instruction=_build_researcher_instruction(i),
+            instruction=_build_researcher_instruction(i, research_mode),
             tools=[google_search],
             output_key=f"research_{i}",
         )
@@ -595,7 +617,8 @@ class SceneResearchOrchestrator(BaseAgent):
         # ------------------------------------------------------------------
         # Build the parallel agent and flip all scenes to "searching"
         # ------------------------------------------------------------------
-        parallel = _build_parallel_research(num_scenes)
+        research_mode: str = ctx.session.state.get("research_mode", "normal")
+        parallel = _build_parallel_research(num_scenes, research_mode)
 
         if self.emitter is not None:
             for i, brief in enumerate(scene_briefs):

@@ -3,9 +3,13 @@
  *
  * Inserts characters one-by-one with a blinking cursor span (.tw-cursor).
  * Speed has +-50% jitter per character for an organic feel.
+ *
+ * Returns a cancellation function that stops the animation and removes
+ * the cursor immediately.
  */
-export function typewriteEntry(el: HTMLElement, text: string, speed = 20): void {
+export function typewriteEntry(el: HTMLElement, text: string, speed = 20): () => void {
   let i = 0;
+  let cancelled = false;
   el.textContent = '';
 
   const cursor = document.createElement('span');
@@ -13,6 +17,7 @@ export function typewriteEntry(el: HTMLElement, text: string, speed = 20): void 
   el.appendChild(cursor);
 
   function tick(): void {
+    if (cancelled) return;
     if (i < text.length) {
       el.insertBefore(document.createTextNode(text[i]!), cursor);
       i++;
@@ -24,4 +29,9 @@ export function typewriteEntry(el: HTMLElement, text: string, speed = 20): void 
   }
 
   tick();
+
+  return () => {
+    cancelled = true;
+    cursor.remove();
+  };
 }

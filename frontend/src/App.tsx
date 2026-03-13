@@ -33,7 +33,13 @@ function ThemeSync() {
 }
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 2, staleTime: 5000 } },
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+    },
+  },
 });
 
 function PageFallback() {

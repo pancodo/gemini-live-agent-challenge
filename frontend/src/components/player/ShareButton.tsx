@@ -61,7 +61,6 @@ function Spinner() {
       style={{ animation: 'spin 1s linear infinite' }}
     >
       <path d="M7 1a6 6 0 0 1 6 6" />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </svg>
   );
 }

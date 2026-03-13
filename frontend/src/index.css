@@ -203,6 +203,9 @@ body {
   opacity: 0.025;
   mix-blend-mode: multiply;
   animation: grain-shift 0.5s steps(4) infinite;
+  will-change: transform;
+  contain: strict;
+  isolation: isolate;
 }
 
 @keyframes grain-shift {
@@ -223,17 +226,21 @@ body {
   pointer-events: none;
   z-index: -1;
   will-change: transform;
+  contain: layout paint;
 }
 .aurora-blob:nth-child(1) {
-  --aurora-color: #8b6914; top: -10%; left: -10%;
+  --aurora-color: #8b6914; top: 0; left: 0;
+  transform: translate3d(-10%, -10%, 0);
   animation: drift 22s ease-in-out infinite alternate;
 }
 .aurora-blob:nth-child(2) {
-  --aurora-color: #3d2e1a; bottom: -10%; right: -10%;
+  --aurora-color: #3d2e1a; top: 0; left: 0;
+  transform: translate3d(calc(100vw - 40vw + 10%), calc(100vh - 40vw + 10%), 0);
   animation: drift 28s ease-in-out infinite alternate-reverse;
 }
 .aurora-blob:nth-child(3) {
-  --aurora-color: #2a1f14; top: 50%; left: 40%;
+  --aurora-color: #2a1f14; top: 0; left: 0;
+  transform: translate3d(30%, 50vh, 0);
   animation: drift 32s ease-in-out infinite alternate;
 }
 
@@ -299,6 +306,7 @@ body {
   --mouse-x: 50%;
   --mouse-y: 50%;
   position: relative;
+  contain: layout paint;
 }
 .agent-card::after {
   content: '';
@@ -338,8 +346,8 @@ body {
   animation: content-reveal 0.4s ease-out;
 }
 @keyframes content-reveal {
-  from { opacity: 0; filter: blur(4px); }
-  to   { opacity: 1; filter: blur(0); }
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Phase Divider (Expedition Log) ────────────────────── */
@@ -512,8 +520,8 @@ body {
 
 /* ── Word-by-word caption reveal ───────────────────────── */
 @keyframes word-appear {
-  from { opacity: 0; filter: blur(4px); transform: translateY(4px); }
-  to   { opacity: 1; filter: blur(0);   transform: translateY(0); }
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Iris transition ───────────────────────────────────── */
@@ -543,6 +551,10 @@ body {
 }
 .iris-overlay.iris-close { animation: iris-close 0.65s ease-in forwards; }
 .iris-overlay.iris-open  { animation: iris-open  0.75s ease-out forwards; }
+.iris-overlay.iris-close,
+.iris-overlay.iris-open {
+  will-change: mask-image, -webkit-mask-image;
+}
 
 @keyframes iris-close {
   from { --iris-r: 150%; }
@@ -663,10 +675,95 @@ body {
 .player-stage::before {
   content: '';
   position: absolute;
-  inset: -120px;
+  inset: 0;
   background: var(--ambient-color, transparent);
   filter: blur(80px);
   transition: background 2.5s ease;
   pointer-events: none;
   z-index: -1;
+  will-change: filter;
+  contain: layout paint;
+}
+
+/* ── Ken Burns keyframes — moved from KenBurnsStage.tsx inline <style> ── */
+@keyframes ken-burns-0 {
+  0%   { transform: scale(1.0) translate(0%, 0%); }
+  100% { transform: scale(1.12) translate(1%, 0.5%); }
+}
+@keyframes ken-burns-1 {
+  0%   { transform: scale(1.0) translate(-3%, -2%); }
+  100% { transform: scale(1.12) translate(0%, 0%); }
+}
+@keyframes ken-burns-2 {
+  0%   { transform: scale(1.0) translate(3%, 0%); }
+  100% { transform: scale(1.12) translate(-1%, -1%); }
+}
+@keyframes ken-burns-3 {
+  0%   { transform: scale(1.0) translate(0%, -3%); }
+  100% { transform: scale(1.12) translate(1%, 0%); }
+}
+
+/* ── Illustration shimmer — moved from KenBurnsStage.tsx ── */
+@keyframes illustration-glow {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
+}
+.illustration-shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.illustration-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(139, 94, 26, 0.12), transparent 70%);
+  opacity: 0;
+  animation: illustration-glow 3s ease-in-out infinite;
+}
+
+/* ── KB loading skeleton — moved from KenBurnsStage.tsx inline <style> ── */
+@keyframes kb-skeleton-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50%      { transform: scale(1.2); opacity: 0.7; }
+}
+
+/* ── View Transition keyframes — moved from DocumentaryPlayer.tsx inline <style> ── */
+@keyframes fade-and-scale-out {
+  to { opacity: 0; filter: brightness(0); transform: scale(1); }
+}
+@keyframes fade-and-scale-in {
+  from { opacity: 0; filter: brightness(0); transform: scale(1.03); }
+  to   { opacity: 1; filter: brightness(1); transform: scale(1); }
+}
+::view-transition-old(root) {
+  animation: 0.35s ease-in both fade-and-scale-out;
+}
+::view-transition-new(root) {
+  animation: 0.35s ease-out both fade-and-scale-in;
+}
+
+/* ── Ink ripple — moved from HistorianPanel.tsx ConsultButton inline <style> ── */
+@keyframes ink-ripple {
+  to { transform: scale(3); opacity: 0; }
+}
+
+/* ── Spin utility — moved from ShareButton.tsx inline <style> ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Player chrome idle transition — moved from DocumentaryPlayer inline style ── */
+.player-chrome {
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.player-chrome--idle {
+  opacity: 0;
+  pointer-events: none;
+}
+.player-chrome-bottom--idle {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
 }

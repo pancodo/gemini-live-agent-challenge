@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
 import { useResearchStore, type PhaseEntry } from '../../store/researchStore';
 import { useSessionStore } from '../../store/sessionStore';
@@ -270,7 +270,9 @@ function PhaseBlock({
 // ── ExpeditionLog ───────────────────────────────────────
 export function ExpeditionLog() {
   const phases = useResearchStore((s) => s.phases);
-  const stats = useResearchStore((s) => s.stats);
+  const sourcesFound = useResearchStore((s) => s.stats.sourcesFound);
+  const factsVerified = useResearchStore((s) => s.stats.factsVerified);
+  const segmentsReady = useResearchStore((s) => s.stats.segmentsReady);
   const agents = useResearchStore((s) => s.agents);
   const sessionId = useSessionStore((s) => s.sessionId);
   const reduced = useReducedMotion() ?? false;
@@ -288,13 +290,28 @@ export function ExpeditionLog() {
     }
   }, [phases, agents]);
 
-  const agentList = Object.values(agents);
-  const activeAgentCount = agentList.filter((a) => a.status === 'searching').length;
+  const agentList = useMemo(() => Object.values(agents), [agents]);
+  const activeAgentCount = useMemo(() => agentList.filter((a) => a.status === 'searching').length, [agentList]);
   const searchingCount = activeAgentCount;
   const selectedAgent = selectedAgentId ? (agents[selectedAgentId] ?? null) : null;
 
   // The active phase is the last phase in the list (most recently started)
   const activePhaseNumber = phases.length > 0 ? phases[phases.length - 1].phase : null;
+
+  const agentsByPhase = useMemo(() => {
+    const map = new Map<number, AgentState[]>();
+    for (const agent of agentList) {
+      for (let p = 1; p <= 5; p++) {
+        if (agentBelongsToPhase(p, agent.id)) {
+          const arr = map.get(p) ?? [];
+          arr.push(agent);
+          map.set(p, arr);
+          break;
+        }
+      }
+    }
+    return map;
+  }, [agentList]);
 
   return (
     <div className="flex flex-col h-full">
@@ -339,31 +356,26 @@ export function ExpeditionLog() {
           </p>
         )}
 
-        {phases.map((entry) => {
-          const phaseAgents = agentList.filter((a) =>
-            agentBelongsToPhase(entry.phase, a.id),
-          );
-          return (
-            <PhaseBlock
-              key={entry.phase}
-              entry={entry}
-              isActive={entry.phase === activePhaseNumber}
-              reduced={reduced}
-              typewrittenRef={typewrittenRef}
-              phaseAgents={phaseAgents}
-              onAgentClick={setSelectedAgentId}
-            />
-          );
-        })}
+        {phases.map((entry) => (
+          <PhaseBlock
+            key={entry.phase}
+            entry={entry}
+            isActive={entry.phase === activePhaseNumber}
+            reduced={reduced}
+            typewrittenRef={typewrittenRef}
+            phaseAgents={agentsByPhase.get(entry.phase) ?? []}
+            onAgentClick={setSelectedAgentId}
+          />
+        ))}
       </div>
 
       {/* Stats bar */}
       <div className="stats-bar flex items-center gap-4 px-5 py-3 border-t border-[var(--bg4)]">
-        <StatBadge label="SOURCES FOUND" value={stats.sourcesFound} />
+        <StatBadge label="SOURCES FOUND" value={sourcesFound} />
         <span className="text-[var(--bg4)]">&middot;</span>
-        <StatBadge label="FACTS VERIFIED" value={stats.factsVerified} />
+        <StatBadge label="FACTS VERIFIED" value={factsVerified} />
         <span className="text-[var(--bg4)]">&middot;</span>
-        <StatBadge label="SEGMENTS READY" value={stats.segmentsReady} />
+        <StatBadge label="SEGMENTS READY" value={segmentsReady} />
       </div>
 
       {/* Agent detail modal */}

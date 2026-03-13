@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, startTransition } from 'react';
 
 // Ancient Greek + Cyrillic glyphs for the cipher effect
 const CIPHER_CHARS =
@@ -77,9 +77,8 @@ export function useTextScramble(finalText: string, active: boolean): string {
         }
       }
 
-      setDisplay(result);
-
       if (progress < 1) {
+        startTransition(() => setDisplay(result));
         rafRef.current = requestAnimationFrame(step);
       } else {
         setDisplay(finalText);

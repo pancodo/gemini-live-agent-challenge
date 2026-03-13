@@ -29,11 +29,14 @@ export function PlayerPage() {
     const { segments, setSegment } = useResearchStore.getState();
     const storeEmpty = Object.keys(segments).length === 0;
     const segmentMissing = segmentId != null && segments[segmentId] == null;
-    if (storeEmpty || segmentMissing) {
-      getSegments(sessionId)
-        .then((segs) => { for (const seg of segs) setSegment(seg.id, seg); })
-        .catch(() => {/* non-fatal */});
-    }
+    if (!storeEmpty && !segmentMissing) return;
+
+    const controller = new AbortController();
+    getSegments(sessionId, controller.signal)
+      .then((segs) => { for (const seg of segs) setSegment(seg.id, seg); })
+      .catch((err) => { if (err instanceof Error && err.name !== 'AbortError') console.warn(err); });
+
+    return () => controller.abort();
   }, [sessionId, segmentId]);
 
   return <DocumentaryPlayer />;

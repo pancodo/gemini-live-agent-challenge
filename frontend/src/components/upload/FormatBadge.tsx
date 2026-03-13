@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Badge } from '../ui';
 
 const SUPPORTED_FORMATS = [
@@ -8,7 +9,7 @@ const SUPPORTED_FORMATS = [
   { label: 'WEBP', variant: 'muted' },
 ] as const;
 
-export function FormatBadge() {
+export const FormatBadge = memo(function FormatBadge() {
   return (
     <div className="flex flex-wrap gap-1.5 justify-center">
       {SUPPORTED_FORMATS.map((f) => (
@@ -18,4 +19,4 @@ export function FormatBadge() {
       ))}
     </div>
   );
-}
+});

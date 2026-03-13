@@ -1,18 +1,15 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import type { BranchNode, Segment } from '../../types';
+import { useShallow } from 'zustand/react/shallow';
+import type { BranchNode } from '../../types';
 import { useResearchStore } from '../../store/researchStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { useGroundingSources } from '../../hooks/useGroundingSources';
 import { SourcePanel } from './SourcePanel';
 import { downloadImage } from '../../utils/downloadImage';
 
-/** Extended player store shape — branchGraph will be added by Team 1. */
-interface PlayerStoreWithBranch {
-  branchGraph?: BranchNode[];
-  [key: string]: unknown;
-}
+const EMPTY_BRANCH: BranchNode[] = [];
 
 interface PlayerSidebarProps {
   isOpen: boolean;
@@ -272,6 +269,9 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
             <img
               src={url}
               alt={`Frame ${i + 1}`}
+              width={48}
+              height={32}
+              loading="lazy"
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
           </button>
@@ -320,16 +320,11 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
 // ── PlayerSidebar ─────────────────────────────────────────────────────────────
 
 export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
-  const segmentsRecord = useResearchStore((s) => s.segments);
+  const segments = useResearchStore(useShallow((s) => Object.values(s.segments)));
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const openSegment = usePlayerStore((s) => s.open);
-  const branchGraph = usePlayerStore((s) => (s as unknown as PlayerStoreWithBranch).branchGraph ?? []);
+  const branchGraph = usePlayerStore((s) => s.branchGraph) ?? EMPTY_BRANCH;
   const sources = useGroundingSources();
-
-  const segments: Segment[] = useMemo(
-    () => Object.values(segmentsRecord),
-    [segmentsRecord],
-  );
 
   const readyCount = useMemo(
     () =>

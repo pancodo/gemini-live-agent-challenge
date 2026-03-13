@@ -6,6 +6,9 @@
 // ── Persona ─────────────────────────────────────────────────
 export type PersonaType = 'professor' | 'storyteller' | 'explorer';
 
+// ── Research Mode ───────────────────────────────────────────
+export type ResearchMode = 'test' | 'normal';
+
 // ── Session ──────────────────────────────────────────────────
 export type SessionStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'playing';
 

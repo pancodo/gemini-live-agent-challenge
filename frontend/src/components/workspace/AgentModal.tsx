@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo, memo, type MouseEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -33,6 +33,14 @@ interface AgentModalProps {
 
 type Tab = 'sources' | 'facts' | 'log';
 type SourceFilter = 'all' | 'accepted' | 'rejected';
+
+// ─────────────────────────────────────────────────────────────
+// Module-level Motion constants
+// ─────────────────────────────────────────────────────────────
+
+const LIVE_DOT_ANIMATE = { scale: [1, 1.4, 1], opacity: [1, 0.5, 1] } as const;
+const LIVE_DOT_TRANSITION = { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } as const;
+const STATIC_ANIMATE = {} as const;
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -292,7 +300,7 @@ function OgImageZone({ imageUrl, hostname, isLoading }: {
 // Source Card
 // ─────────────────────────────────────────────────────────────
 
-function SourceCard({ source, index, isLive }: { source: EvaluatedSource; index: number; isLive: boolean }) {
+const SourceCard = memo(function SourceCard({ source, index, isLive }: { source: EvaluatedSource; index: number; isLive: boolean }) {
   const [faviconError, setFaviconError] = useState(false);
   const host = extractHostname(source.url);
 
@@ -365,7 +373,7 @@ function SourceCard({ source, index, isLive }: { source: EvaluatedSource; index:
       </div>
     </motion.div>
   );
-}
+});
 
 function ShimmerCard() {
   return (
@@ -530,8 +538,8 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
   const evaluatedSources = agent?.evaluatedSources ?? [];
   const facts = agent?.facts ?? [];
 
-  const acceptedSources = evaluatedSources.filter((s) => s.accepted);
-  const rejectedSources = evaluatedSources.filter((s) => !s.accepted);
+  const acceptedSources = useMemo(() => evaluatedSources.filter((s) => s.accepted), [evaluatedSources]);
+  const rejectedSources = useMemo(() => evaluatedSources.filter((s) => !s.accepted), [evaluatedSources]);
 
   // Auto-switch tabs as data arrives
   useEffect(() => {
@@ -582,8 +590,8 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                           agent?.status === 'error' ? 'bg-red-500' :
                           'bg-[var(--muted)]'
                         }`}
-                        animate={isLive ? { scale: [1, 1.4, 1], opacity: [1, 0.5, 1] } : {}}
-                        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                        animate={isLive ? LIVE_DOT_ANIMATE : STATIC_ANIMATE}
+                        transition={LIVE_DOT_TRANSITION}
                       />
 
                       {/* Query title */}
