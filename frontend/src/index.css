@@ -777,3 +777,13 @@ body {
   transform: translateY(20px);
   pointer-events: none;
 }
+
+/* ── Globe pulse for map discovery hint ── */
+@keyframes globe-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(196,149,106,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(196,149,106,0); }
+  100% { box-shadow: 0 0 0 0 rgba(196,149,106,0); }
+}
+.globe-pulse {
+  animation: globe-pulse-ring 1.5s ease-out 2;
+}
