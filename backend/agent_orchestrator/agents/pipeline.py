@@ -956,16 +956,17 @@ class StreamingPipelineAgent(BaseAgent):
             )
 
         # ------------------------------------------------------------------
-        # Visual phases: run remaining batch agents (3.1, 3.2, 4.0, IV, V)
+        # Visual phases: run remaining batch agents (3.1, 3.2, 3.3, 4.0, IV, V)
         # These run on the accumulated script state from per-segment pipeline.
         # Phase 3.5 and 3.8 are skipped (already done per-segment).
         # ------------------------------------------------------------------
         visual_phase_map: list[tuple[int | float, list[int]]] = [
             (3.1, [3]),   # narrative_director
-            (3.2, [4]),   # beat_illustration (interleaved TEXT+IMAGE for player)
-            (4,   [5]),   # narrative_visual_planner
-            (5,   [6]),   # visual_research_orch
-            (6,   [7]),   # visual_director_orch
+            (3.2, [4]),   # beat_illustration (interleaved TEXT+IMAGE beats)
+            (3.3, [5]),   # visual_interleave (assigns visual_type per beat)
+            (4,   [6]),   # narrative_visual_planner
+            (5,   [7]),   # visual_research_orch
+            (6,   [8]),   # visual_director_orch (now beat-aware)
         ]
 
         for phase_num, agent_indices in visual_phase_map:
@@ -1205,9 +1206,10 @@ def build_streaming_pipeline(
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     aggregator = _make_aggregator_agent()
 
-    # Visual phase agents (indices 3, 4, 5, 6, 7) -- run after per-segment pipeline
+    # Visual phase agents (indices 3, 4, 5, 6, 7, 8) -- run after per-segment pipeline
     narrative_director = build_narrative_director_agent(emitter=emitter)
     beat_illustration = build_beat_illustration_agent(emitter=emitter)
+    visual_interleave = build_visual_interleave_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
     visual_research_orch = build_visual_research_orchestrator(
         emitter=emitter, rate_limiter=gemini_limiter,
@@ -1223,7 +1225,8 @@ def build_streaming_pipeline(
         description=(
             "AI Historian per-segment streaming pipeline (Workstream B). "
             "Global phases I+II run first, then per-segment Script/FactCheck/Geo "
-            "coroutines produce segments incrementally. Visual phases run after. "
+            "coroutines produce segments incrementally. Visual phases (3.1, 3.2, "
+            "3.3, 4.0, IV, V) run after. "
             "Scene 0 is prioritized for fastest time-to-first-playable."
         ),
         firestore_project=os.environ.get("GCP_PROJECT_ID", ""),
@@ -1237,8 +1240,9 @@ def build_streaming_pipeline(
             aggregator,                      # [2] Phase II (aggregator)
             narrative_director,              # [3] Phase 3.1
             beat_illustration,               # [4] Phase 3.2 -- interleaved TEXT+IMAGE beats
-            narrative_visual_planner_orch,   # [5] Phase 4.0
-            visual_research_orch,            # [6] Phase IV
-            visual_director_orch,            # [7] Phase V
+            visual_interleave,               # [5] Phase 3.3 -- assigns visual_type per beat
+            narrative_visual_planner_orch,   # [6] Phase 4.0
+            visual_research_orch,            # [7] Phase IV
+            visual_director_orch,            # [8] Phase V
         ],
     )
