@@ -564,10 +564,18 @@ export function ResearchPanel() {
       {/* Scrollable content area */}
       <div className="flex-1 flex flex-col gap-2 overflow-y-auto overflow-x-hidden px-5 pt-3 pb-16">
         {/* Section Header */}
-        <div>
-          <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em] text-[var(--gold)] mb-1 text-center">
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <svg width="60" height="16" viewBox="0 0 60 16" fill="none" style={{ opacity: 0.45 }}>
+            <path d="M58 8 C50 8, 46 2, 38 2 C32 2, 28 6, 28 10 C28 14, 32 15, 35 13 C36 12, 36 10, 34 10 C32 10, 31 12, 32 13" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M28 10 C24 12, 14 13, 2 9" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em] text-[var(--gold)] shrink-0">
             Research Activity
           </h2>
+          <svg width="60" height="16" viewBox="0 0 60 16" fill="none" style={{ opacity: 0.45, transform: 'scaleX(-1)' }}>
+            <path d="M58 8 C50 8, 46 2, 38 2 C32 2, 28 6, 28 10 C28 14, 32 15, 35 13 C36 12, 36 10, 34 10 C32 10, 31 12, 32 13" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M28 10 C24 12, 14 13, 2 9" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
         </div>
 
         {/* Agent cards grouped by phase */}
@@ -619,10 +627,20 @@ export function ResearchPanel() {
 
         {/* Segments section */}
         {segmentList.length > 0 && (
-          <div>
-            <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-3">
-              Segments
-            </h2>
+          <div className="mt-2">
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <svg width="60" height="16" viewBox="0 0 60 16" fill="none" style={{ opacity: 0.45 }}>
+                <path d="M58 8 C50 8, 46 2, 38 2 C32 2, 28 6, 28 10 C28 14, 32 15, 35 13 C36 12, 36 10, 34 10 C32 10, 31 12, 32 13" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M28 10 C24 12, 14 13, 2 9" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em] text-[var(--gold)] shrink-0">
+                Segments
+              </h2>
+              <svg width="60" height="16" viewBox="0 0 60 16" fill="none" style={{ opacity: 0.45, transform: 'scaleX(-1)' }}>
+                <path d="M58 8 C50 8, 46 2, 38 2 C32 2, 28 6, 28 10 C28 14, 32 15, 35 13 C36 12, 36 10, 34 10 C32 10, 31 12, 32 13" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M28 10 C24 12, 14 13, 2 9" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </div>
             <div className="space-y-3">
               {segmentList.map((segment, i) => (
                 <SegmentCard key={segment.id} segment={segment} index={i} />
