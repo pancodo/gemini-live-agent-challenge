@@ -1,37 +1,33 @@
-"""ADK Pipeline — SequentialAgent orchestrating the full documentary generation flow.
+"""ADK Pipeline -- SequentialAgent orchestrating the full documentary generation flow.
 
-Current pipeline order (Phases I–V fully integrated, with III.5 fact validation
+Workstream B: Per-segment streaming pipeline
+---------------------------------------------
+After global phases (Phase I document analysis + Phase II scene research)
+complete, the pipeline switches to per-segment coroutines. Each segment
+runs: Script -> FactCheck -> Geo -> VisualResearch -> Imagen3 -> emit
+segment_playable -> Veo2 background.
+
+Scene 0 runs FIRST (fastest path to first playable segment). Scenes 1-N
+stagger with ``asyncio.Semaphore(2)`` for API quota safety.
+
+Legacy pipeline (``build_pipeline``) and the batch sequential pipeline
+(``ResumablePipelineAgent``) are preserved for reference and fallback.
+
+Current pipeline order (Phases I-V fully integrated, with III.5 fact validation
 and 3.8 geographic mapping):
-    1. document_analyzer            — OCR, semantic chunking, parallel summarisation,
-                                      narrative curation → scene_briefs + visual_bible
-    2. scene_research_orch          — Parallel scene research (one google_search agent
-                                      per SceneBrief) → research_0 … research_N
-    3. aggregator_agent             — Merges all research_N outputs into unified context
-    4. script_orch                  — Script Agent (gemini-2.0-pro) → SegmentScript list,
-                                      Firestore write, segment_update SSE (Phase III)
-   4b. fact_validator               — Hallucination firewall: cross-references narration
-                                      claims against research evidence (Phase III.5)
-   4c. geo_location                 — Extracts geographic locations and routes from scripts,
-                                      geocodes via Gemini, produces SegmentGeo metadata
-                                      for frontend timeline map (Phase 3.8)
-    5. narrative_visual_planner     — Single Gemini Pro call producing VisualStoryboard
-                                      with per-scene primary subjects, avoid lists,
-                                      targeted searches, and 4 frame concepts (Phase 4.0)
-    6. visual_research_orch         — Per-scene 6-stage micro-pipeline → VisualDetailManifest
-                                      per scene, Firestore write, segment_update(ready) SSE
-                                      (Phase IV — now reads visual_storyboard when available)
-    7. visual_director_orch         — Reads manifests → Imagen 3 (4 frames/scene) + Veo 2
-                                      → GCS upload, Firestore imageUrls/videoUrl,
-                                      segment_update(complete) SSE (Phase V)
-
-The ``ResumablePipelineAgent`` wraps the sequential execution with checkpoint
-persistence: after each phase completes, the session state is checkpointed to
-Firestore. On restart, completed phases are skipped and state is restored from
-the last checkpoint.
-
-Legacy agents (scan_agent, build_research_agents) remain in this file and are
-used by the legacy ``build_pipeline`` path. They will be removed once all
-phases are integrated.
+    1. document_analyzer            -- OCR, semantic chunking, parallel summarisation,
+                                      narrative curation -> scene_briefs + visual_bible
+    2. scene_research_orch          -- Parallel scene research (one google_search agent
+                                      per SceneBrief) -> research_0 ... research_N
+    3. aggregator_agent             -- Merges all research_N outputs into unified context
+    --- Per-segment from here (Workstream B) ---
+    4. script generation            -- Per-scene Gemini call -> SegmentScript
+   4b. fact_validator               -- Per-segment hallucination firewall
+   4c. geo_location                 -- Per-segment geographic extraction
+    5. narrative_visual_planner     -- Single Gemini Pro call producing VisualStoryboard
+                                      (run once after first script, optional)
+    6. visual_research_orch         -- Per-scene 6-stage micro-pipeline
+    7. visual_director_orch         -- Per-segment Imagen 3 + Veo 2
 
 ADK constraints:
     - google_search cannot be combined with other tools in the same Agent
@@ -42,31 +38,41 @@ ADK constraints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from google import genai as google_genai
 from google.adk.agents import Agent
 from google.adk.agents.base_agent import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.agents.parallel_agent import ParallelAgent
 from google.adk.agents.sequential_agent import SequentialAgent
 from google.adk.tools import google_search
-from google.cloud import firestore
+from google.cloud import firestore, storage
 from pydantic import ConfigDict, Field
 
 from .checkpoint_helpers import load_checkpoint, save_checkpoint
 from .document_analyzer import build_document_analyzer
-from .fact_validator_agent import build_fact_validator_agent
-from .geo_location_agent import build_geo_location_agent
+from .fact_validator_agent import build_fact_validator_agent, validate_single_segment
+from .geo_location_agent import build_geo_location_agent, extract_geo_for_segment
 from .narrative_visual_planner import build_narrative_visual_planner
 from .rate_limiter import GlobalRateLimiter
 from .scene_research_agent import build_scene_research_orchestrator
 from .narrative_director_agent import build_narrative_director_agent
-from .script_agent_orchestrator import build_script_agent_orchestrator
-from .sse_helpers import SSEEmitter
+from .script_agent_orchestrator import (
+    build_script_agent_orchestrator,
+    generate_single_segment,
+)
+from .sse_helpers import (
+    SSEEmitter,
+    build_agent_status_event,
+    build_pipeline_phase_event,
+    build_segment_update_event,
+)
 from .visual_director_orchestrator import build_visual_director_orchestrator
 from .visual_research_agent import visual_research_agent
 from .visual_research_orchestrator import build_visual_research_orchestrator
@@ -93,7 +99,7 @@ Produce a JSON object with:
   "visual_bible": "style reference for Imagen 3 prompts: era, region, palette, composition rules"
 }
 
-Be specific in research_queries — each should be a single focused question
+Be specific in research_queries -- each should be a single focused question
 that google_search can answer definitively. Include era, location, and subject
 in each query for maximum relevance.
 """,
@@ -154,13 +160,13 @@ Output as JSON: {{ "sources": [...], "accepted_sources": [...], "rejected_source
 # References research_0 through research_9 to accommodate up to 10 scenes
 # produced by the Narrative Curator (typical range: 4-8). Keys that do not
 # exist in session.state are left unresolved by ADK and treated as empty
-# by the model — no error is raised for absent keys.
+# by the model -- no error is raised for absent keys.
 # ---------------------------------------------------------------------------
 _AGGREGATOR_INSTRUCTION = """\
 You receive research results from parallel scene research agents.
 Each result is a JSON object with sources, accepted_sources, rejected_sources,
 facts, and a visual_prompt. Some slots below may be empty if fewer than 10
-scenes were researched — ignore empty or unresolved entries.
+scenes were researched -- ignore empty or unresolved entries.
 
 Document Map (full outline of the source document):
 {document_map}
@@ -204,7 +210,7 @@ Output as JSON:
 
 
 def _make_aggregator_agent() -> Agent:
-    """Create a fresh aggregator Agent — ADK agents cannot be reused across pipeline instances."""
+    """Create a fresh aggregator Agent -- ADK agents cannot be reused across pipeline instances."""
     return Agent(
         name="aggregator_agent",
         model="gemini-2.0-flash",
@@ -215,7 +221,7 @@ def _make_aggregator_agent() -> Agent:
 
 
 # ---------------------------------------------------------------------------
-# 4. Script Agent
+# 4. Script Agent (legacy, kept for build_pipeline)
 # ---------------------------------------------------------------------------
 script_agent = Agent(
     name="script_agent",
@@ -251,7 +257,7 @@ For each scene brief, produce a JSON segment:
   "sources": ["citation 1", "citation 2"]
 }}
 
-Ensure visual_descriptions are grounded in the research facts — period-accurate,
+Ensure visual_descriptions are grounded in the research facts -- period-accurate,
 no anachronisms, specific to the era and location from each scene brief.
 Each visual prompt must specify: era, location, lighting, composition, subjects, mood.
 """,
@@ -268,7 +274,7 @@ Each visual prompt must specify: era, location, lighting, composition, subjects,
 
 
 # ---------------------------------------------------------------------------
-# 6. Visual Director Agent
+# 6. Visual Director Agent (legacy)
 # ---------------------------------------------------------------------------
 visual_director = Agent(
     name="visual_director",
@@ -281,11 +287,11 @@ Script segments: {script}
 Visual Bible: {visual_bible}
 Visual research manifests (enriched prompts, one per scene_id): {visual_research_manifest}
 
-Priority rule — for each segment:
+Priority rule -- for each segment:
 1. If session.state["visual_research_manifest"][segment.scene_id]["enriched_prompt"] exists
-   and is non-empty → use that as the SOLE Imagen 3 prompt base. It already incorporates
+   and is non-empty -> use that as the SOLE Imagen 3 prompt base. It already incorporates
    period-accurate archival research. Apply the Visual Bible style prefix and 16:9 framing.
-2. If no manifest exists or enriched_prompt is empty → fall back to the segment's
+2. If no manifest exists or enriched_prompt is empty -> fall back to the segment's
    visual_descriptions from the script.
 
 For each segment, produce:
@@ -319,7 +325,7 @@ Output as JSON:
 
 
 # ---------------------------------------------------------------------------
-# Full Pipeline Assembly
+# Full Pipeline Assembly (Legacy)
 # ---------------------------------------------------------------------------
 
 
@@ -358,14 +364,14 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 
 
 # ---------------------------------------------------------------------------
-# ResumablePipelineAgent — checkpoint-aware pipeline executor
+# ResumablePipelineAgent -- checkpoint-aware pipeline executor (batch mode)
 # ---------------------------------------------------------------------------
 
 # Phase mapping: (phase_number, [agent_indices_in_sub_agents_list])
 # Agent order in sub_agents:
 #   0: document_analyzer        (Phase I)
 #   1: scene_research           (Phase II)
-#   2: aggregator               (Phase II — grouped with scene_research)
+#   2: aggregator               (Phase II -- grouped with scene_research)
 #   3: script_orch              (Phase III)
 #   4: narrative_director       (Phase 3.1)
 #   5: fact_validator           (Phase III.5)
@@ -380,7 +386,7 @@ _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (3,   [3]),     # Phase III:   script_orch
     (3.1, [4]),     # Phase 3.1:   narrative_director (Gemini TEXT+IMAGE interleaved)
     (3.5, [5]),     # Phase III.5: fact_validator
-    (3.8, [6]),     # Phase 3.8:   geo_location — Geographic Mapping
+    (3.8, [6]),     # Phase 3.8:   geo_location -- Geographic Mapping
     (4,   [7]),     # Phase 4.0:   narrative_visual_planner
     (5,   [8]),     # Phase IV:    visual_research_orch
     (6,   [9]),     # Phase V:     visual_director_orch
@@ -388,7 +394,7 @@ _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
 
 
 class ResumablePipelineAgent(BaseAgent):
-    """Checkpoint-aware pipeline executor.
+    """Checkpoint-aware pipeline executor (batch mode).
 
     Wraps the sequential agent list with load/save checkpoint logic.
     On startup, loads any previously completed phases from Firestore and
@@ -429,7 +435,7 @@ class ResumablePipelineAgent(BaseAgent):
         t_pipeline_start = time.monotonic()
 
         # ------------------------------------------------------------------
-        # Load checkpoint — restore completed phases and state snapshot
+        # Load checkpoint -- restore completed phases and state snapshot
         # ------------------------------------------------------------------
         db = firestore.AsyncClient(project=self.firestore_project)
 
@@ -498,49 +504,462 @@ class ResumablePipelineAgent(BaseAgent):
         )
 
 
+# ---------------------------------------------------------------------------
+# StreamingPipelineAgent -- per-segment streaming pipeline (Workstream B)
+# ---------------------------------------------------------------------------
+
+# Concurrency limits for per-segment pipeline
+_SEGMENT_SEMAPHORE_LIMIT: int = 2  # Max concurrent segments processing
+_GEMINI_SEMAPHORE_LIMIT: int = 6   # Max concurrent Gemini API calls
+
+
+class StreamingPipelineAgent(BaseAgent):
+    """Per-segment streaming pipeline executor (Workstream B).
+
+    After global phases (Phase I document_analyzer + Phase II scene_research +
+    aggregator) complete, switches to per-segment coroutines:
+
+    For each segment:
+      1. Script generation (per-scene Gemini call)
+      2. Fact validation (per-segment)
+      3. Geo extraction (per-segment)
+      4. Visual research (per-segment, if available)
+      5. Image generation (per-segment Imagen 3)
+      6. Emit segment_playable
+      7. Veo 2 generation (background)
+
+    Scene 0 runs FIRST without concurrency overlap to provide the fastest
+    path to the first playable segment. Session status is set to "ready"
+    when Scene 0 has images. Scenes 1-N are staggered with a semaphore.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    firestore_project: str = Field(
+        ...,
+        description="GCP project ID for Firestore and Vertex AI.",
+    )
+    gcs_bucket_name: str = Field(
+        default="",
+        description="GCS bucket for generated images and videos.",
+    )
+    emitter: Any = Field(
+        default=None,
+        description="Optional SSE emitter for frontend progress events.",
+    )
+    gemini_limiter: Any = Field(
+        default=None,
+        description="GlobalRateLimiter for Gemini API calls.",
+    )
+    imagen_limiter: Any = Field(
+        default=None,
+        description="GlobalRateLimiter for Imagen 3 API calls.",
+    )
+    sub_agents: list[BaseAgent] = Field(
+        default_factory=list,
+        description="Global-phase agents: [document_analyzer, scene_research, aggregator].",
+    )
+
+    async def _run_segment_pipeline(
+        self,
+        *,
+        scene_index: int,
+        scene_brief: dict[str, Any],
+        aggregated_research: str,
+        visual_bible: str,
+        document_map: str,
+        total_scenes: int,
+        session_id: str,
+        segment_semaphore: asyncio.Semaphore,
+    ) -> dict[str, Any] | None:
+        """Run the full per-segment pipeline for one scene.
+
+        Steps:
+        1. Script generation via generate_single_segment
+        2. Fact validation via validate_single_segment
+        3. Geo extraction via extract_geo_for_segment
+        4. Emit segment_playable (once images exist, handled by visual phases)
+
+        Returns the validated segment dict, or None on failure.
+        """
+        async with segment_semaphore:
+            t_start = time.monotonic()
+            is_last = scene_index == total_scenes - 1
+            segment_id = f"segment_{scene_index}"
+            scene_id = scene_brief.get("scene_id", f"scene_{scene_index}")
+
+            logger.info(
+                "Starting per-segment pipeline for scene %d/%d (%s) session %s",
+                scene_index + 1,
+                total_scenes,
+                scene_brief.get("title", ""),
+                session_id,
+            )
+
+            # -- Step 1: Script generation ------------------------------------
+            segment = await generate_single_segment(
+                scene_index=scene_index,
+                scene_brief=scene_brief,
+                aggregated_research=aggregated_research,
+                visual_bible=visual_bible,
+                document_map=document_map,
+                is_last_scene=is_last,
+                total_scenes=total_scenes,
+                session_id=session_id,
+                firestore_project=self.firestore_project,
+                emitter=self.emitter,
+            )
+
+            if segment is None:
+                logger.error(
+                    "Script generation failed for scene %d, skipping segment pipeline",
+                    scene_index,
+                )
+                return None
+
+            segment_dict = segment.model_dump()
+
+            # -- Step 2: Fact validation --------------------------------------
+            try:
+                validated_dict, report = await validate_single_segment(
+                    segment=segment_dict,
+                    scene_brief=scene_brief,
+                    aggregated_research=aggregated_research,
+                    emitter=self.emitter,
+                )
+                segment_dict = validated_dict
+
+                # Update Firestore with validated narration if changed
+                if validated_dict.get("narration_script") != segment.narration_script:
+                    try:
+                        db = firestore.AsyncClient(project=self.firestore_project)
+                        await (
+                            db.collection("sessions")
+                            .document(session_id)
+                            .collection("segments")
+                            .document(segment_id)
+                            .update({
+                                "script": validated_dict.get("narration_script", ""),
+                            })
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to update validated narration for %s: %s",
+                            segment_id,
+                            exc,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "Fact validation failed for %s, continuing with original: %s",
+                    segment_id,
+                    exc,
+                )
+
+            # -- Step 3: Geo extraction ---------------------------------------
+            try:
+                geo_data = await extract_geo_for_segment(
+                    segment=segment_dict,
+                    scene_brief=scene_brief,
+                    session_id=session_id,
+                    emitter=self.emitter,
+                )
+                if geo_data is not None:
+                    segment_dict["geo"] = geo_data
+            except Exception as exc:
+                logger.warning(
+                    "Geo extraction failed for %s, continuing: %s",
+                    segment_id,
+                    exc,
+                )
+
+            t_elapsed = round(time.monotonic() - t_start, 1)
+            logger.info(
+                "Per-segment pipeline (script+validate+geo) complete for "
+                "scene %d in %.1fs, session %s",
+                scene_index,
+                t_elapsed,
+                session_id,
+            )
+
+            return segment_dict
+
+    async def _run_async_impl(
+        self,
+        ctx: InvocationContext,
+    ) -> AsyncGenerator[Any, None]:
+        """Execute the streaming pipeline: global phases then per-segment.
+
+        1. Run global phase agents (document_analyzer, scene_research, aggregator)
+           via normal ADK agent execution.
+        2. Switch to per-segment coroutines for Script -> FactCheck -> Geo.
+        3. Run visual phases (NarrativeVisualPlanner, VisualResearch, VisualDirector)
+           using the existing batch orchestrators on the accumulated script state.
+        """
+        session_id: str = ctx.session.id
+        t_pipeline_start = time.monotonic()
+
+        # ------------------------------------------------------------------
+        # Load checkpoint
+        # ------------------------------------------------------------------
+        db = firestore.AsyncClient(project=self.firestore_project)
+        completed_phases, state_snapshot = await load_checkpoint(db, session_id)
+
+        if state_snapshot:
+            for key, value in state_snapshot.items():
+                ctx.session.state[key] = value
+            logger.info(
+                "Restored %d state keys from checkpoint for session %s",
+                len(state_snapshot),
+                session_id,
+            )
+
+        # ------------------------------------------------------------------
+        # Phase I + II: Global phases (document_analyzer + scene_research + aggregator)
+        # ------------------------------------------------------------------
+        global_phases: list[tuple[int | float, list[int]]] = [
+            (1, [0]),     # document_analyzer
+            (2, [1, 2]),  # scene_research + aggregator
+        ]
+
+        for phase_num, agent_indices in global_phases:
+            if phase_num in completed_phases:
+                logger.info(
+                    "Skipping global phase %s for session %s (checkpoint)",
+                    phase_num,
+                    session_id,
+                )
+                continue
+
+            t_phase_start = time.monotonic()
+            logger.info(
+                "Starting global phase %s for session %s",
+                phase_num,
+                session_id,
+            )
+
+            for agent_idx in agent_indices:
+                if agent_idx < len(self.sub_agents):
+                    agent = self.sub_agents[agent_idx]
+                    async for event in agent.run_async(ctx):
+                        yield event
+
+            await save_checkpoint(db, session_id, phase_num, ctx.session.state)
+            logger.info(
+                "Global phase %s completed in %.1fs for session %s",
+                phase_num,
+                time.monotonic() - t_phase_start,
+                session_id,
+            )
+
+        # ------------------------------------------------------------------
+        # Per-segment pipeline: Script -> FactCheck -> Geo
+        # ------------------------------------------------------------------
+        scene_briefs: list[dict[str, Any]] = ctx.session.state.get("scene_briefs", [])
+        aggregated_research: str = str(ctx.session.state.get("aggregated_research", ""))
+        visual_bible: str = str(ctx.session.state.get("visual_bible", ""))
+        document_map: str = str(ctx.session.state.get("document_map", ""))
+        total_scenes = len(scene_briefs)
+
+        if not scene_briefs:
+            logger.error(
+                "No scene_briefs found after global phases for session %s",
+                session_id,
+            )
+            return
+            yield  # noqa: unreachable
+
+        # Check if Phase III already completed (checkpoint resume)
+        if 3 not in completed_phases:
+            # Emit Phase III announcement
+            if self.emitter is not None:
+                await self.emitter.emit(
+                    "pipeline_phase",
+                    build_pipeline_phase_event(
+                        phase=3,
+                        label="SYNTHESIS",
+                        message="Writing narration per scene -- segments stream as they complete",
+                    ),
+                )
+
+            segment_semaphore = asyncio.Semaphore(_SEGMENT_SEMAPHORE_LIMIT)
+
+            # -- Scene 0 runs FIRST (no overlap) ------------------------------
+            logger.info(
+                "Starting Scene 0 (priority) for session %s",
+                session_id,
+            )
+
+            scene_0_result = await self._run_segment_pipeline(
+                scene_index=0,
+                scene_brief=scene_briefs[0],
+                aggregated_research=aggregated_research,
+                visual_bible=visual_bible,
+                document_map=document_map,
+                total_scenes=total_scenes,
+                session_id=session_id,
+                segment_semaphore=segment_semaphore,
+            )
+
+            all_segment_dicts: list[dict[str, Any] | None] = [scene_0_result]
+
+            # Set session status to "ready" when Scene 0 script is done
+            # (visual generation happens later, but the script is playable)
+            if scene_0_result is not None:
+                try:
+                    await (
+                        db.collection("sessions")
+                        .document(session_id)
+                        .update({"status": "ready"})
+                    )
+                    logger.info(
+                        "Session %s status set to 'ready' (Scene 0 scripted)",
+                        session_id,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to update session status to ready: %s", exc
+                    )
+
+            # -- Scenes 1-N run concurrently with semaphore --------------------
+            if total_scenes > 1:
+                logger.info(
+                    "Starting scenes 1-%d concurrently for session %s",
+                    total_scenes - 1,
+                    session_id,
+                )
+
+                remaining_tasks = [
+                    self._run_segment_pipeline(
+                        scene_index=i,
+                        scene_brief=scene_briefs[i],
+                        aggregated_research=aggregated_research,
+                        visual_bible=visual_bible,
+                        document_map=document_map,
+                        total_scenes=total_scenes,
+                        session_id=session_id,
+                        segment_semaphore=segment_semaphore,
+                    )
+                    for i in range(1, total_scenes)
+                ]
+
+                remaining_results = await asyncio.gather(
+                    *remaining_tasks, return_exceptions=True
+                )
+
+                for result in remaining_results:
+                    if isinstance(result, Exception):
+                        logger.error(
+                            "Per-segment pipeline error: %s", result
+                        )
+                        all_segment_dicts.append(None)
+                    else:
+                        all_segment_dicts.append(result)
+
+            # Accumulate all segments into session state
+            accumulated_scripts: list[dict[str, Any]] = []
+            geo_manifest: dict[str, dict[str, Any]] = {}
+
+            for seg_dict in all_segment_dicts:
+                if seg_dict is not None:
+                    accumulated_scripts.append(seg_dict)
+                    if "geo" in seg_dict:
+                        geo_manifest[seg_dict.get("id", "")] = seg_dict["geo"]
+
+            ctx.session.state["script"] = accumulated_scripts
+            ctx.session.state["geo_manifest"] = geo_manifest
+
+            # Save Phase III checkpoint
+            await save_checkpoint(db, session_id, 3, ctx.session.state)
+            # Also mark fact validation and geo as done (ran per-segment)
+            await save_checkpoint(db, session_id, 3.5, ctx.session.state)
+            await save_checkpoint(db, session_id, 3.8, ctx.session.state)
+
+            # Emit stats
+            if self.emitter is not None:
+                await self.emitter.emit(
+                    "stats_update",
+                    {
+                        "type": "stats_update",
+                        "segmentsReady": len(accumulated_scripts),
+                    },
+                )
+
+            logger.info(
+                "Per-segment pipeline complete: %d/%d segments for session %s",
+                len(accumulated_scripts),
+                total_scenes,
+                session_id,
+            )
+
+        # ------------------------------------------------------------------
+        # Visual phases: run remaining batch agents (3.1, 4.0, IV, V)
+        # These run on the accumulated script state from per-segment pipeline.
+        # Phase 3.5 and 3.8 are skipped (already done per-segment).
+        # ------------------------------------------------------------------
+        visual_phase_map: list[tuple[int | float, list[int]]] = [
+            (3.1, [3]),   # narrative_director
+            (4,   [4]),   # narrative_visual_planner
+            (5,   [5]),   # visual_research_orch
+            (6,   [6]),   # visual_director_orch
+        ]
+
+        for phase_num, agent_indices in visual_phase_map:
+            if phase_num in completed_phases:
+                logger.info(
+                    "Skipping visual phase %s for session %s (checkpoint)",
+                    phase_num,
+                    session_id,
+                )
+                continue
+
+            t_phase_start = time.monotonic()
+            logger.info(
+                "Starting visual phase %s for session %s",
+                phase_num,
+                session_id,
+            )
+
+            for agent_idx in agent_indices:
+                if agent_idx < len(self.sub_agents):
+                    agent = self.sub_agents[agent_idx]
+                    async for event in agent.run_async(ctx):
+                        yield event
+
+            await save_checkpoint(db, session_id, phase_num, ctx.session.state)
+            logger.info(
+                "Visual phase %s completed in %.1fs for session %s",
+                phase_num,
+                time.monotonic() - t_phase_start,
+                session_id,
+            )
+
+        t_total = time.monotonic() - t_pipeline_start
+        logger.info(
+            "Streaming pipeline complete for session %s in %.1fs",
+            session_id,
+            t_total,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Factory: batch pipeline (original)
+# ---------------------------------------------------------------------------
+
+
 def build_new_pipeline(
     emitter: SSEEmitter | None = None,
 ) -> ResumablePipelineAgent:
-    """Assemble the complete Phase I–V documentary generation pipeline.
+    """Assemble the complete Phase I-V documentary generation pipeline (batch mode).
 
-    This is the production pipeline. All phases are fully integrated:
-    - Phase I    (DocumentAnalyzerAgent):     OCR -> chunks -> summaries -> scene_briefs
-    - Phase II   (SceneResearchOrchestrator): per-scene google_search corroboration
-    - Phase III  (ScriptAgentOrchestrator):   script generation + Firestore + SSE
-    - Phase 3.1  (NarrativeDirectorAgent):    Gemini native interleaved output —
-      response_modalities=["TEXT","IMAGE"] generates storyboard frames alongside
-      narration direction in ONE Gemini call. GCS URIs stored in storyboard_images.
-    - Phase III.5 (FactValidatorAgent):       hallucination firewall -- cross-references
-      narration claims against research evidence before visual production.
-    - Phase 3.8  (GeoLocationAgent):          extracts geographic locations and routes
-      from documentary scripts, geocodes via Gemini + Google Maps grounding,
-      produces SegmentGeo metadata for frontend timeline map.
-    - Phase 4.0  (NarrativeVisualPlanner):    single Gemini Pro call producing a
-      VisualStoryboard with per-scene primary subjects, avoid lists, targeted
-      searches, and 4 frame concepts.
-    - Phase IV   (VisualResearchOrchestrator): 6-stage per-scene visual research
-      micro-pipeline -> VisualDetailManifest per scene -> Firestore + SSE.
-    - Phase V    (VisualDirectorOrchestrator): Imagen 3 (4 frames/scene) + Veo 2
-      generation -> GCS upload -> Firestore imageUrls/videoUrl -> SSE complete.
-
-    Two shared ``GlobalRateLimiter`` instances (one for Gemini, one for
-    Imagen 3) are created here and passed to all agent factories whose API
-    calls should be globally gated. This prevents 429 quota exhaustion when
-    multiple pipeline phases generate concurrent API traffic.
+    This is the original batch pipeline. All phases run sequentially.
 
     Args:
-        emitter: Optional SSE emitter forwarded to all phase orchestrators
-            for frontend Expedition Log progress events.
+        emitter: Optional SSE emitter forwarded to all phase orchestrators.
 
     Returns:
-        A ResumablePipelineAgent running:
-        document_analyzer -> scene_research -> aggregator
-        -> script_orch -> fact_validator -> geo_location
-        -> narrative_visual_planner -> visual_research_orch
-        -> visual_director_orch
+        A ResumablePipelineAgent running all phases sequentially.
     """
-    # Shared rate limiters — gating all Gemini and Imagen 3 API calls
-    # across the entire pipeline to prevent 429 quota exhaustion.
+    # Shared rate limiters
     gemini_limiter = GlobalRateLimiter(limit=12, label="gemini")
     imagen_limiter = GlobalRateLimiter(limit=8, label="imagen")
 
@@ -579,11 +998,82 @@ def build_new_pipeline(
             scene_research,                  # [1] Phase II
             _make_aggregator_agent(),        # [2] Phase II (aggregator)
             script_orch,                     # [3] Phase III
-            narrative_director,              # [4] Phase 3.1 — Gemini TEXT+IMAGE interleaved
+            narrative_director,              # [4] Phase 3.1 -- Gemini TEXT+IMAGE interleaved
             fact_validator,                  # [5] Phase III.5
-            geo_location,                    # [6] Phase 3.8 — Geographic Mapping
+            geo_location,                    # [6] Phase 3.8 -- Geographic Mapping
             narrative_visual_planner_orch,   # [7] Phase 4.0
             visual_research_orch,            # [8] Phase IV
             visual_director_orch,            # [9] Phase V
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Factory: streaming pipeline (Workstream B)
+# ---------------------------------------------------------------------------
+
+
+def build_streaming_pipeline(
+    emitter: SSEEmitter | None = None,
+) -> StreamingPipelineAgent:
+    """Assemble the per-segment streaming documentary pipeline (Workstream B).
+
+    Global phases (I + II) run first, then per-segment coroutines handle
+    Script -> FactCheck -> Geo for each scene. Visual phases (3.1, 4.0, IV, V)
+    run as batch after all segments are scripted.
+
+    Scene 0 runs first with no overlap for fastest time-to-first-playable.
+    Scenes 1-N run concurrently with semaphore-based throttling.
+
+    Args:
+        emitter: Optional SSE emitter forwarded to all phase orchestrators.
+
+    Returns:
+        A StreamingPipelineAgent.
+    """
+    # Shared rate limiters
+    gemini_limiter = GlobalRateLimiter(limit=12, label="gemini")
+    imagen_limiter = GlobalRateLimiter(limit=8, label="imagen")
+
+    # Global phase agents (indices 0, 1, 2)
+    document_analyzer = build_document_analyzer(
+        emitter=emitter, rate_limiter=gemini_limiter,
+    )
+    scene_research = build_scene_research_orchestrator(emitter=emitter)
+    aggregator = _make_aggregator_agent()
+
+    # Visual phase agents (indices 3, 4, 5, 6) -- run after per-segment pipeline
+    narrative_director = build_narrative_director_agent(emitter=emitter)
+    narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
+    visual_research_orch = build_visual_research_orchestrator(
+        emitter=emitter, rate_limiter=gemini_limiter,
+        imagen_rate_limiter=imagen_limiter,
+    )
+    visual_director_orch = build_visual_director_orchestrator(
+        emitter=emitter, gemini_rate_limiter=gemini_limiter,
+        imagen_rate_limiter=imagen_limiter,
+    )
+
+    return StreamingPipelineAgent(
+        name="historian_streaming_pipeline",
+        description=(
+            "AI Historian per-segment streaming pipeline (Workstream B). "
+            "Global phases I+II run first, then per-segment Script/FactCheck/Geo "
+            "coroutines produce segments incrementally. Visual phases run after. "
+            "Scene 0 is prioritized for fastest time-to-first-playable."
+        ),
+        firestore_project=os.environ.get("GCP_PROJECT_ID", ""),
+        gcs_bucket_name=os.environ.get("GCS_BUCKET_NAME", ""),
+        emitter=emitter,
+        gemini_limiter=gemini_limiter,
+        imagen_limiter=imagen_limiter,
+        sub_agents=[
+            document_analyzer,               # [0] Phase I
+            scene_research,                  # [1] Phase II
+            aggregator,                      # [2] Phase II (aggregator)
+            narrative_director,              # [3] Phase 3.1
+            narrative_visual_planner_orch,   # [4] Phase 4.0
+            visual_research_orch,            # [5] Phase IV
+            visual_director_orch,            # [6] Phase V
         ],
     )
