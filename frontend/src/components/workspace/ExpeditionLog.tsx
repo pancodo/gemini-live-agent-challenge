@@ -127,7 +127,7 @@ function StatBadge({ label, value }: { label: string; value: number }) {
       </span>
       <span
         ref={spanRef}
-        className="stat-value text-[13px] font-sans font-medium text-[var(--gold)] tabular-nums"
+        className="stat-value text-[16px] font-sans font-medium text-[var(--gold)] tabular-nums"
       >
         {value}
       </span>
@@ -154,9 +154,13 @@ function PhaseBlock({
   onAgentClick,
 }: PhaseBlockProps) {
   const [collapsed, setCollapsed] = useState(false);
+  // Track whether the user manually toggled this phase open/closed.
+  // When true, auto-collapse is suppressed so the user can read at their pace.
+  const userToggledRef = useRef(false);
 
-  // Auto-collapse completed phases after 2 seconds
+  // Auto-collapse completed phases after 2 seconds — unless user manually opened it
   useEffect(() => {
+    if (userToggledRef.current) return;
     if (!isActive) {
       const allDone = phaseAgents.length > 0 && phaseAgents.every(
         (a) => a.status === 'done' || a.status === 'error',
@@ -196,13 +200,13 @@ function PhaseBlock({
       {/* Phase header — clickable to toggle collapse */}
       <button
         type="button"
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={() => { userToggledRef.current = true; setCollapsed((c) => !c); }}
         className="w-full flex items-center gap-2 text-left cursor-pointer bg-transparent border-none p-0 mb-0"
         aria-expanded={!collapsed}
       >
         <p
-          className="text-[11px] font-serif uppercase tracking-[0.35em] text-[var(--gold)] mb-0 flex-1"
-          style={{ fontWeight: 400 }}
+          className="text-[12px] font-serif uppercase tracking-[0.3em] text-[var(--gold)] mb-0 flex-1"
+          style={{ fontWeight: 700 }}
         >
           {headerLabel}
         </p>
@@ -323,8 +327,8 @@ export function ExpeditionLog() {
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
         <h2
-          className="text-[11px] font-serif uppercase tracking-[0.4em] text-[var(--gold)]"
-          style={{ fontWeight: 400 }}
+          className="text-[12px] font-serif uppercase tracking-[0.35em] text-[var(--gold)]"
+          style={{ fontWeight: 700 }}
         >
           Expedition Log
         </h2>
@@ -375,7 +379,7 @@ export function ExpeditionLog() {
       </div>
 
       {/* Stats bar */}
-      <div className="stats-bar flex items-center gap-4 px-5 py-3 border-t border-[var(--bg4)]">
+      <div className="stats-bar flex items-center justify-center gap-6 px-5 py-3 border-t border-[var(--bg4)]" style={{ boxShadow: '0 -4px 12px rgba(0,0,0,0.04)' }}>
         <StatBadge label="SOURCES FOUND" value={sourcesFound} />
         <span className="text-[var(--bg4)]">&middot;</span>
         <StatBadge label="FACTS VERIFIED" value={factsVerified} />

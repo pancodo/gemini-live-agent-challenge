@@ -1,7 +1,7 @@
 """Phase III of the AI Historian documentary pipeline: Script Generation.
 
-Wraps per-scene Gemini calls in a custom ``BaseAgent`` orchestrator that
-handles SSE emission, output parsing, and Firestore persistence.
+Wraps per-scene Gemini calls (gemini-2.5-flash) in a custom ``BaseAgent`` orchestrator
+that handles SSE emission, output parsing, and Firestore persistence.
 
 Architecture (Workstream B — per-segment streaming)
 ----------------------------------------------------
@@ -56,7 +56,7 @@ from .sse_helpers import (
 
 logger = logging.getLogger(__name__)
 
-_MODEL: str = "gemini-2.0-flash"  # Switch to gemini-2.0-pro before submission
+_MODEL: str = "gemini-2.5-flash"
 _MAX_RETRIES: int = 3
 
 # ---------------------------------------------------------------------------
@@ -599,8 +599,8 @@ async def generate_single_segment(
 class ScriptAgentOrchestrator(BaseAgent):
     """Phase III orchestrator: per-scene Gemini calls -> parse -> store -> emit.
 
-    Makes N sequential ``client.aio.models.generate_content`` calls, one per
-    scene brief, producing and emitting each ``SegmentScript`` immediately
+    Makes N sequential ``client.aio.models.generate_content`` calls (gemini-2.5-flash),
+    one per scene brief, producing and emitting each ``SegmentScript`` immediately
     without waiting for the entire script to be generated.
     """
 
@@ -768,6 +768,7 @@ class ScriptAgentOrchestrator(BaseAgent):
                 build_agent_status_event(
                     agent_id="script_agent",
                     status="done",
+                    query="Generating documentary narration and visual descriptions",
                     elapsed=round(t_total_elapsed, 1),
                     facts=[
                         f"{len(segments)} segment(s) scripted and written to Firestore",
@@ -809,8 +810,8 @@ def build_script_agent_orchestrator(
     return ScriptAgentOrchestrator(
         name="script_agent_orchestrator",
         description=(
-            "Phase III: Makes per-scene Gemini calls to generate narration "
-            "and visual descriptions for each SceneBrief individually, "
+            "Phase III: Makes per-scene Gemini calls (gemini-2.5-flash) to generate "
+            "narration and visual descriptions for each SceneBrief individually, "
             "validates the output, writes segments to Firestore immediately, "
             "and emits segment_update SSE events so the frontend updates "
             "incrementally without waiting for all segments."

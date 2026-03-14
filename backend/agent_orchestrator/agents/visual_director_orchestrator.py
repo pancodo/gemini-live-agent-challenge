@@ -1584,6 +1584,7 @@ async def _run_segment_generation(
             build_agent_status_event(
                 agent_id=f"visual_director_{scene_id}",
                 status="done",
+                query=f"Generating visuals for {segment.get('title', scene_id)}",
                 elapsed=t_elapsed,
                 facts=[
                     f"{len(image_urls)}/{len(_frames_for_segment(segment, narrative_role, manifest=manifest))} frames generated",
@@ -2215,6 +2216,7 @@ class VisualDirectorOrchestrator(BaseAgent):
                 build_agent_status_event(
                     agent_id="visual_director_orchestrator",
                     status="done",
+                    query="Generating cinematic visuals for all documentary scenes",
                     elapsed=t_elapsed,
                     facts=[
                         f"{len(image_url_store)}/{len(script_raw)} segments with images",

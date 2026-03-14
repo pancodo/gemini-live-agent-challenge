@@ -462,6 +462,7 @@ class GeoLocationAgent(BaseAgent):
                         build_agent_status_event(
                             agent_id=agent_id,
                             status="error",
+                            query=f"Mapping locations for: {title}",
                             error_message=f"Failed to extract geo data for {title}",
                         ),
                     )
@@ -571,6 +572,7 @@ class GeoLocationAgent(BaseAgent):
                     build_agent_status_event(
                         agent_id=agent_id,
                         status="done",
+                        query=f"Mapping locations for: {title}",
                         elapsed=round(time.monotonic() - t_start, 1),
                         facts=[e.name for e in events],
                     ),

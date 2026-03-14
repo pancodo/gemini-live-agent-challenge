@@ -68,13 +68,17 @@ function ReadyBanner() {
       </div>
 
       {firstReadyId && (
-        <button
+        <motion.button
           type="button"
           onClick={() => triggerIris(`/player/${firstReadyId}`)}
-          className="text-[12px] font-sans font-medium text-[var(--gold)] tracking-wide hover:text-[var(--gold-d)] transition-colors cursor-pointer whitespace-nowrap"
+          className="group inline-flex items-center gap-2 text-[11px] font-sans font-medium tracking-[0.1em] uppercase whitespace-nowrap px-4 py-2 rounded bg-[var(--gold)] text-[var(--bg)] hover:bg-[var(--gold-d)] transition-colors cursor-pointer"
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          Watch Documentary &rarr;
-        </button>
+          Watch Documentary
+          <span className="inline-block transition-transform duration-200 group-hover:translate-x-1">&rarr;</span>
+        </motion.button>
       )}
     </motion.div>
   );
@@ -154,59 +158,76 @@ export function WorkspacePage() {
       <WorkspaceLayout>
         {/* Right panel — content switches on session status */}
         <div className="flex flex-col h-full">
-          {status === 'processing' && (
-            <AnimatePresence mode="wait">
-              {hasStoryboardFrames ? (
-                <motion.div
-                  key="storyboard-split"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex h-full"
-                >
-                  <div className="w-[38%] shrink-0 border-r border-[var(--bg4)] overflow-hidden">
+          <AnimatePresence mode="wait">
+            {status === 'processing' && (
+              <AnimatePresence mode="wait">
+                {hasStoryboardFrames ? (
+                  <motion.div
+                    key="storyboard-split"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    className="flex h-full"
+                  >
+                    <div className="w-[38%] shrink-0 border-r border-[var(--bg4)] overflow-hidden">
+                      <ExpeditionLog />
+                    </div>
+                    <div className="w-[62%] overflow-hidden">
+                      <StoryboardStream />
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="expedition-only"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.35, ease: 'easeInOut' }}
+                    className="h-full"
+                  >
                     <ExpeditionLog />
-                  </div>
-                  <div className="w-[62%] overflow-hidden">
-                    <StoryboardStream />
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="expedition-only"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="h-full"
-                >
-                  <ExpeditionLog />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
 
-          {(status === 'ready' || status === 'playing') && (
-            <div className="flex flex-col h-full">
-              <div className="shrink-0 px-3 pt-3 flex flex-col gap-3">
-                <ReadyBanner />
-                <HistorianPanel />
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <ResearchPanel />
-              </div>
-            </div>
-          )}
+            {(status === 'ready' || status === 'playing') && (
+              <motion.div
+                key="ready-panel"
+                className="flex flex-col h-full"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+              >
+                <div className="shrink-0 px-5 pt-4 flex flex-col gap-3">
+                  <ReadyBanner />
+                  <HistorianPanel />
+                </div>
+                <div className="h-px mx-5 bg-gradient-to-r from-transparent via-[var(--bg4)] to-transparent opacity-60" />
+                <div className="flex-1 overflow-y-auto">
+                  <ResearchPanel />
+                </div>
+              </motion.div>
+            )}
 
-          {(status === 'idle' || status === 'uploading') && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 p-6">
-              <div className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] opacity-60 animate-pulse" />
-              <p className="text-[11px] text-[var(--muted)] font-sans uppercase tracking-[0.2em]">
-                Preparing document…
-              </p>
-            </div>
-          )}
+            {(status === 'idle' || status === 'uploading') && (
+              <motion.div
+                key="preparing"
+                className="flex flex-col items-center justify-center h-full gap-3 p-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] opacity-60 animate-pulse" />
+                <p className="text-[11px] text-[var(--muted)] font-sans uppercase tracking-[0.2em]">
+                  Preparing document…
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </WorkspaceLayout>
     </>

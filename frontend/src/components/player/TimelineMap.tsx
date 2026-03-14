@@ -23,8 +23,10 @@ const PIN_PULSE_CIRCLE = 'pin-pulse-circles';
 const PIN_PULSE_DIAMOND = 'pin-pulse-diamonds';
 const PIN_CIRCLE_LAYER = 'pin-circles';
 const PIN_DIAMOND_LAYER = 'pin-diamonds';
+const PIN_LABELS = 'pin-labels';
 
 const ALL_PIN_LAYERS = [
+  PIN_LABELS,
   PIN_DIAMOND_LAYER, PIN_CIRCLE_LAYER,
   PIN_PULSE_DIAMOND, PIN_PULSE_CIRCLE,
   PIN_GLOW_DIAMOND, PIN_GLOW_CIRCLE,
@@ -395,6 +397,28 @@ function TimelineMapInner({
         'circle-stroke-width': 2,
       },
     });
+
+    // ── Name labels below pins ──
+    map.addLayer({
+      id: PIN_LABELS,
+      type: 'symbol',
+      source: PIN_SOURCE,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': 11,
+        'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+        'text-offset': [0, 1.4],
+        'text-anchor': 'top',
+        'text-max-width': 8,
+        'text-allow-overlap': false,
+        'text-optional': true,
+      },
+      paint: {
+        'text-color': isLight ? '#1E170C' : '#e8ddd0',
+        'text-halo-color': isLight ? 'rgba(242,237,227,0.9)' : 'rgba(13,11,9,0.85)',
+        'text-halo-width': 1.5,
+      },
+    });
   }, []);
 
   const addRoute = useCallback((route: GeoRoute, index: number) => {
@@ -421,15 +445,38 @@ function TimelineMapInner({
       migration: '#1E5E5E',
     };
 
+    const lineColor = colorMap[route.style] ?? '#d4a574';
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
     map.addLayer({
       id: layerId,
       type: 'line',
       source: sourceId,
       paint: {
-        'line-color': colorMap[route.style] ?? '#d4a574',
+        'line-color': lineColor,
         'line-width': 2.5,
         'line-opacity': 0.8,
         'line-dasharray': [3, 2],
+      },
+    });
+
+    // Route name label along the line
+    map.addLayer({
+      id: `${layerId}-label`,
+      type: 'symbol',
+      source: sourceId,
+      layout: {
+        'symbol-placement': 'line-center',
+        'text-field': route.name,
+        'text-size': 9,
+        'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+        'text-allow-overlap': false,
+        'text-rotation-alignment': 'map',
+      },
+      paint: {
+        'text-color': lineColor,
+        'text-halo-color': isLight ? 'rgba(242,237,227,0.8)' : 'rgba(13,11,9,0.8)',
+        'text-halo-width': 1.5,
       },
     });
   }, []);
@@ -527,8 +574,33 @@ function TimelineMapInner({
           {tooltipInfo.description && (
             <div className="timeline-map-tooltip-desc">{tooltipInfo.description}</div>
           )}
+          <div className="timeline-map-tooltip-action">Click to ask the historian</div>
         </div>
       )}
+
+      {/* Legend */}
+      <div className="timeline-map-legend">
+        <div className="timeline-map-legend-row">
+          <span className="timeline-map-legend-dot" style={{ background: '#c4956a' }} />
+          <span>City / Region</span>
+        </div>
+        <div className="timeline-map-legend-row">
+          <span className="timeline-map-legend-dot" style={{ background: '#c0392b' }} />
+          <span>Battle</span>
+        </div>
+        <div className="timeline-map-legend-row">
+          <span className="timeline-map-legend-line" style={{ borderColor: '#d4a574' }} />
+          <span>Trade route</span>
+        </div>
+        <div className="timeline-map-legend-row">
+          <span className="timeline-map-legend-line" style={{ borderColor: '#c0392b' }} />
+          <span>Military</span>
+        </div>
+        <div className="timeline-map-legend-row">
+          <span className="timeline-map-legend-line" style={{ borderColor: '#1E5E5E' }} />
+          <span>Migration</span>
+        </div>
+      </div>
 
       {/* Vignette overlay */}
       <div

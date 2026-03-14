@@ -21,13 +21,31 @@ and 3.8 geographic mapping):
                                       per SceneBrief) -> research_0 ... research_N
     3. aggregator_agent             -- Merges all research_N outputs into unified context
     --- Per-segment from here (Workstream B) ---
-    4. script generation            -- Per-scene Gemini call -> SegmentScript
-   4b. fact_validator               -- Per-segment hallucination firewall
-   4c. geo_location                 -- Per-segment geographic extraction
-    5. narrative_visual_planner     -- Single Gemini Pro call producing VisualStoryboard
-                                      (run once after first script, optional)
-    6. visual_research_orch         -- Per-scene 6-stage micro-pipeline
-    7. visual_director_orch         -- Per-segment Imagen 3 + Veo 2
+    4. script generation            -- Per-scene Gemini call (gemini-2.5-flash) -> SegmentScript,
+                                      Firestore write, segment_update SSE (Phase III)
+   4b. fact_validator               -- Per-segment hallucination firewall: cross-references
+                                      narration claims against research evidence (Phase III.5)
+   4c. geo_location                 -- Per-segment geographic extraction, geocodes via Gemini,
+                                      produces SegmentGeo metadata for frontend timeline map
+                                      (Phase 3.8)
+    5. narrative_visual_planner     -- Single Gemini 2.5 Flash call producing VisualStoryboard
+                                      with per-scene primary subjects, avoid lists,
+                                      targeted searches, and 4 frame concepts (Phase 4.0)
+    6. visual_research_orch         -- Per-scene 6-stage micro-pipeline -> VisualDetailManifest
+                                      per scene, Firestore write, segment_update(ready) SSE
+                                      (Phase IV -- now reads visual_storyboard when available)
+    7. visual_director_orch         -- Per-segment Imagen 3 (4 frames/scene) + Veo 2
+                                      -> GCS upload, Firestore imageUrls/videoUrl,
+                                      segment_update(complete) SSE (Phase V)
+
+The ``ResumablePipelineAgent`` wraps the sequential execution with checkpoint
+persistence: after each phase completes, the session state is checkpointed to
+Firestore. On restart, completed phases are skipped and state is restored from
+the last checkpoint.
+
+Legacy agents (scan_agent, build_research_agents) remain in this file and are
+used by the legacy ``build_pipeline`` path. They will be removed once all
+phases are integrated.
 
 ADK constraints:
     - google_search cannot be combined with other tools in the same Agent
@@ -261,7 +279,7 @@ def _make_aggregator_agent() -> Agent:
 # ---------------------------------------------------------------------------
 script_agent = Agent(
     name="script_agent",
-    model="gemini-2.0-pro",
+    model="gemini-2.5-flash",
     description="Generates documentary segments grounded in scene briefs and aggregated research.",
     instruction="""\
 You are the scriptwriter for an AI-generated historical documentary.
