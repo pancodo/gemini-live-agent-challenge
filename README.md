@@ -23,13 +23,14 @@
 
 ## What is AI Historian?
 
-AI Historian is a real-time multimodal research and documentary engine. Drop any historical document — PDF, scanned manuscript, ancient script — and a seven-agent pipeline immediately begins researching it in parallel. Within 45 seconds the first segment is playable: cinematic imagery, AI narration, and a live historian persona you can interrupt mid-sentence.
+AI Historian is a real-time multimodal research and documentary engine. Drop any historical document — PDF, scanned manuscript, ancient script — and an 11-phase ADK pipeline immediately begins researching it in parallel. Within 45 seconds the first segment is playable: cinematic imagery, AI narration, and a live historian persona you can interrupt mid-sentence.
 
 | Dimension | What it does |
 |---|---|
 | **Input** | Any document — PDF, image, multilingual, including dead scripts |
-| **Research** | 7-phase ADK pipeline with Google Search grounding, Wikipedia, and Gemini multimodal evaluation |
-| **Output** | Self-generating documentary: Imagen 3 visuals · Veo 2 video · AI narration |
+| **Research** | 11-phase ADK pipeline with Google Search grounding, Wikipedia, and Gemini multimodal evaluation |
+| **Interleaved Output** | Gemini generates TEXT+IMAGE in a single call — narration direction and storyboard illustrations produced together, not sequentially. Three pipeline phases (3.1, 3.2, 3.3) use `response_modalities=["TEXT","IMAGE"]` |
+| **Output** | Self-generating documentary: Gemini interleaved illustrations · Imagen 3 cinematic frames · Veo 2 video · AI narration |
 | **Voice** | Gemini 2.5 Flash Native Audio — always listening, responds in < 300ms, resumes after interruption |
 | **Grounding** | Every spoken question retrieves the 4 most relevant source passages via Firestore vector search — the historian cites actual document pages, not just scripted narration |
 | **Live Illustration** | User questions during the documentary trigger on-the-fly Imagen 3 illustrations with cinematic crossfade |
@@ -59,10 +60,10 @@ flowchart TD
 
     subgraph BRAIN["🧠 The Brain — Gemini Models"]
         direction LR
-        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation"]
+        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation\nTEXT+IMAGE Interleaved"]
         PRO["Gemini 2.0 Pro\nScripts · Visual Planning"]
         LIVE_API["Gemini 2.5 Flash\nNative Audio\nReal-time Voice"]
-        IMAGEN["Imagen 3\nScene Images"]
+        IMAGEN["Imagen 3\nCinematic Frames"]
         VEO["Veo 2\nDramatic Video"]
     end
 
@@ -72,16 +73,20 @@ flowchart TD
         RELAY["live-relay\nNode.js 20\nWebSocket Proxy"]
     end
 
-    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 7 Phases"]
+    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 11 Phases"]
         direction LR
         P1["I\nDocument\nAnalyzer"]
         P2["II\nScene\nResearch"]
         P3["III\nScript\nGenerator"]
+        P31["3.1\nNarrative\nDirector"]
+        P32["3.2\nBeat\nIllustrator"]
+        P33["3.3\nVisual\nInterleave"]
         P35["III.5\nFact\nValidator"]
+        P38["3.8\nGeo\nMapping"]
         P40["4.0\nVisual\nPlanner"]
         P4["IV\nVisual\nResearch"]
         P5["V\nVisual\nDirector"]
-        P1 --> P2 --> P3 --> P35 --> P40 --> P4 --> P5
+        P1 --> P2 --> P3 --> P31 --> P32 --> P33 --> P35 --> P38 --> P40 --> P4 --> P5
     end
 
     subgraph DATA["☁️ Google Cloud Services"]
@@ -101,6 +106,7 @@ flowchart TD
     ORCH -->|"Google ADK\nSequentialAgent + ParallelAgent"| PIPELINE
     P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
     P3 & P40 -->|"GenAI SDK"| PRO
+    P31 & P32 & P33 -->|"GenAI SDK\nTEXT+IMAGE"| FLASH
     P5 -->|"Vertex AI\nGenAI SDK"| IMAGEN
     P5 -.->|"Vertex AI\nAsync generation"| VEO
     RELAY <-.->|"WebSocket\nBidiGenerateContent"| LIVE_API
@@ -108,17 +114,17 @@ flowchart TD
     %% Backend to Data Layer
     ORCH <-->|"Checkpoint resume"| FS
     P1 --> DAI
-    P1 & P3 & P5 --> GCS
+    P1 & P3 & P31 & P32 & P5 --> GCS
     P3 & P4 & P5 --> FS
     ORCH --> PS
     API --> SM
 ```
 
-> **How to read this diagram:** The user uploads a document through the React frontend. The `historian-api` triggers the `agent-orchestrator`, which runs a 7-phase ADK pipeline. Each phase calls Gemini models via the **Google GenAI SDK** (accessed through the **ADK** framework). The `live-relay` service connects the user's voice to the **Gemini Live API** via WebSocket for real-time conversation. All services run on **Google Cloud Run**, with Firestore for state and Cloud Storage for media.
+> **How to read this diagram:** The user uploads a document through the React frontend. The `historian-api` triggers the `agent-orchestrator`, which runs an 11-phase ADK pipeline. Phases 3.1–3.3 use Gemini's native interleaved `TEXT+IMAGE` output to generate narration direction and illustrations in a single call. Each phase calls Gemini models via the **Google GenAI SDK** (accessed through the **ADK** framework). The `live-relay` service connects the user's voice to the **Gemini Live API** via WebSocket for real-time conversation. All services run on **Google Cloud Run**, with Firestore for state and Cloud Storage for media.
 
 ---
 
-## Agent Pipeline — 7 Phases
+## Agent Pipeline — 11 Phases
 
 <details>
 <summary><strong>Phase I — Document Analyzer</strong></summary>
@@ -157,12 +163,62 @@ flowchart TD
 </details>
 
 <details>
+<summary><strong>Phase 3.1 — Narrative Director (Gemini Interleaved TEXT+IMAGE)</strong></summary>
+
+- Uses Gemini 2.0 Flash with `response_modalities=["TEXT","IMAGE"]` — a single call per scene produces **both** a creative direction note (text) and a storyboard illustration (image) in one unified reasoning pass
+- This is the project's primary implementation of Gemini's native interleaved output: the model acts as creative director, generating visuals and narration direction simultaneously
+- Storyboard images are uploaded to GCS and serve as cinematic reference for Phase V's Imagen 3 frames
+- Emits `storyboard_scene_start`, `storyboard_text_chunk`, and `storyboard_image_ready` SSE events for live frontend updates
+
+**Outputs:** `storyboard_images` (dict of scene_id → GCS URIs)
+
+</details>
+
+<details>
+<summary><strong>Phase 3.2 — Beat Illustration Agent (Interleaved TEXT+IMAGE for Player)</strong></summary>
+
+- Pre-generates narration beats with Gemini's interleaved output (`response_modalities=["TEXT","IMAGE"]`) during the pipeline, so the documentary player has beat images ready **before** playback begins
+- Each segment script is decomposed into 3–4 dramatic beats; each beat gets a narration direction + cinematic illustration from a single Gemini call
+- Beat 0 is emitted immediately (fast path); beats 1–N are generated concurrently via `asyncio.gather`
+- Beat images are the **primary visual path** for the documentary player — Imagen 3 frames from Phase V serve as cinematic fallback
+- Emits `narration_beat` SSE events per beat for progressive frontend loading
+
+**Outputs:** `beats` (dict of segment_id → list of beat dicts with GCS image URIs)
+
+</details>
+
+<details>
+<summary><strong>Phase 3.3 — Visual Interleave Agent (Beat Visual Type Assignment)</strong></summary>
+
+- Reads beat data from Phase 3.2 and assigns each beat a `visual_type` using Gemini 2.0 Flash:
+  - `illustration` — keep the Phase 3.2 Gemini TEXT+IMAGE (no extra generation needed)
+  - `cinematic` — generate an Imagen 3 photorealistic frame in Phase V
+  - `video` — generate a Veo 2 short clip in Phase V
+- This creates a **mixed-modality playback sequence** where illustrations, photographs, and video clips alternate based on narrative pacing
+- Phase V reads the `beat_visual_plan` to determine which generation path to use per beat
+
+**Output:** `beat_visual_plan` (dict of segment_id → list of BeatVisualAssignment dicts)
+
+</details>
+
+<details>
 <summary><strong>Phase III.5 — Fact Validator (Hallucination Firewall)</strong></summary>
 
 - Gemini 2.0 Flash acts as an LLM-judge, cross-referencing every narration claim against the aggregated research
 - Claims are classified: `SUPPORTED` (keep) · `UNSUPPORTED_SPECIFIC` (remove + bridge sentence) · `UNSUPPORTED_PLAUSIBLE` (soften with "according to tradition") · `NON_FACTUAL` (keep, skip)
 - Overwrites `session.state["script"]` in place — zero changes to downstream agents
 - Latency: ~3–5s; eliminates hallucinated dates, names, and events from narration
+
+</details>
+
+<details>
+<summary><strong>Phase 3.8 — Geographic Mapping</strong></summary>
+
+- Extracts geographic locations from scripts and scene briefs, geocodes via Gemini 2.0 Flash with Google Maps grounding
+- Writes `SegmentGeo` data to Firestore and emits `geo_update` SSE events for the frontend timeline map
+- Enables the interactive antique-style map with animated pins, routes, and fly-to transitions per segment
+
+**Output:** `SegmentGeo` per segment in Firestore
 
 </details>
 
@@ -199,8 +255,12 @@ Fast path (Scene 0): 3 sources, early exit at 2 accepted — prioritizes first s
 <details>
 <summary><strong>Phase V — Visual Director</strong></summary>
 
-- **Imagen 3** (`imagen-3.0-fast-generate-001`): 4 frames per scene, all scenes concurrent via `asyncio.gather`. Priority: enriched manifest → script visual_descriptions → generic fallback. Prompts include era markers as negative prompts.
-- **Veo 2** (`veo-2.0-generate-001`): one dramatic clip per scene, fired async after all Imagen generation completes. Polled with `loop.run_in_executor(None, client.operations.get, op)` (sync-only API).
+- **Beat-aware generation** — reads Phase 3.3's `beat_visual_plan` to determine which path to use per beat:
+  - `illustration` beats already have Gemini-generated images from Phase 3.2 — no extra work
+  - `cinematic` beats get Imagen 3 photorealistic frames
+  - `video` beats get Veo 2 short clips
+- **Imagen 3** (`imagen-3.0-fast-generate-001`): generates frames only for `cinematic` beats, all scenes concurrent via `asyncio.gather`. Priority: enriched manifest → storyboard reference → script visual_descriptions → generic fallback. Prompts include era markers as negative prompts.
+- **Veo 2** (`veo-2.0-generate-001`): generates clips only for `video` beats, fired async after all Imagen generation completes. Polled with `loop.run_in_executor(None, client.operations.get, op)` (sync-only API).
 - **GCS uploads** use a module-level `storage.Client()` singleton and cached `Bucket` reference — eliminates per-upload HTTP connection pool creation.
 - Updates Firestore with `imageUrls[]` and `videoUrl` per segment and emits `segment_update(status="complete")` SSE.
 
@@ -209,9 +269,13 @@ Fast path (Scene 0): 3 sources, early exit at 2 accepted — prioritizes first s
 </details>
 
 <details>
-<summary><strong>Checkpoint Resume — ResumablePipelineAgent</strong></summary>
+<summary><strong>Pipeline Executors — Batch and Streaming</strong></summary>
 
-Every completed phase is checkpointed to Firestore (`/sessions/{id}/checkpoints/pipeline`). On restart after crash or timeout, completed phases are skipped and `session.state` is restored from the snapshot. The pipeline resumes from the first incomplete phase — no reprocessing of OCR, research, or scripts.
+Two pipeline execution modes:
+
+- **`ResumablePipelineAgent`** (batch mode) — every completed phase is checkpointed to Firestore (`/sessions/{id}/checkpoints/pipeline`). On restart after crash or timeout, completed phases are skipped and `session.state` is restored from the snapshot. The pipeline resumes from the first incomplete phase — no reprocessing of OCR, research, or scripts.
+
+- **`StreamingPipelineAgent`** (streaming mode) — runs global phases (I + II) once, then processes per-segment in parallel. Each segment flows through Phases III → 3.1 → 3.2 → 3.3 → V independently, enabling faster first-segment delivery and progressive playback.
 
 </details>
 
@@ -268,7 +332,7 @@ gcloud firestore indexes composite create \
 |---|---|
 | `gemini-2.5-flash-native-audio-preview-12-2025` | Historian persona — Gemini Live API |
 | `gemini-2.0-pro` | Script generation, Visual Planner, Narrative Curator |
-| `gemini-2.0-flash` | Scan Agent, Research Subagents, Fact Validator, Visual Research |
+| `gemini-2.0-flash` | Scan Agent, Research Subagents, Fact Validator, Visual Research, Interleaved TEXT+IMAGE (Phases 3.1, 3.2, 3.3), Geo Mapping |
 | `gemini-embedding-2-preview` | Chunk summary embeddings (768 dims) + query embedding for RAG retrieval |
 | `imagen-3.0-fast-generate-001` | Scene images (4 frames per segment, ~5s each) |
 | `veo-2.0-generate-001` | Dramatic video clips (async, 1–2 min each) |
@@ -427,13 +491,14 @@ cd frontend && pnpm install && pnpm dev
 │       │   ├── upload/                 DropZone, FormatBadge, PersonaSelector
 │       │   ├── workspace/              WorkspaceLayout, PDFViewer, ResearchPanel,
 │       │   │                           HistorianPanel, AgentModal, SegmentCard,
-│       │   │                           ExpeditionLog, TopNav
+│       │   │                           ExpeditionLog, StoryboardStream, TopNav
 │       │   ├── player/                 DocumentaryPlayer, KenBurnsStage, TimelineMap,
 │       │   │                           CaptionTrack, PlayerSidebar, IrisOverlay,
 │       │   │                           SourcePanel, ShareButton, BranchTree
 │       │   ├── voice/                  VoiceButton, Waveform, VoiceLayer, LiveToast,
 │       │   │                           LivingPortrait (canvas)
-│       │   └── ui/                     Button, InkButton, Badge, Spinner, Modal
+│       │   └── ui/                     Button, InkButton, Badge, Spinner, Modal,
+│       │                               VisualSourceBadge
 │       ├── hooks/
 │       │   ├── useSSE.ts               Adaptive drip SSE — 1/3/8 events per 150ms tick
 │       │   ├── useGeminiLive.ts        WebSocket session lifecycle + text messages
@@ -448,7 +513,8 @@ cd frontend && pnpm install && pnpm dev
 │       ├── store/                      sessionStore · researchStore (sessionStorage) · voiceStore · playerStore
 │       ├── services/                   api.ts · upload.ts (GCS signed URL)
 │       ├── styles/                     map-style.json · map-style-light.json · timeline-map.css
-│       └── pages/                      LandingPage · UploadPage · WorkspacePage · PlayerPage (lazy-loaded)
+│       └── pages/                      LandingPage · UploadPage · WorkspacePage · PlayerPage ·
+│                                       InterleavedDemoPage (lazy-loaded)
 │
 ├── backend/
 │   ├── historian_api/
@@ -456,28 +522,36 @@ cd frontend && pnpm install && pnpm dev
 │   │       ├── session.py              Session lifecycle, SSE stream, signed URL refresh
 │   │       ├── pipeline.py             Pipeline trigger, segment endpoints
 │   │       ├── retrieve.py             POST /api/session/{id}/retrieve — RAG vector search
-│   │       └── illustrate.py           POST /api/session/{id}/illustrate — live Imagen 3 on user questions
+│   │       ├── illustrate.py           POST /api/session/{id}/illustrate — live Imagen 3 on user questions
+│   │       ├── narrate.py              POST /api/session/{id}/segment/{segId}/narrate — beat-driven interleaved narration
+│   │       └── demo_interleaved.py     GET /api/demo/interleaved — standalone TEXT+IMAGE demo
 │   ├── agent_orchestrator/
 │   │   └── agents/
-│   │       ├── pipeline.py             ResumablePipelineAgent — checkpoint-aware orchestrator
+│   │       ├── pipeline.py             ResumablePipelineAgent + StreamingPipelineAgent
 │   │       ├── document_analyzer.py    Phase I — OCR, chunking, summarization, curation
 │   │       ├── scene_research_agent.py Phase II — ParallelAgent scene research
 │   │       ├── script_agent_orchestrator.py  Phase III — script gen + WriteBatch
+│   │       ├── narrative_director_agent.py   Phase 3.1 — Gemini TEXT+IMAGE storyboard
+│   │       ├── beat_illustration_agent.py    Phase 3.2 — TEXT+IMAGE player beats
+│   │       ├── visual_interleave_agent.py    Phase 3.3 — beat visual_type assignment
 │   │       ├── fact_validator_agent.py Phase III.5 — hallucination firewall
+│   │       ├── geo_location_agent.py   Phase 3.8 — geographic mapping + geocoding
 │   │       ├── narrative_visual_planner.py   Phase 4.0 — VisualStoryboard
 │   │       ├── visual_research_orchestrator.py Phase IV — 6-stage visual research
-│   │       ├── visual_director_orchestrator.py Phase V — Imagen 3 + Veo 2 + GCS
-│   │       ├── narrative_director_agent.py   Phase 3.1 — TEXT+IMAGE interleaved storyboard
+│   │       ├── visual_director_orchestrator.py Phase V — beat-aware Imagen 3 + Veo 2
 │   │       ├── branch_pipeline.py      Branching documentary graph from user questions
 │   │       ├── entity_extractor.py     Named entity extraction for PDF highlights
 │   │       ├── research_deduplicator.py Source deduplication across scenes
+│   │       ├── prompt_style_helpers.py Visual prompt styling and era markers
 │   │       ├── checkpoint_helpers.py   Phase checkpoint load/save (Firestore)
 │   │       ├── rate_limiter.py         GlobalRateLimiter + Retry-After backoff
 │   │       ├── sse_helpers.py          SSE event builders
 │   │       ├── chunk_types.py          ChunkRecord · SceneBrief · DocumentMap
 │   │       ├── script_types.py         SegmentScript
 │   │       ├── storyboard_types.py     VisualStoryboard
-│   │       └── visual_detail_types.py  VisualDetailManifest
+│   │       ├── visual_detail_types.py  VisualDetailManifest
+│   │       ├── visual_interleave_types.py BeatVisualAssignment
+│   │       └── geo_types.py            SegmentGeo
 │   └── live_relay/                     Node.js 20 WebSocket proxy → Gemini Live API
 │                                       + RAG injection · transcript forwarding · Firestore context
 │
@@ -501,7 +575,7 @@ cd frontend && pnpm install && pnpm dev
 `live-relay` · Gemini Live API · browser audio pipeline (PCM encoding) · interruption handling · voice button state machine · session resumption · RAG context injection · transcript forwarding
 
 **Efe** — Research Pipeline, Agent Visualization & Documentary Engine
-ADK 7-phase agent pipeline · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal · Timeline Map · Living Portrait avatar · live illustration engine · light/dark theme
+ADK 11-phase agent pipeline · Gemini interleaved TEXT+IMAGE (Phases 3.1–3.3) · beat-driven narration engine · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal · Timeline Map · Living Portrait avatar · live illustration engine · light/dark theme
 
 ---
 

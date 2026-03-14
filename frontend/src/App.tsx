@@ -26,6 +26,9 @@ const NotFoundPage = lazy(() =>
 const TestMapPage = lazy(() =>
   import('./pages/TestMapPage').then((m) => ({ default: m.TestMapPage })),
 );
+const InterleavedDemoPage = lazy(() =>
+  import('./pages/InterleavedDemoPage').then((m) => ({ default: m.InterleavedDemoPage })),
+);
 
 function ThemeSync() {
   useTheme();
@@ -119,6 +122,14 @@ const router = createBrowserRouter([
       },
       { path: '/workspace', element: <WorkspaceGuard /> },
       { path: '/player/:segmentId', element: <PlayerGuard /> },
+      {
+        path: '/demo/interleaved',
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <InterleavedDemoPage />
+          </Suspense>
+        ),
+      },
       ...(import.meta.env.DEV ? [{
         path: '/test-map',
         element: (
