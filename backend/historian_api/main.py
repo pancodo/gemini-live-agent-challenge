@@ -11,6 +11,7 @@ from .routes import session as session_router
 from .routes import pipeline as pipeline_router
 from .routes import retrieve as retrieve_router
 from .routes import illustrate as illustrate_router
+from .routes import narrate as narrate_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ app.include_router(session_router.router, prefix="/api")
 app.include_router(pipeline_router.router, prefix="/api")
 app.include_router(retrieve_router.router, prefix="/api")
 app.include_router(illustrate_router.router, prefix="/api")
+app.include_router(narrate_router.router, prefix="/api")
 
 
 @app.get("/health")
