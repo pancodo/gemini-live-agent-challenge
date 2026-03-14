@@ -89,6 +89,7 @@ from .sse_helpers import (
     SSEEmitter,
     build_agent_status_event,
     build_pipeline_phase_event,
+    build_segment_playable_event,
     build_segment_update_event,
 )
 from .visual_director_orchestrator import build_visual_director_orchestrator
@@ -96,6 +97,41 @@ from .visual_research_agent import visual_research_agent
 from .visual_research_orchestrator import build_visual_research_orchestrator
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# GCS URL signing utility
+# ---------------------------------------------------------------------------
+
+from datetime import timedelta
+from google.cloud import storage as gcs_storage
+
+
+def _sign_gcs_url(gcs_uri: str, bucket_name: str) -> str:
+    """Convert a ``gs://`` URI to a 4-hour signed HTTPS URL.
+
+    If *gcs_uri* does not start with ``gs://``, it is returned unchanged
+    (already an HTTPS URL or other format).
+
+    Args:
+        gcs_uri: The GCS URI to sign, e.g. ``gs://bucket/path/to/blob``.
+        bucket_name: The GCS bucket name (used to strip the URI prefix).
+
+    Returns:
+        A signed HTTPS URL valid for 4 hours, or the original URI if not
+        a ``gs://`` path.
+    """
+    if not gcs_uri.startswith("gs://"):
+        return gcs_uri
+    blob_path = gcs_uri.replace(f"gs://{bucket_name}/", "")
+    client = gcs_storage.Client()
+    blob = client.bucket(bucket_name).blob(blob_path)
+    return blob.generate_signed_url(
+        expiration=timedelta(hours=4),
+        method="GET",
+        version="v4",
+    )
+
 
 # ---------------------------------------------------------------------------
 # 1. Scan Agent
@@ -950,6 +986,98 @@ class StreamingPipelineAgent(BaseAgent):
                 time.monotonic() - t_phase_start,
                 session_id,
             )
+
+        # ------------------------------------------------------------------
+        # Sign GCS URLs and emit segment_playable for each segment
+        # ------------------------------------------------------------------
+        bucket_name = self.gcs_bucket_name
+        image_url_store: dict[str, list[str]] = ctx.session.state.get(
+            "image_urls", {}
+        )
+        video_url_store: dict[str, str] = ctx.session.state.get(
+            "video_urls", {}
+        )
+
+        # Sign all GCS image/video URLs and re-emit segment_update with
+        # HTTPS URLs, then emit segment_playable for each segment.
+        if bucket_name:
+            for seg_dict in accumulated_scripts:
+                if seg_dict is None:
+                    continue
+                seg_id = seg_dict.get("id", "")
+                scene_id_val = seg_dict.get("scene_id", "")
+
+                # Sign image URLs
+                raw_image_urls = image_url_store.get(seg_id, [])
+                signed_image_urls: list[str] = []
+                for url in raw_image_urls:
+                    try:
+                        signed_image_urls.append(
+                            _sign_gcs_url(url, bucket_name)
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to sign image URL %s: %s", url, exc
+                        )
+                        signed_image_urls.append(url)
+
+                # Sign video URL
+                raw_video_url = video_url_store.get(seg_id)
+                signed_video_url: str | None = None
+                if raw_video_url:
+                    try:
+                        signed_video_url = _sign_gcs_url(
+                            raw_video_url, bucket_name
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to sign video URL %s: %s",
+                            raw_video_url,
+                            exc,
+                        )
+                        signed_video_url = raw_video_url
+
+                # Emit segment_update with signed URLs
+                if self.emitter and signed_image_urls:
+                    await self.emitter.emit(
+                        "segment_update",
+                        build_segment_update_event(
+                            segment_id=seg_id,
+                            scene_id=scene_id_val,
+                            status="complete",
+                            title=seg_dict.get("title"),
+                            mood=seg_dict.get("mood"),
+                            image_urls=signed_image_urls,
+                            video_url=signed_video_url,
+                        ),
+                    )
+
+                # Emit segment_playable
+                if self.emitter:
+                    await self.emitter.emit(
+                        "segment_playable",
+                        build_segment_playable_event(segment_id=seg_id),
+                    )
+
+                logger.info(
+                    "Emitted segment_playable for %s (session %s, "
+                    "%d signed images, video=%s)",
+                    seg_id,
+                    session_id,
+                    len(signed_image_urls),
+                    bool(signed_video_url),
+                )
+        else:
+            # No bucket configured -- emit segment_playable without signing
+            for seg_dict in accumulated_scripts:
+                if seg_dict is None:
+                    continue
+                seg_id = seg_dict.get("id", "")
+                if self.emitter:
+                    await self.emitter.emit(
+                        "segment_playable",
+                        build_segment_playable_event(segment_id=seg_id),
+                    )
 
         t_total = time.monotonic() - t_pipeline_start
         logger.info(

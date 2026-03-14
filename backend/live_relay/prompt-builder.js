@@ -34,6 +34,7 @@ function formatSegments(segments) {
   return segments
     .map((seg, i) => {
       const lines = [`Segment ${i + 1}: ${seg.title}`];
+      if (seg.era) lines.push(`  Historical period: ${seg.era}`);
       if (seg.mood) lines.push(`  Mood: ${seg.mood}`);
       if (seg.script) lines.push(`  Script: ${seg.script}`);
       if (seg.sources.length > 0) {
@@ -82,6 +83,19 @@ function buildSystemInstruction(context) {
 
   contextLines.push('Documentary Segments:');
   contextLines.push(formatSegments(context.segments));
+
+  // Extract unique eras across segments for general visual guidance
+  const eras = [...new Set(context.segments.map(s => s.era).filter(Boolean))];
+  if (eras.length > 0) {
+    contextLines.push('');
+    contextLines.push('HISTORICAL PERIOD CONTEXT:');
+    contextLines.push(`This documentary covers: ${eras.join(', ')}`);
+    contextLines.push(
+      'When using generate_illustration, always specify mood and composition ' +
+      'appropriate to these historical periods. Reference period-correct ' +
+      'architecture, clothing, lighting, and atmospheric elements.'
+    );
+  }
 
   let full = BASE_PERSONA + '\n' + contextLines.join('\n');
 

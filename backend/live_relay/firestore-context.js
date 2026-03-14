@@ -41,6 +41,7 @@ function getFirestore() {
  * @property {string}   title
  * @property {string}   script
  * @property {string}   mood
+ * @property {string}   era
  * @property {string[]} sources
  */
 
@@ -101,6 +102,7 @@ async function fetchDocumentaryContext(sessionId) {
       title: d?.title ?? '',
       script: d?.script ?? '',
       mood: d?.mood ?? '',
+      era: d?.era ?? '',
       sources: Array.isArray(d?.sources) ? d.sources : [],
     });
   }

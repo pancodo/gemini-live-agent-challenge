@@ -16,6 +16,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from google import genai
@@ -132,6 +133,7 @@ async def illustrate(
     except Exception as exc:
         logger.warning("Failed to read session %s: %s", session_id, exc)
 
+    seg_data: dict[str, Any] = {}
     if body.current_segment_id:
         try:
             seg_doc = (
@@ -184,6 +186,22 @@ async def illustrate(
         composition_framing=composition_framing,
         rag_context=rag_context or "(no document context retrieved)",
     )
+
+    # ── Augment prompt with shared style terms for visual coherence ─
+    try:
+        from agent_orchestrator.agents.prompt_style_helpers import build_style_block
+
+        style_block = build_style_block(
+            visual_bible=visual_bible,
+            era=seg_data.get("era", ""),
+            mood=mood,
+            title=segment_title,
+            narrative_role=seg_data.get("narrativeRole", ""),
+        )
+        if style_block:
+            prompt += f"\n\n{style_block}\n\nMatch these style terms exactly in the illustration."
+    except ImportError:
+        pass  # Style helpers not available — proceed with base prompt
 
     # ── Call Gemini with interleaved text+image output ────────────
     client = _get_genai_client()
