@@ -12,7 +12,7 @@ type RelayMessage =
   | { type: 'resumption_token'; token: string }
   | { type: 'go_away' }
   | { type: 'transcript'; text: string }
-  | { type: 'live_illustration'; imageUrl: string; caption: string }
+  | { type: 'live_illustration'; imageUrl: string; caption: string; query?: string }
   | { type: 'resumption_expired' }
   | { type: 'error'; message: string };
 
@@ -29,6 +29,7 @@ export interface GeminiLiveConfig {
   onReconnecting?: (attempt: number, max: number) => void;
   onReconnectFailed?: () => void;
   onResumptionExpired?: () => void;
+  onReady?: () => void;
 }
 
 export interface GeminiLiveReturn {
@@ -141,6 +142,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
       switch (msg.type) {
         case 'ready':
           isReadyRef.current = true;
+          cfg.onReady?.();
           break;
 
         case 'audio':
@@ -183,6 +185,7 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
               imageUrl: msg.imageUrl,
               caption: msg.caption,
               receivedAt: Date.now(),
+              query: msg.query,
             });
           }
           break;

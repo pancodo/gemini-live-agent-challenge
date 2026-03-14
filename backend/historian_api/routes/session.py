@@ -65,6 +65,38 @@ def get_gcs() -> storage.Client:
     return _gcs
 
 
+_signing_creds = None
+
+
+def get_signing_credentials():
+    """Return credentials capable of signing (for generate_signed_url).
+
+    Service account credentials sign directly. User/ADC credentials
+    (from gcloud auth) use IAM signBlob via service account impersonation.
+    """
+    global _signing_creds
+    if _signing_creds is not None:
+        return _signing_creds
+
+    credentials, project = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    if hasattr(credentials, "signer") and hasattr(credentials, "service_account_email"):
+        _signing_creds = credentials
+    else:
+        from google.auth import impersonated_credentials
+        sa_email = os.environ.get(
+            "SIGNING_SERVICE_ACCOUNT",
+            f"historian-api@{project}.iam.gserviceaccount.com",
+        )
+        _signing_creds = impersonated_credentials.Credentials(
+            source_credentials=credentials,
+            target_principal=sa_email,
+            target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+    return _signing_creds
+
+
 @router.get("/session/create", response_model=CreateSessionResponse)
 async def create_session(
     filename: str = "document.pdf",
@@ -78,13 +110,11 @@ async def create_session(
     blob_path = f"{session_id}/document.pdf"
 
     # Generate signed URL for direct browser-to-GCS upload (PUT, 10 min expiry)
-    # Uses google-auth credentials with request signer to support ADC (no service account key needed)
     try:
-        credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         bucket = get_gcs().bucket(GCS_BUCKET)
         blob = bucket.blob(blob_path)
         upload_url = blob.generate_signed_url(
-            credentials=credentials,
+            credentials=get_signing_credentials(),
             version="v4",
             expiration=timedelta(minutes=10),
             method="PUT",
@@ -140,12 +170,9 @@ async def get_session_status(session_id: str) -> SessionStatusResponse:
             gs_path = data["gcsPath"]  # e.g. gs://bucket/session_id/document.pdf
             without_scheme = gs_path[5:]  # strip "gs://"
             bucket_name, _, blob_name = without_scheme.partition("/")
-            credentials, _ = google.auth.default(
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
             blob = get_gcs().bucket(bucket_name).blob(blob_name)
             document_url = blob.generate_signed_url(
-                credentials=credentials,
+                credentials=get_signing_credentials(),
                 version="v4",
                 expiration=timedelta(hours=1),
                 method="GET",
@@ -196,12 +223,9 @@ def _gs_to_signed_url(gs_uri: str) -> str:
     try:
         without_scheme = gs_uri[5:]  # strip "gs://"
         bucket_name, _, blob_name = without_scheme.partition("/")
-        credentials, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
         blob = get_gcs().bucket(bucket_name).blob(blob_name)
         return blob.generate_signed_url(
-            credentials=credentials,
+            credentials=get_signing_credentials(),
             version="v4",
             expiration=timedelta(hours=1),
             method="GET",

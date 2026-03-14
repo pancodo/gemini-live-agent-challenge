@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue, useSpring, useReducedMotion } from 'motion/react';
-import { Badge, Button } from '../ui';
+import { Button } from '../ui';
 import { usePlayerStore } from '../../store/playerStore';
 import { useTextScramble } from '../../hooks/useTextScramble';
 import { downloadImage } from '../../utils/downloadImage';
@@ -184,6 +184,18 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
   const springY = useSpring(my, { stiffness: 150, damping: 15 });
   const isReady = segment.status === 'ready' || segment.status === 'complete' || segment.status === 'visual_ready';
   const [hasBeenReady, setHasBeenReady] = useState(isReady);
+  const [scriptExpanded, setScriptExpanded] = useState(false);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const imageCount = segment.imageUrls?.length ?? 0;
+
+  // Auto-cycle images every 4s
+  useEffect(() => {
+    if (imageCount <= 1) return;
+    const timer = setInterval(() => {
+      setCarouselIdx((prev) => (prev + 1) % imageCount);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [imageCount]);
 
   // Track transition to ready/complete for cipher reveal
   useEffect(() => {
@@ -254,94 +266,110 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 22 }}
         onMouseMove={handleMouseMove}
-        className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-4 cursor-pointer`}
+        className={`seg-card ${segment.status} agent-card archival-frame relative rounded-lg border border-[var(--bg4)] bg-[var(--bg)] p-4 cursor-pointer`}
       >
-        {/* Header row: mood badge + source count + index */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            {segment.mood ? (
-              <Badge variant="gold">{segment.mood}</Badge>
-            ) : (
-              <span />
-            )}
-            {segment.sources?.length > 0 && (
-              <Badge variant="muted">
-                {segment.sources.length} src
-              </Badge>
-            )}
-          </div>
+        {/* Title row with index */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <h3 className="seg-title font-serif text-[20px] font-normal text-[var(--text)] leading-snug flex-1">
+            {isGenerating
+              ? <span className="inline-block w-3/4 h-[1.2em] rounded bg-[var(--bg3)] animate-pulse" />
+              : scrambledTitle}
+          </h3>
           <span
-            className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em]"
+            className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em] shrink-0 mt-1.5"
             style={{ fontVariantNumeric: 'tabular-nums' }}
           >
             {String(index + 1).padStart(2, '0')}
           </span>
         </div>
 
-        {/* Title with cipher reveal / skeleton shimmer */}
-        <h3 className="seg-title font-serif text-[18px] font-normal text-[var(--text)] mb-3 leading-snug">
-          {isGenerating
-            ? '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'
-            : scrambledTitle}
-        </h3>
-
-        {/* Image thumbnails row */}
-        {segment.imageUrls?.length > 0 && (
-          <div className="flex gap-1.5 mb-3 overflow-hidden">
-            {segment.imageUrls.slice(0, 3).map((url, i) => (
-              <div
-                key={i}
-                role="button"
-                tabIndex={0}
-                aria-label={`View scene ${i + 1} full size`}
-                className="w-16 h-10 rounded bg-[var(--bg3)] overflow-hidden shrink-0 cursor-pointer transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
-                style={{ outlineColor: 'var(--gold)' }}
-                onClick={(e) => handleThumbnailClick(e, i)}
-                onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setLightboxIndex(i);
-                  }
-                }}
-              >
+        {/* Image carousel — single image with crossfade + dot navigation */}
+        {imageCount > 0 && (
+          <div className="relative mb-3">
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={`View scene ${carouselIdx + 1} of ${imageCount} full size`}
+              className="w-full aspect-[16/9] rounded-md bg-[var(--bg3)] overflow-hidden cursor-pointer relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
+              style={{ outlineColor: 'var(--gold)' }}
+              onClick={(e) => handleThumbnailClick(e, carouselIdx)}
+              onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setLightboxIndex(carouselIdx);
+                }
+              }}
+            >
+              {segment.imageUrls.map((url, i) => (
                 <img
+                  key={i}
                   src={url}
-                  alt={`Scene ${i + 1}`}
-                  className="w-full h-full object-cover pointer-events-none"
+                  alt={`${segment.title} — scene ${i + 1}`}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                   loading="lazy"
+                  style={{
+                    opacity: i === carouselIdx ? 1 : 0,
+                    transition: 'opacity 0.8s ease-in-out',
+                  }}
                 />
-              </div>
-            ))}
-            {segment.imageUrls.length > 3 && (
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={`View ${segment.imageUrls.length - 3} more images`}
-                className="w-16 h-10 rounded bg-[var(--bg3)] flex items-center justify-center shrink-0 cursor-pointer transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
-                style={{ outlineColor: 'var(--gold)' }}
-                onClick={(e) => handleThumbnailClick(e, 3)}
-                onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setLightboxIndex(3);
-                  }
+              ))}
+              {/* Frame counter */}
+              <span
+                className="absolute top-2 right-2 font-sans text-[9px] uppercase tracking-[0.15em] px-2 py-0.5 rounded"
+                style={{
+                  background: 'rgba(0,0,0,0.5)',
+                  color: 'rgba(255,255,255,0.8)',
+                  backdropFilter: 'blur(4px)',
                 }}
               >
-                <span className="font-sans text-[10px] text-[var(--muted)]">
-                  +{segment.imageUrls.length - 3}
-                </span>
+                {carouselIdx + 1} / {imageCount}
+              </span>
+            </div>
+            {/* Dot indicators */}
+            {imageCount > 1 && (
+              <div className="flex justify-center gap-1.5 mt-2">
+                {segment.imageUrls.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Go to scene ${i + 1}`}
+                    className="p-0 border-none bg-transparent cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); setCarouselIdx(i); }}
+                  >
+                    <span
+                      className="block rounded-full transition-all duration-300"
+                      style={{
+                        width: i === carouselIdx ? 16 : 6,
+                        height: 6,
+                        background: i === carouselIdx ? 'var(--gold)' : 'var(--bg4)',
+                      }}
+                    />
+                  </button>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Script preview (2 lines) */}
+        {/* Script preview — expandable */}
         {segment.script && (
-          <p className="font-sans text-[13px] text-[var(--muted)] line-clamp-2 mb-3 leading-relaxed">
-            {segment.script}
-          </p>
+          <div className="mb-3">
+            <p
+              className={`font-sans text-[13.5px] text-[var(--text)] leading-relaxed opacity-70 ${scriptExpanded ? '' : 'line-clamp-3'}`}
+            >
+              {segment.script}
+            </p>
+            {segment.script.length > 200 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setScriptExpanded((v) => !v); }}
+                className="font-sans text-[11px] text-[var(--gold)] mt-1 cursor-pointer bg-transparent border-none p-0 hover:underline"
+              >
+                {scriptExpanded ? 'Show less' : 'Read more'}
+              </button>
+            )}
+          </div>
         )}
 
         {/* Watch button */}
@@ -352,7 +380,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
             onMouseLeave={handleWatchLeave}
           >
             <motion.div style={reducedMotion ? {} : { x: springX, y: springY }}>
-              <Button variant="secondary" size="sm" onClick={handleWatch}>
+              <Button variant="primary" size="sm" onClick={handleWatch}>
                 {'\u25B6'} Watch
               </Button>
             </motion.div>

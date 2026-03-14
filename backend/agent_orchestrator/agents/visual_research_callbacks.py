@@ -49,6 +49,7 @@ async def on_visual_research_complete(
         build_agent_status_event(
             agent_id=AGENT_ID,
             status="done",
+            query="Searching for period-accurate visual references",
             elapsed=elapsed,
         ),
     )
@@ -64,6 +65,7 @@ async def on_visual_research_error(
         build_agent_status_event(
             agent_id=AGENT_ID,
             status="error",
+            query="Searching for period-accurate visual references",
         ),
     )
     await emitter.emit(

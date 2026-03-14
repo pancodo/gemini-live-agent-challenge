@@ -223,7 +223,10 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
-  const [zoom, setZoom] = useState(1.0);
+  // Base zoom offset so the PDF fills the panel better at "100%".
+  // The UI displays (zoom - ZOOM_BASE_OFFSET) so the user sees "100%".
+  const ZOOM_BASE_OFFSET = 0.25;
+  const [zoom, setZoom] = useState(1.0 + ZOOM_BASE_OFFSET);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -302,27 +305,29 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
     onHandleReady?.(handle);
   }, [handle, onHandleReady]);
 
-  // Load PDF document
-  const loadPdf = useCallback(async () => {
-    if (!documentUrl) return;
+  // Load PDF document — only reload when the base path changes (not the signature).
+  // The signed URL is refreshed every poll but the actual document doesn't change.
+  const docUrlRef = useRef(documentUrl);
+  docUrlRef.current = documentUrl;
+
+  const basePath = documentUrl ? documentUrl.split('?')[0] : null;
+
+  useEffect(() => {
+    const url = docUrlRef.current;
+    if (!url) return;
 
     setLoading(true);
     setError(null);
 
-    try {
-      const doc = await pdfjsLib.getDocument(documentUrl).promise;
+    pdfjsLib.getDocument(url).promise.then((doc) => {
       setPdf(doc);
       setNumPages(doc.numPages);
-    } catch (err) {
+    }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Failed to load PDF document');
-    } finally {
+    }).finally(() => {
       setLoading(false);
-    }
-  }, [documentUrl]);
-
-  useEffect(() => {
-    loadPdf();
-  }, [loadPdf]);
+    });
+  }, [basePath]); // eslint-disable-line react-hooks/exhaustive-deps -- docUrlRef always has latest signed URL
 
   // Render a single page: canvas layer + text layer
   const renderPage = useCallback(
@@ -392,7 +397,10 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
   // Re-render all pages on pdf/zoom/renderPage changes
   useEffect(() => {
     if (!pdf) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Render at slightly higher resolution than display for crisper text.
+    // Native PDF viewers use their own high-res engines; pdfjs needs help.
+    const rawDpr = window.devicePixelRatio || 1;
+    const dpr = rawDpr < 1.5 ? rawDpr * 1.5 : rawDpr;
 
     async function renderAll() {
       for (let i = 1; i <= pdf!.numPages; i++) {
@@ -485,7 +493,18 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
         <p className="text-[14px] text-red-600 font-sans text-center">{error}</p>
-        <Button variant="secondary" size="sm" onClick={loadPdf}>
+        <Button variant="secondary" size="sm" onClick={() => {
+          const url = docUrlRef.current;
+          if (!url) return;
+          setLoading(true);
+          setError(null);
+          pdfjsLib.getDocument(url).promise.then((doc) => {
+            setPdf(doc);
+            setNumPages(doc.numPages);
+          }).catch((err) => {
+            setError(err instanceof Error ? err.message : 'Failed to load PDF');
+          }).finally(() => setLoading(false));
+        }}>
           Retry
         </Button>
       </div>
@@ -523,11 +542,11 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
               −
             </button>
             <button
-              onClick={() => setZoom(1.0)}
+              onClick={() => setZoom(1.0 + ZOOM_BASE_OFFSET)}
               aria-label="Reset zoom"
               className="px-2.5 py-1.5 text-[11px] font-sans tabular-nums text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--bg3)] transition-colors border-r border-[var(--bg4)] min-w-[3.5rem] text-center"
             >
-              {Math.round(zoom * 100)}%
+              {Math.round((zoom - ZOOM_BASE_OFFSET) * 100)}%
             </button>
             <button
               onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}

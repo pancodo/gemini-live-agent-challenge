@@ -1243,7 +1243,7 @@ Output ONLY a JSON array of exactly {frame_count} string(s), in the order listed
     # --- Generate master enriched_prompt (used as fallback when frame_prompts is empty) ---
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-2.0-pro",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=genai_types.GenerateContentConfig(
                 max_output_tokens=1024,

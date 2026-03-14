@@ -252,6 +252,7 @@ async function generateIllustrationAsync(sessionId, subject, mood, composition, 
         type: 'live_illustration',
         imageUrl: data.imageUrl,
         caption: data.caption || subject,
+        query: subject,
       }));
     }
 

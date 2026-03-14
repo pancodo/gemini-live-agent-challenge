@@ -10,6 +10,10 @@ interface Settings {
   voiceEnabled: boolean;
   showCaptions: boolean;
   theme: Theme;
+  hasSeenPlayerShortcuts: boolean;
+  hasSeenInterruptHint: boolean;
+  hasSeenMapDiscovery: boolean;
+  hasSeenSegmentControls: boolean;
 }
 
 function getSystemTheme(): Theme {
@@ -22,6 +26,10 @@ const DEFAULT_SETTINGS: Settings = {
   voiceEnabled: true,
   showCaptions: true,
   theme: 'light', // overridden at runtime by getSystemTheme() when no preference is saved
+  hasSeenPlayerShortcuts: false,
+  hasSeenInterruptHint: false,
+  hasSeenMapDiscovery: false,
+  hasSeenSegmentControls: false,
 };
 
 function loadSettings(): Settings {
@@ -38,6 +46,10 @@ function loadSettings(): Settings {
       voiceEnabled: typeof obj['voiceEnabled'] === 'boolean' ? obj['voiceEnabled'] : DEFAULT_SETTINGS.voiceEnabled,
       showCaptions: typeof obj['showCaptions'] === 'boolean' ? obj['showCaptions'] : DEFAULT_SETTINGS.showCaptions,
       theme: (theme === 'light' || theme === 'dark') ? theme : getSystemTheme(),
+      hasSeenPlayerShortcuts: typeof obj['hasSeenPlayerShortcuts'] === 'boolean' ? obj['hasSeenPlayerShortcuts'] : DEFAULT_SETTINGS.hasSeenPlayerShortcuts,
+      hasSeenInterruptHint: typeof obj['hasSeenInterruptHint'] === 'boolean' ? obj['hasSeenInterruptHint'] : DEFAULT_SETTINGS.hasSeenInterruptHint,
+      hasSeenMapDiscovery: typeof obj['hasSeenMapDiscovery'] === 'boolean' ? obj['hasSeenMapDiscovery'] : DEFAULT_SETTINGS.hasSeenMapDiscovery,
+      hasSeenSegmentControls: typeof obj['hasSeenSegmentControls'] === 'boolean' ? obj['hasSeenSegmentControls'] : DEFAULT_SETTINGS.hasSeenSegmentControls,
     };
   } catch {
     return DEFAULT_SETTINGS;
