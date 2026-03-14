@@ -5,6 +5,17 @@ import type { AgentState, EntityHighlight, EvaluatedSource, Segment } from '../t
 
 const MAX_EVALUATED_SOURCES = 50;
 
+export interface StoryboardFrame {
+  sceneId: string;
+  segmentId: string;
+  title: string;
+  mood: string;
+  textChunks: string[];
+  imageUrl: string | null;
+  imageCaption: string;
+  completedAt: number | null;
+}
+
 export interface PhaseEntry {
   phase: number;
   label: string;
@@ -21,6 +32,8 @@ interface ResearchStore {
   scanEntities: string[];
   /** Per-segment entity highlights mapping narration entities to PDF page locations */
   entityHighlights: Record<string, EntityHighlight[]>;
+  /** Storyboard frames keyed by sceneId, populated by streaming storyboard events */
+  storyboardFrames: Record<string, StoryboardFrame>;
   setAgent: (agentId: string, state: Partial<AgentState>) => void;
   setSegment: (segmentId: string, state: Partial<Segment>) => void;
   appendSegmentImage: (segmentId: string, imageUrl: string) => void;
@@ -29,6 +42,9 @@ interface ResearchStore {
   addEvaluatedSource: (agentId: string, source: EvaluatedSource) => void;
   setScanEntities: (entities: string[]) => void;
   setEntityHighlights: (segmentId: string, highlights: EntityHighlight[]) => void;
+  addStoryboardScene: (sceneId: string, segmentId: string, title: string, mood: string) => void;
+  appendStoryboardText: (sceneId: string, text: string) => void;
+  setStoryboardImage: (sceneId: string, imageUrl: string, caption: string) => void;
   reset: () => void;
 }
 
@@ -39,6 +55,7 @@ export const useResearchStore = create<ResearchStore>()(persist(subscribeWithSel
   phases: [],
   scanEntities: [],
   entityHighlights: {},
+  storyboardFrames: {},
   setAgent: (agentId, partial) =>
     set((s) => ({
       agents: {
@@ -114,6 +131,52 @@ export const useResearchStore = create<ResearchStore>()(persist(subscribeWithSel
         [segmentId]: highlights,
       },
     })),
+  addStoryboardScene: (sceneId, segmentId, title, mood) =>
+    set((s) => ({
+      storyboardFrames: {
+        ...s.storyboardFrames,
+        [sceneId]: {
+          sceneId,
+          segmentId,
+          title,
+          mood,
+          textChunks: [],
+          imageUrl: null,
+          imageCaption: '',
+          completedAt: null,
+        },
+      },
+    })),
+  appendStoryboardText: (sceneId, text) =>
+    set((s) => {
+      const frame = s.storyboardFrames[sceneId];
+      if (!frame) return s;
+      return {
+        storyboardFrames: {
+          ...s.storyboardFrames,
+          [sceneId]: {
+            ...frame,
+            textChunks: [...frame.textChunks, text],
+          },
+        },
+      };
+    }),
+  setStoryboardImage: (sceneId, imageUrl, caption) =>
+    set((s) => {
+      const frame = s.storyboardFrames[sceneId];
+      if (!frame) return s;
+      return {
+        storyboardFrames: {
+          ...s.storyboardFrames,
+          [sceneId]: {
+            ...frame,
+            imageUrl,
+            imageCaption: caption,
+            completedAt: Date.now(),
+          },
+        },
+      };
+    }),
   reset: () =>
     set({
       agents: {},
@@ -122,6 +185,7 @@ export const useResearchStore = create<ResearchStore>()(persist(subscribeWithSel
       phases: [],
       scanEntities: [],
       entityHighlights: {},
+      storyboardFrames: {},
     }),
 })), {
   name: 'ai-historian-research',
@@ -139,5 +203,6 @@ export const useResearchStore = create<ResearchStore>()(persist(subscribeWithSel
     stats: state.stats,
     phases: state.phases,
     scanEntities: state.scanEntities,
+    storyboardFrames: state.storyboardFrames,
   }) as unknown as ResearchStore,
 }));

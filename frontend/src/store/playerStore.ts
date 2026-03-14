@@ -35,6 +35,9 @@ interface PlayerStore {
   /** Current map view mode in the documentary player */
   mapViewMode: MapViewMode;
   setMapViewMode: (mode: MapViewMode) => void;
+  /** True when the entire research+generation pipeline has finished */
+  pipelineComplete: boolean;
+  setPipelineComplete: (complete: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -45,7 +48,7 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   isKenBurnsPaused: false,
   isIdle: false,
   open: (segmentId) => set({ isOpen: true, currentSegmentId: segmentId, isIdle: false }),
-  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {} }),
+  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {}, pipelineComplete: false }),
   setCaption: (captionText) => set({ captionText }),
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
   setIdle: (isIdle) => set({ isIdle }),
@@ -65,6 +68,8 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
     set((state) => ({ segmentGeo: { ...state.segmentGeo, [segmentId]: geo } })),
   mapViewMode: 'ken-burns',
   setMapViewMode: (mapViewMode) => set({ mapViewMode }),
+  pipelineComplete: false,
+  setPipelineComplete: (pipelineComplete) => set({ pipelineComplete }),
   liveIllustration: null,
   setLiveIllustration: (ill) => {
     if (_illustrationTimerHandle !== null) {
@@ -75,7 +80,7 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
       _illustrationTimerHandle = setTimeout(() => {
         _illustrationTimerHandle = null;
         set({ liveIllustration: null });
-      }, 25_000);
+      }, 35_000);
     }
     set({ liveIllustration: ill ?? null });
   },
