@@ -145,7 +145,6 @@ export function DocumentaryPlayer() {
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
-  const captionWps = usePlayerStore((s) => s.captionWps);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
 
@@ -1020,7 +1019,7 @@ export function DocumentaryPlayer() {
 
       {/* Layer 3: Captions — always visible */}
       <div className="absolute bottom-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
-        <CaptionTrack wordsPerSecond={captionWps > 0 ? captionWps : undefined} />
+        <CaptionTrack />
       </div>
 
       {/* Layer 3b: Illustration caption */}
