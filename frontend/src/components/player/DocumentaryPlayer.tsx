@@ -17,6 +17,7 @@ import { TimelineMap } from './TimelineMap';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
 import { toast } from 'sonner';
 import type { MapViewMode } from '../../types';
+import { startNarration } from '../../services/api';
 
 /**
  * PipelinePhaseLabel — Shows the current (latest) pipeline phase name.
@@ -162,32 +163,108 @@ export function DocumentaryPlayer() {
     }
   }, [voiceCaption, setCaption, setCaptionWps]);
 
-  // ── Fix 1.1: Auto-narration on player mount ────────────────
+  // ── Beat-driven narration (interleaved TEXT+IMAGE) ──────────
   const sendTextToHistorian = useVoiceStore((s) => s.sendTextToHistorian);
   const autoNarratedRef = useRef<Set<string>>(new Set());
 
+  const beats = usePlayerStore((s) => s.beats);
+  const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
+  const advanceBeat = usePlayerStore((s) => s.advanceBeat);
+  const setIsNarrating = usePlayerStore((s) => s.setIsNarrating);
+
+  // Track which segment we started narration for
+  const narrationStartedRef = useRef<Set<string>>(new Set());
+  // Track which beat index we last sent to historian
+  const lastSentBeatRef = useRef<number>(-1);
+  // Timer for beat advancement
+  const beatTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // ── Effect 1: Trigger beat generation on segment open ────────
+  useEffect(() => {
+    if (!currentSegment || !sessionId) return;
+    if (!currentSegment.script || currentSegment.script.length < 50) return;
+    if (narrationStartedRef.current.has(currentSegment.id)) return;
+
+    narrationStartedRef.current.add(currentSegment.id);
+    setIsNarrating(true);
+
+    const controller = new AbortController();
+    startNarration(sessionId, currentSegment.id, controller.signal).catch(() => {
+      // Silently fail — fallback effect below will handle it
+    });
+
+    return () => controller.abort();
+  }, [currentSegment, sessionId, setIsNarrating]);
+
+  // ── Effect 2: Send beat text to Gemini Live as beats arrive ──
+  useEffect(() => {
+    if (!sendTextToHistorian) return;
+    if (!currentSegment) return;
+    if (beats.length === 0) return;
+
+    const beat = beats[currentBeatIndex];
+    if (!beat) return;
+    if (lastSentBeatRef.current >= currentBeatIndex) return;
+
+    lastSentBeatRef.current = currentBeatIndex;
+
+    // Send this beat's narration to the historian
+    const prefix = currentBeatIndex === 0
+      ? `You are narrating "${currentSegment.title}". Deliver this naturally — no announcements. `
+      : 'Continue narrating the next moment: ';
+
+    sendTextToHistorian(prefix + beat.narrationText);
+
+    // Estimate narration duration and schedule beat advance
+    const wordCount = beat.narrationText.trim().split(/\s+/).length;
+    const estimatedMs = Math.max(wordCount * 400, 3000); // ~2.5 wps, minimum 3s
+
+    clearTimeout(beatTimerRef.current);
+    if (currentBeatIndex < beat.totalBeats - 1) {
+      beatTimerRef.current = setTimeout(() => {
+        advanceBeat();
+      }, estimatedMs);
+    } else {
+      // Last beat — mark narration complete after duration
+      beatTimerRef.current = setTimeout(() => {
+        setIsNarrating(false);
+      }, estimatedMs);
+    }
+
+    return () => clearTimeout(beatTimerRef.current);
+  }, [beats, currentBeatIndex, currentSegment, sendTextToHistorian, advanceBeat, setIsNarrating]);
+
+  // ── Effect 3: Fallback — if no beats arrive in 10s, send full script ──
   useEffect(() => {
     if (!currentSegment) return;
-    if (!currentSegment.script) return;
-    if (currentSegment.script.length < 50) return;
-    if (autoNarratedRef.current.has(currentSegment.id)) return;
     if (!sendTextToHistorian) return;
+    if (!currentSegment.script || currentSegment.script.length < 50) return;
+    if (autoNarratedRef.current.has(currentSegment.id)) return;
+    if (beats.length > 0) {
+      // Beats arrived — no fallback needed. Mark as auto-narrated.
+      autoNarratedRef.current.add(currentSegment.id);
+      return;
+    }
 
-    autoNarratedRef.current.add(currentSegment.id);
+    const fallbackTimer = setTimeout(() => {
+      // Still no beats after 10s — fall back to full script
+      if (usePlayerStore.getState().beats.length === 0) {
+        autoNarratedRef.current.add(currentSegment.id);
+        sendTextToHistorian(
+          `You are now narrating the segment titled "${currentSegment.title}". ` +
+          `Deliver this naturally in your historian voice. ` +
+          `\n\nScript:\n${currentSegment.script}`
+        );
+      }
+    }, 10_000);
 
-    const timer = setTimeout(() => {
-      sendTextToHistorian(
-        `You are now narrating the segment titled "${currentSegment.title}". ` +
-        `Here is the narration script — deliver it naturally in your historian voice, ` +
-        `weaving in dramatic pauses and emphasis. Do not say "I will now narrate" or ` +
-        `announce what you are doing. Simply begin speaking the narrative. ` +
-        `If a visual would enhance the story, you may use the generate_illustration tool. ` +
-        `\n\nScript:\n${currentSegment.script}`
-      );
-    }, 800);
+    return () => clearTimeout(fallbackTimer);
+  }, [currentSegment, sendTextToHistorian, beats.length]);
 
-    return () => clearTimeout(timer);
-  }, [currentSegment, sendTextToHistorian]);
+  // Reset lastSentBeatRef when segment changes
+  useEffect(() => {
+    lastSentBeatRef.current = -1;
+  }, [currentSegment?.id]);
 
   const currentIndexInReady = useMemo(() => {
     if (!currentSegmentId) return -1;
