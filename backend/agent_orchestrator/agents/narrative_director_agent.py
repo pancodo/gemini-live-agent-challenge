@@ -36,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from datetime import timedelta
 import os
 import time
 import uuid
@@ -54,6 +55,9 @@ from .sse_helpers import (
     build_agent_status_event,
     build_pipeline_phase_event,
     build_segment_update_event,
+    build_storyboard_image_ready_event,
+    build_storyboard_scene_start_event,
+    build_storyboard_text_chunk_event,
     build_stats_update_event,
 )
 
@@ -215,6 +219,18 @@ class NarrativeDirectorAgent(BaseAgent):
                     ),
                 )
 
+            # ── Emit storyboard_scene_start ────────────────────────────────
+            if self.emitter:
+                await self.emitter.emit(
+                    "storyboard_scene_start",
+                    build_storyboard_scene_start_event(
+                        scene_id=scene_id,
+                        segment_id=segment_id,
+                        title=title,
+                        mood=mood,
+                    ),
+                )
+
             prompt = _STORYBOARD_PROMPT.format(
                 visual_bible=visual_bible[:2000],  # trim to avoid token overflow
                 title=title,
@@ -249,13 +265,28 @@ class NarrativeDirectorAgent(BaseAgent):
                 )
 
                 # ── Parse interleaved response ────────────────────────────────
+                # Process parts sequentially: text parts emit storyboard_text_chunk,
+                # image parts get uploaded to GCS with signed URLs and emit
+                # storyboard_image_ready. This preserves Gemini's interleaved ordering.
                 image_uris: list[str] = []
+                signed_urls: list[str] = []
                 direction_text: str = ""
 
                 if response.candidates:
                     for part in response.candidates[0].content.parts:
                         if hasattr(part, "text") and part.text:
                             direction_text += part.text
+
+                            # Emit text chunk immediately for streaming UX
+                            if self.emitter:
+                                await self.emitter.emit(
+                                    "storyboard_text_chunk",
+                                    build_storyboard_text_chunk_event(
+                                        scene_id=scene_id,
+                                        text=part.text,
+                                    ),
+                                )
+
                         elif hasattr(part, "inline_data") and part.inline_data:
                             # Got an inline image from Gemini — upload to GCS
                             image_bytes = part.inline_data.data
@@ -267,17 +298,29 @@ class NarrativeDirectorAgent(BaseAgent):
                                 f"{scene_id}_frame_{len(image_uris)}_{uuid.uuid4().hex[:8]}.{ext}"
                             )
 
+                            blob = bucket.blob(gcs_path)
+
                             # Upload synchronously via executor (GCS client is sync)
                             loop = asyncio.get_event_loop()
                             await loop.run_in_executor(
                                 None,
-                                lambda b=image_bytes, p=gcs_path, m=mime_type: bucket
-                                    .blob(p)
+                                lambda b=image_bytes, bl=blob, m=mime_type: bl
                                     .upload_from_string(data=b, content_type=m),
                             )
 
                             gcs_uri = f"gs://{self.gcs_bucket}/{gcs_path}"
                             image_uris.append(gcs_uri)
+
+                            # Generate 4-hour signed HTTPS URL for frontend rendering
+                            signed_url: str = await loop.run_in_executor(
+                                None,
+                                lambda bl=blob: bl.generate_signed_url(
+                                    expiration=timedelta(hours=4),
+                                    method="GET",
+                                    version="v4",
+                                ),
+                            )
+                            signed_urls.append(signed_url)
                             frames_generated += 1
 
                             logger.info(
@@ -285,10 +328,27 @@ class NarrativeDirectorAgent(BaseAgent):
                                 gcs_uri,
                             )
 
+                            # Emit storyboard_image_ready with signed URL
+                            if self.emitter:
+                                caption = (
+                                    direction_text[:200].strip()
+                                    if direction_text
+                                    else f"Storyboard frame for: {title}"
+                                )
+                                await self.emitter.emit(
+                                    "storyboard_image_ready",
+                                    build_storyboard_image_ready_event(
+                                        scene_id=scene_id,
+                                        segment_id=segment_id,
+                                        image_url=signed_url,
+                                        caption=caption,
+                                    ),
+                                )
+
                 if image_uris:
                     storyboard_map[scene_id] = image_uris
 
-                    # Emit segment_update with storyboard images
+                    # Emit segment_update with storyboard images (GCS URIs for Phase V)
                     if self.emitter:
                         await self.emitter.emit(
                             "segment_update",
