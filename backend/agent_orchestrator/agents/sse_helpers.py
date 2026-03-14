@@ -349,6 +349,40 @@ def build_storyboard_image_ready_event(
     }
 
 
+def build_narration_beat_event(
+    *,
+    segment_id: str,
+    beat_index: int,
+    total_beats: int,
+    narration_text: str,
+    image_url: str | None,
+    direction_text: str,
+) -> dict[str, Any]:
+    """Build a narration_beat SSE event for interleaved TEXT+IMAGE output.
+
+    Emitted beat-by-beat during the Interleaved Narration Engine endpoint.
+    Each event carries the narration text for the beat, the Gemini creative
+    direction note, and an optional illustration URL.
+
+    Args:
+        segment_id: e.g. "segment_0"
+        beat_index: Zero-based beat position within the segment.
+        total_beats: Total number of beats for this segment.
+        narration_text: The narration script text for this beat.
+        image_url: Signed GCS URL for the generated beat illustration, or None.
+        direction_text: Gemini creative direction note (interleaved text output).
+    """
+    return {
+        "type": "narration_beat",
+        "segmentId": segment_id,
+        "beatIndex": beat_index,
+        "totalBeats": total_beats,
+        "narrationText": narration_text,
+        "imageUrl": image_url,
+        "directionText": direction_text,
+    }
+
+
 def build_live_illustration_event(
     *,
     segment_id: str,
