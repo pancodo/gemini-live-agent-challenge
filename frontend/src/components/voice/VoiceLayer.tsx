@@ -233,11 +233,20 @@ export function VoiceLayer() {
   const isPlayerOpen = usePlayerStore((s) => s.isOpen);
   const setConversationMode = usePlayerStore((s) => s.setConversationMode);
 
+  const wasHistorianSpeakingRef = useRef(false);
+
   useEffect(() => {
     if (!isPlayerOpen) return;
-    // Conversation mode when user is talking to historian in the player
-    // (listening or historian responding to interruption)
-    const isConversing = state === 'listening' || state === 'interrupted';
+    // Conversation mode ONLY when user interrupts the historian (not on initial narration).
+    // Track if historian was speaking — only show portrait if user interrupts mid-narration.
+    if (state === 'historian_speaking') {
+      wasHistorianSpeakingRef.current = true;
+    }
+    const isConversing = state === 'interrupted' ||
+      (state === 'listening' && wasHistorianSpeakingRef.current);
+    if (state === 'idle') {
+      wasHistorianSpeakingRef.current = false;
+    }
     setConversationMode(isConversing);
   }, [state, isPlayerOpen, setConversationMode]);
 

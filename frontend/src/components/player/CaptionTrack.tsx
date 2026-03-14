@@ -66,8 +66,12 @@ export function CaptionTrack({ wordsPerSecond: _wps }: CaptionTrackProps) {
           return (
             <span
               key={`${globalIndex}-${word}`}
-              className={`inline-block mr-[0.3em] ${isNew ? 'caption-word' : ''}`}
-              style={isNew ? { '--word-delay': `${(globalIndex - newWordsStart) * 0.06}s` } as React.CSSProperties : undefined}
+              className="inline-block mr-[0.3em]"
+              style={{
+                opacity: isNew ? 0 : 1,
+                animation: isNew ? 'caption-fade-in 0.4s ease forwards' : undefined,
+                animationDelay: isNew ? `${(globalIndex - newWordsStart) * 0.08}s` : undefined,
+              }}
             >
               {word}
             </span>
