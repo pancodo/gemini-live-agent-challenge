@@ -138,7 +138,11 @@ export function VoiceLayer() {
     switch (currentState) {
       case 'idle':
         connect();
-        void capture.start();
+        capture.start().catch(() => {
+          // Mic permission denied — disconnect and reset
+          disconnect();
+          reset();
+        });
         transition('listening');
         break;
 
@@ -179,7 +183,7 @@ export function VoiceLayer() {
     // Queue greeting — sent reliably when onReady fires (no fragile setTimeout)
     pendingGreetingRef.current = 'Hello! Please introduce yourself briefly and tell me about the document I uploaded.';
     connect();
-    void capture.start();
+    capture.start().catch(() => { disconnect(); reset(); });
     transition('listening');
   };
 
@@ -191,7 +195,7 @@ export function VoiceLayer() {
       // Queue text — sent reliably when onReady fires (no fragile setTimeout)
       pendingGreetingRef.current = text;
       connect();
-      void capture.start();
+      capture.start().catch(() => { disconnect(); reset(); });
       transition('listening');
     } else {
       sendTextStableRef.current(text);
