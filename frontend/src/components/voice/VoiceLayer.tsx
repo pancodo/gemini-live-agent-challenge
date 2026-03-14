@@ -207,16 +207,27 @@ export function VoiceLayer() {
     }
   };
 
+  // Preconnect: open WebSocket without mic, so Play click sends text instantly.
+  const preconnectRef = useRef(() => {});
+  preconnectRef.current = () => {
+    const currentState = useVoiceStore.getState().state;
+    if (currentState !== 'idle') return;
+    if (isConnected) return;
+    connect();
+  };
+
   // Register once on mount, clean up on unmount. The stable lambda
   // delegates to speakRef.current so it always calls the latest closure.
   useEffect(() => {
     useVoiceStore.setState({
       beginConsultation: () => speakRef.current(),
       sendTextToHistorian: (text: string) => sendTextRef.current(text),
+      preconnect: () => preconnectRef.current(),
     });
     return () => useVoiceStore.setState({
       beginConsultation: null,
       sendTextToHistorian: null,
+      preconnect: null,
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

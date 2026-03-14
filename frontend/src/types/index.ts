@@ -10,7 +10,7 @@ export type PersonaType = 'professor' | 'storyteller' | 'explorer';
 export type ResearchMode = 'test' | 'normal';
 
 // ── Session ──────────────────────────────────────────────────
-export type SessionStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'playing';
+export type SessionStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'playing' | 'error';
 
 export interface Session {
   sessionId: string;

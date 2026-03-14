@@ -114,6 +114,7 @@ const STATUS_VARIANTS: Record<SessionStatus, 'gold' | 'teal' | 'green' | 'muted'
   processing: 'teal',
   ready: 'green',
   playing: 'gold',
+  error: 'red',
 };
 
 function formatRelativeTime(timestamp: number): string {
