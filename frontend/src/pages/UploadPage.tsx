@@ -65,7 +65,7 @@ function SampleDocuments() {
         const file = new File([blob], doc.filename, { type: 'application/pdf' });
         const { sessionId, gcsPath } = await uploadDocument(file, doc.language, persona, undefined, researchMode);
         resetResearch();
-        setSession({ sessionId, gcsPath, status: 'processing' });
+        setSession({ sessionId, gcsPath, status: 'processing', documentLabel: doc.label });
         navigate('/workspace');
       } catch (err) {
         setLoading(null);

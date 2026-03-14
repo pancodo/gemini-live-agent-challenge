@@ -84,6 +84,7 @@ export function DropZone() {
           sessionId,
           gcsPath,
           status: 'processing',
+          documentLabel: file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' '),
         });
 
         navigate('/workspace');

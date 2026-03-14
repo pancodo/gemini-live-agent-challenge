@@ -20,16 +20,20 @@ interface SessionStore {
   researchMode: ResearchMode;
   visualBible: string | null;
   documentUrl: string | null;
+  documentLabel: string | null;
   recentSessions: RecentSession[];
   setSession: (partial: Partial<Omit<SessionStore, 'setSession' | 'reset' | 'renameSession' | 'recentSessions'>>) => void;
   renameSession: (sessionId: string, label: string) => void;
   reset: () => void;
 }
 
-function deriveLabel(gcsPath: string | null): string {
+function deriveLabel(gcsPath: string | null, documentLabel?: string | null): string {
+  if (documentLabel) return documentLabel;
   if (!gcsPath) return 'Document';
   const parts = gcsPath.split('/');
-  return parts.pop() || 'Document';
+  const filename = parts.pop() || 'Document';
+  // Strip "sample-" prefix and extension for nicer labels
+  return filename.replace(/^sample-/, '').replace(/\.pdf$/i, '').replace(/-/g, ' ');
 }
 
 const initialState = {
@@ -41,6 +45,7 @@ const initialState = {
   researchMode: 'normal' as ResearchMode,
   visualBible: null as string | null,
   documentUrl: null as string | null,
+  documentLabel: null as string | null,
   recentSessions: [] as RecentSession[],
 };
 
@@ -58,9 +63,10 @@ export const useSessionStore = create<SessionStore>()(
           const language = partial.language ?? current.language;
           const status = partial.status ?? current.status;
 
+          const docLabel = partial.documentLabel ?? current.documentLabel;
           const entry: RecentSession = {
             sessionId: incomingId,
-            label: deriveLabel(gcsPath),
+            label: deriveLabel(gcsPath, docLabel),
             status,
             createdAt: Date.now(),
             gcsPath,
