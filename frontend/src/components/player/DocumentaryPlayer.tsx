@@ -485,8 +485,11 @@ export function DocumentaryPlayer() {
         cycleMapMode();
       } else if (e.key === ' ') {
         e.preventDefault();
-        if (voiceState === 'idle') {
-          setVoiceState('listening');
+        // Delegate to VoiceButton's toggle which handles WebSocket connection,
+        // mic capture, and proper state transitions — not just state label changes.
+        const begin = useVoiceStore.getState().beginConsultation;
+        if (voiceState === 'idle' && begin) {
+          begin();
         } else if (voiceState === 'listening') {
           setVoiceState('idle');
         }
