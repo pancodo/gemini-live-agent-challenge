@@ -227,7 +227,11 @@ export function DocumentaryPlayer() {
 
     lastSentBeatRef.current = currentBeatIndex;
 
-    // Send this beat's narration to the historian
+    // Only send beat text if voice is already active (user pressed Space).
+    // Do NOT auto-connect — that requires mic permission via user gesture.
+    const voiceActive = useVoiceStore.getState().state !== 'idle';
+    if (!voiceActive) return;
+
     const prefix = currentBeatIndex === 0
       ? `You are narrating "${currentSegment.title}". Deliver this naturally — no announcements. `
       : 'Continue narrating the next moment: ';
