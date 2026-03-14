@@ -1003,6 +1003,19 @@ class DocumentAnalyzerAgent(BaseAgent):
         ctx.session.state["visual_bible"] = visual_bible
 
         # ------------------------------------------------------------------
+        # Firestore persistence -- Visual Bible
+        # ------------------------------------------------------------------
+        # Persist Visual Bible to Firestore for out-of-pipeline consumers
+        # (e.g. illustrate.py, live-relay prompt injection).
+        try:
+            await db.collection("sessions").document(session_id).update({
+                "visualBible": visual_bible,
+            })
+            logger.info("Visual Bible written to Firestore for session %s", session_id)
+        except Exception as exc:
+            logger.warning("Failed to write Visual Bible to Firestore: %s", exc)
+
+        # ------------------------------------------------------------------
         # Firestore persistence -- scene briefs
         # ------------------------------------------------------------------
         await _write_scene_briefs_to_firestore(db, session_id, scene_briefs)
