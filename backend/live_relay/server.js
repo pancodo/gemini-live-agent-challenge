@@ -77,10 +77,7 @@ const transcriptDebounceTimers = new Map();
 /** @type {Map<string, Map<string, QueryCacheEntry>>} */
 const queryResultCache = new Map();
 
-// --- LIVE ILLUSTRATION ---
-const ILLUSTRATION_COOLDOWN_MS = 12_000;
-/** @type {Map<string, number>} sessionId → last illustration timestamp */
-const lastIllustrationTime = new Map();
+// --- LIVE ILLUSTRATION (now driven by Gemini NON_BLOCKING function calling) ---
 
 function _normalizeQuery(query) {
   return query.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -150,10 +147,6 @@ setInterval(() => {
     }
     if (sessionCache.size === 0) queryResultCache.delete(sid);
   }
-  // Clean expired illustration cooldowns (older than 5 minutes)
-  for (const [sid, ts] of lastIllustrationTime) {
-    if (now - ts > 5 * 60 * 1000) lastIllustrationTime.delete(sid);
-  }
 }, 5 * 60 * 1000); // every 5 minutes
 
 /**
@@ -216,26 +209,21 @@ async function retrieveContext(sessionId, query) {
 }
 
 /**
- * Fire-and-forget illustration generation. Sends the result to the client
- * WebSocket as a `live_illustration` message. Never throws — errors are
+ * Fire-and-forget illustration generation triggered by Gemini's
+ * NON_BLOCKING function call. Sends the result to the client WebSocket
+ * as a `live_illustration` message and returns a FunctionResponse to
+ * Gemini so it knows the image is visible. Never throws — errors are
  * silently swallowed because the historian voice must never be interrupted.
  *
  * @param {string} sessionId
- * @param {string} transcript  User's speech transcript
- * @param {WebSocket} clientWs  Browser WebSocket to send result to
+ * @param {string} subject   What to illustrate
+ * @param {string} mood      Cinematic mood
+ * @param {string|undefined} composition  Camera angle / framing
+ * @param {string} callId    Gemini function call ID for the response
+ * @param {WebSocket} clientWs   Browser WebSocket
+ * @param {WebSocket} geminiWs   Upstream Gemini WebSocket
  */
-async function maybeGenerateIllustration(sessionId, transcript, clientWs) {
-  // 1. Cooldown check
-  const now = Date.now();
-  const lastTime = lastIllustrationTime.get(sessionId) || 0;
-  if (now - lastTime < ILLUSTRATION_COOLDOWN_MS) return;
-
-  // 2. Minimum length heuristic
-  if (transcript.length < 20) return;
-
-  // 3. Set cooldown immediately (prevents double-fire)
-  lastIllustrationTime.set(sessionId, now);
-
+async function generateIllustrationAsync(sessionId, subject, mood, composition, callId, clientWs, geminiWs) {
   try {
     const res = await fetch(
       `${HISTORIAN_API_URL}/api/session/${sessionId}/illustrate`,
@@ -243,23 +231,48 @@ async function maybeGenerateIllustration(sessionId, transcript, clientWs) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: transcript,
-          current_segment_id: '',
-          mood: 'cinematic',
+          query: subject,
+          mood: mood || 'cinematic',
+          composition: composition || '',
         }),
         signal: AbortSignal.timeout(15_000),
       }
     );
 
-    if (!res.ok) return;
-    const { imageUrl, caption } = await res.json();
+    if (!res.ok) {
+      console.warn(`[live-relay] Illustration API returned ${res.status} for session=${sessionId}`);
+      return;
+    }
 
-    if (imageUrl && clientWs.readyState === WebSocket.OPEN) {
+    const data = await res.json();
+
+    // Send the generated image to the browser
+    if (data.imageUrl && clientWs.readyState === WebSocket.OPEN) {
       clientWs.send(JSON.stringify({
         type: 'live_illustration',
-        imageUrl,
-        caption,
-        query: transcript,
+        imageUrl: data.imageUrl,
+        caption: data.caption || subject,
+        query: subject,
+      }));
+    }
+
+    // Send FunctionResponse back to Gemini so it knows the image is visible.
+    // turnComplete: false ensures Gemini absorbs this silently without
+    // interrupting its current speech turn.
+    if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+      geminiWs.send(JSON.stringify({
+        toolResponse: {
+          functionResponses: [{
+            id: callId,
+            name: 'generate_illustration',
+            response: {
+              result: { success: true, description: `Illustration of ${subject} is now visible to the viewer.` },
+            },
+          }],
+        },
+        clientContent: {
+          turnComplete: false,
+        },
       }));
     }
   } catch (err) {
@@ -381,7 +394,36 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
           },
         },
         systemInstruction: {
-          parts: [{ text: `${systemText}\n\nIMPORTANT: The user will speak in English only. All transcription and responses must be in English. If you detect non-English speech or noise, treat it as background noise and do not respond. RESPOND IN ENGLISH AT ALL TIMES.` }],
+          parts: [{ text: `${systemText}\n\nIMPORTANT: The user will speak in English only. All transcription and responses must be in English. If you detect non-English speech or noise, treat it as background noise and do not respond. RESPOND IN ENGLISH AT ALL TIMES.\n\nILLUSTRATION BEHAVIOR: You have a generate_illustration tool. Use it when describing vivid scenes, important locations, key figures, or dramatic moments. Do NOT pause your narration to wait for the illustration — keep speaking naturally. Do NOT describe the illustration to the viewer until they can see it. Simply continue your narration. The image will appear on screen automatically.` }],
+        },
+        tools: [{
+          functionDeclarations: [{
+            name: 'generate_illustration',
+            description: 'Generate a cinematic historical illustration to show the viewer while you continue narrating. Call this when describing a vivid scene, important location, key figure, or dramatic moment that would benefit from visual accompaniment. Do not pause your narration — keep speaking while the image generates. Generate at most one illustration per 30 seconds of narration.',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                subject: {
+                  type: 'STRING',
+                  description: 'What to illustrate — the specific scene, person, building, or moment',
+                },
+                mood: {
+                  type: 'STRING',
+                  description: 'Cinematic mood: dramatic, intimate, epic, mysterious, solemn',
+                },
+                composition: {
+                  type: 'STRING',
+                  description: 'Camera angle and framing: wide establishing shot, close-up portrait, aerial view, ground-level',
+                },
+              },
+              required: ['subject', 'mood'],
+            },
+          }],
+        }],
+        toolConfig: {
+          functionCallingConfig: {
+            behavior: 'NON_BLOCKING',
+          },
         },
         realtimeInputConfig: {
           automaticActivityDetection: {
@@ -516,6 +558,17 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
                 })
               );
             }
+
+            // NON_BLOCKING function call — Gemini wants to generate an illustration
+            if (part.functionCall && part.functionCall.name === 'generate_illustration') {
+              const { subject, mood, composition } = part.functionCall.args || {};
+              const callId = part.functionCall.id;
+              console.log(`[live-relay] Gemini requested illustration: subject="${subject}" mood="${mood}" session=${sessionId}`);
+
+              // Fire-and-forget: illustration generates while historian keeps speaking
+              generateIllustrationAsync(sessionId, subject, mood, composition, callId, clientWs, geminiWs)
+                .catch(err => console.error('[live-relay] Illustration generation failed:', err));
+            }
           }
         }
 
@@ -571,8 +624,6 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
             transcriptDebounceTimers.set(sessionId, timer);
           }
 
-          // Fire-and-forget live illustration
-          maybeGenerateIllustration(sessionId, transcript, clientWs);
         }
       }
     });
@@ -676,7 +727,6 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
     }
     const pendingTimer = transcriptDebounceTimers.get(sessionId);
     if (pendingTimer) { clearTimeout(pendingTimer); transcriptDebounceTimers.delete(sessionId); }
-    lastIllustrationTime.delete(sessionId);
   });
 
   clientWs.addEventListener('error', (err) => {

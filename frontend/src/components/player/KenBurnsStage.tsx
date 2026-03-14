@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
@@ -46,6 +46,10 @@ const CYCLE_INTERVAL_MS = 7000;
 
 export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStageProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  /** Tracks whether the very first image for this segment has been revealed (blur-in transition). */
+  const hasRevealedFirstRef = useRef(false);
+  /** Previous image count — used to detect when new images arrive dynamically. */
+  const prevImageCountRef = useRef(0);
   const isKenBurnsPaused = usePlayerStore((s) => s.isKenBurnsPaused);
   const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const voiceState = useVoiceStore((s) => s.state);
@@ -69,10 +73,23 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     return () => clearInterval(interval);
   }, [hasVideo, images.length, shouldPause]);
 
-  // Reset index when segment changes
+  // Reset index and first-reveal flag when segment changes
   useEffect(() => {
     setCurrentIndex(0);
+    hasRevealedFirstRef.current = false;
+    prevImageCountRef.current = 0;
   }, [segment?.id]);
+
+  // Detect when new images arrive dynamically and update the cycle
+  useEffect(() => {
+    const prevCount = prevImageCountRef.current;
+    prevImageCountRef.current = images.length;
+
+    if (images.length > 0 && prevCount === 0) {
+      // First image(s) just arrived — mark for blur-in reveal
+      hasRevealedFirstRef.current = false;
+    }
+  }, [images.length]);
 
   // Notify parent of active image URL whenever it changes
   useEffect(() => {
@@ -198,18 +215,33 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
       {images.map((url, i) => {
         const isActive = i === currentIndex;
+        // Determine if this image should play the initial blur-in reveal
+        const isFirstReveal = isActive && !hasRevealedFirstRef.current;
         return (
-          <img
+          <motion.img
             key={`${segment.id}-${i}`}
             src={url}
             alt=""
             role="presentation"
             data-index={i}
-            onLoad={(e) => handleImageLoad(e, i)}
+            onLoad={(e) => {
+              handleImageLoad(e, i);
+              // Mark first image as revealed after it loads
+              if (isFirstReveal) {
+                hasRevealedFirstRef.current = true;
+              }
+            }}
+            initial={isFirstReveal ? { filter: 'blur(20px)', opacity: 0 } : false}
+            animate={isFirstReveal
+              ? { filter: 'blur(0px)', opacity: isActive ? 1 : 0 }
+              : { opacity: isActive ? 1 : 0 }
+            }
+            transition={isFirstReveal
+              ? { duration: 1.5, ease: 'easeOut' }
+              : { duration: CROSSFADE_DURATION_MS / 1000, ease: 'easeInOut' }
+            }
             className="absolute inset-0 w-full h-full object-cover"
             style={{
-              opacity: isActive ? 1 : 0,
-              transition: `opacity ${CROSSFADE_DURATION_MS}ms ease-in-out`,
               // Only the active image runs its drift animation; inactive images
               // are paused so they don't burn through GPU resources and so that
               // when they become active they start the animation fresh from the
@@ -232,12 +264,18 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             src={liveIllustration.imageUrl}
             alt=""
             role="presentation"
-            initial={{ opacity: 0, scale: 1.0 }}
+            initial={{ opacity: 0, scale: 1.04 }}
             animate={{ opacity: 1, scale: 1.08 }}
             exit={{ opacity: 0 }}
             transition={{
               opacity: { duration: 1.2, ease: 'easeInOut' },
-              scale: { duration: 20, ease: 'linear' },
+              scale: {
+                type: 'spring',
+                stiffness: 20,
+                damping: 15,
+                mass: 1,
+                duration: 20,
+              },
             }}
             className="absolute inset-0 w-full h-full object-cover"
             style={{

@@ -20,6 +20,50 @@ import type { MapViewMode } from '../../types';
 import { useSettings } from '../../hooks/useSettings';
 
 /**
+ * PipelinePhaseLabel — Shows the current (latest) pipeline phase name.
+ */
+function PipelinePhaseLabel() {
+  const phases = useResearchStore((s) => s.phases);
+  const currentPhase = phases.length > 0 ? phases[phases.length - 1] : null;
+
+  if (!currentPhase) return null;
+
+  return (
+    <span
+      style={{
+        fontFamily: 'var(--font-serif)',
+        fontSize: 12,
+        color: 'rgba(196, 149, 106, 0.8)',
+        letterSpacing: '0.05em',
+      }}
+    >
+      {currentPhase.label}
+    </span>
+  );
+}
+
+/**
+ * PipelineStats — Condensed sources / segments counts from the research store.
+ */
+function PipelineStats() {
+  const stats = useResearchStore((s) => s.stats);
+  const agents = useResearchStore((s) => s.agents);
+  const activeAgentCount = Object.values(agents).filter(
+    (a) => a.status === 'searching' || a.status === 'evaluating',
+  ).length;
+
+  return (
+    <>
+      {stats.sourcesFound > 0 && <span>{stats.sourcesFound} sources</span>}
+      {stats.segmentsReady > 0 && <span>{stats.segmentsReady} segments</span>}
+      {activeAgentCount > 0 && (
+        <span>{activeAgentCount} agent{activeAgentCount !== 1 ? 's' : ''} active</span>
+      )}
+    </>
+  );
+}
+
+/**
  * DocumentaryPlayer — Full-screen cinematic player.
  *
  * Layers (bottom to top):
@@ -55,6 +99,9 @@ export function DocumentaryPlayer() {
   const isIdle = usePlayerStore((s) => s.isIdle);
   const setIdle = usePlayerStore((s) => s.setIdle);
   const open = usePlayerStore((s) => s.open);
+  const pipelineComplete = usePlayerStore((s) => s.pipelineComplete);
+
+  const [pipCollapsed, setPipCollapsed] = useState(false);
 
   const mapViewMode = usePlayerStore((s) => s.mapViewMode);
   const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
@@ -496,10 +543,10 @@ export function DocumentaryPlayer() {
             AI Historian
           </span>
 
-          {/* Illustration badge */}
+          {/* Illustration badge — "AI Illustrated" label */}
           <AnimatePresence>
             {liveIllustration && (
-              <motion.span
+              <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
@@ -508,17 +555,41 @@ export function DocumentaryPlayer() {
                   position: 'absolute',
                   top: 20,
                   right: 80,
-                  fontFamily: 'var(--font-sans)',
-                  fontWeight: 400,
-                  fontSize: 10,
-                  letterSpacing: '0.2em',
-                  textTransform: 'uppercase' as const,
-                  color: 'var(--gold)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                  gap: 4,
                   zIndex: 20,
                 }}
               >
-                &#10022; Illustrated
-              </motion.span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-sans)',
+                    fontWeight: 400,
+                    fontSize: 10,
+                    letterSpacing: '0.15em',
+                    textTransform: 'uppercase' as const,
+                    color: 'var(--gold)',
+                  }}
+                >
+                  &#10022; AI Illustrated
+                </span>
+                {liveIllustration.caption && (
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontWeight: 400,
+                      fontSize: 11,
+                      color: 'rgba(196, 149, 106, 0.65)',
+                      maxWidth: 260,
+                      textAlign: 'right',
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {liveIllustration.caption}
+                  </span>
+                )}
+              </motion.div>
             )}
           </AnimatePresence>
 
@@ -1022,6 +1093,129 @@ export function DocumentaryPlayer() {
           </div>
         </div>
       </div>
+
+      {/* Layer 4.5: Research PiP — visible while pipeline is still running */}
+      <AnimatePresence>
+        {!pipelineComplete && (
+          <motion.div
+            key="research-pip"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: isIdle ? 0 : 1, y: isIdle ? 20 : 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="fixed bottom-24 left-6"
+            style={{ zIndex: 15, pointerEvents: isIdle ? 'none' : 'auto' }}
+          >
+            <div
+              style={{
+                background: 'rgba(26, 21, 16, 0.85)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                borderRadius: 10,
+                border: '1px solid rgba(196, 149, 106, 0.12)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Toggle header — always visible */}
+              <button
+                onClick={() => setPipCollapsed((c) => !c)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: pipCollapsed ? '8px 14px' : '10px 14px 6px',
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'rgba(196, 149, 106, 0.7)',
+                }}
+                aria-label={pipCollapsed ? 'Expand research panel' : 'Collapse research panel'}
+              >
+                {/* Animated pulse dot */}
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: 'var(--gold)',
+                    flexShrink: 0,
+                    animation: 'pulse 2s ease-in-out infinite',
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: 'var(--font-sans)',
+                    fontWeight: 400,
+                    fontSize: 10,
+                    letterSpacing: '0.15em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Generating
+                </span>
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    marginLeft: 'auto',
+                    transform: pipCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.25s ease',
+                  }}
+                >
+                  <path d="M2 6.5L5 3.5L8 6.5" />
+                </svg>
+              </button>
+
+              {/* Expandable content */}
+              <AnimatePresence>
+                {!pipCollapsed && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div
+                      style={{
+                        padding: '4px 14px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}
+                    >
+                      {/* Current phase */}
+                      <PipelinePhaseLabel />
+
+                      {/* Stats row */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 16,
+                          fontFamily: 'var(--font-sans)',
+                          fontSize: 10,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          color: 'rgba(196, 149, 106, 0.5)',
+                        }}
+                      >
+                        <PipelineStats />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Layer 5: Sidebar */}
       <PlayerSidebar

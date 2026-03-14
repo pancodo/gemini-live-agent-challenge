@@ -38,6 +38,13 @@ Session state contract
 **Outputs** (written by this agent):
     - ``session.state["script"]`` -- overwritten with validated narration_scripts
     - ``session.state["validation_report"]`` -- list of per-segment reports
+
+Per-segment mode (Workstream B)
+-------------------------------
+The ``validate_single_segment`` async function validates a single segment's
+narration script against aggregated research, for use by the per-segment
+streaming pipeline in ``pipeline.py``. It returns the validated segment dict
+and a per-segment report without touching session state.
 """
 
 from __future__ import annotations
@@ -207,6 +214,210 @@ def _parse_validation_output(raw: str) -> tuple[list[dict[str, Any]], list[dict[
         report = []
 
     return validated_segments, report
+
+
+# ---------------------------------------------------------------------------
+# Per-segment validation (Workstream B)
+# ---------------------------------------------------------------------------
+
+
+_SINGLE_SEGMENT_SYSTEM_INSTRUCTION: str = """\
+You are a rigorous fact-checking editor for a historical documentary narration.
+
+You receive:
+1. A single documentary script segment (with a narration_script).
+2. Aggregated research containing corroborated facts, source citations, and
+   confidence labels ([ESTABLISHED FACT], [VERIFIED], [UNVERIFIED], [DISPUTED]).
+3. The scene brief for this segment.
+
+YOUR TASK:
+Review every sentence in the narration_script. Classify each sentence into
+exactly one of four categories:
+
+== CATEGORY 1: SUPPORTED ==
+Keep the sentence EXACTLY as written.
+
+== CATEGORY 2: UNSUPPORTED SPECIFIC ==
+Contains a SPECIFIC factual claim (date, number, name) NOT in the research.
+REMOVE the specific claim. Replace with a bridging sentence.
+
+== CATEGORY 3: UNSUPPORTED PLAUSIBLE ==
+General historical claim not confirmed in research. Soften with hedging
+language ("According to tradition...", "Historical accounts suggest...").
+
+== CATEGORY 4: NON-FACTUAL ==
+Rhetoric, atmospheric description, transitions. Keep EXACTLY as written.
+
+CRITICAL RULES:
+- Never invent new facts.
+- Never change mood, tone, or narrative voice.
+- Only modify narration_script. All other fields must be copied EXACTLY.
+
+OUTPUT FORMAT:
+Return a single JSON object with exactly two keys. No markdown fences.
+{
+  "validated_segment": { ... complete segment object, narration_script may differ ... },
+  "report": {
+    "segment_id": "segment_0",
+    "claims_checked": 12,
+    "claims_removed": 1,
+    "claims_softened": 2,
+    "changes": ["description of each change"]
+  }
+}
+"""
+
+
+async def validate_single_segment(
+    *,
+    segment: dict[str, Any],
+    scene_brief: dict[str, Any],
+    aggregated_research: str,
+    emitter: SSEEmitter | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate a single segment's narration against aggregated research.
+
+    This is the per-segment entry point used by the streaming pipeline.
+    Returns the validated segment dict (with potentially modified narration)
+    and a per-segment validation report.
+
+    Args:
+        segment: SegmentScript dict to validate.
+        scene_brief: The scene brief dict for this segment.
+        aggregated_research: Merged research string.
+        emitter: Optional SSE emitter for status events.
+
+    Returns:
+        Tuple of (validated_segment_dict, report_dict). On failure, returns
+        the original segment unchanged with an empty report.
+    """
+    import asyncio
+
+    segment_id = segment.get("id", "unknown")
+    title = segment.get("title", "")
+    agent_id = f"fact_validator_{segment_id}"
+
+    t_start = time.monotonic()
+
+    # Emit status
+    if emitter is not None:
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="searching",
+                query=f"Validating narration for: {title}",
+            ),
+        )
+
+    # Build prompt
+    prompt = (
+        f"SEGMENT TO VALIDATE:\n{json.dumps(segment, indent=2, ensure_ascii=False)}\n\n"
+        f"SCENE BRIEF:\n{json.dumps(scene_brief, indent=2, ensure_ascii=False)}\n\n"
+        f"AGGREGATED RESEARCH:\n{aggregated_research}"
+    )
+
+    # Initialize client
+    project_id = os.environ.get("GCP_PROJECT_ID", "")
+    client = google_genai.Client(
+        vertexai=True if project_id else False,
+        project=project_id or None,
+        location=os.environ.get("VERTEX_AI_LOCATION", "us-central1") if project_id else None,
+    )
+
+    raw_text: str | None = None
+    last_error: Exception | None = None
+
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(
+                model=_MODEL,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=_SINGLE_SEGMENT_SYSTEM_INSTRUCTION,
+                    max_output_tokens=4096,
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+            raw_text = response.text
+            break
+        except Exception as exc:
+            last_error = exc
+            wait = 2 ** attempt
+            logger.warning(
+                "Per-segment fact validation attempt %d/%d failed for %s: %s",
+                attempt + 1,
+                _MAX_RETRIES,
+                segment_id,
+                exc,
+            )
+            await asyncio.sleep(wait)
+
+    if raw_text is None:
+        logger.error(
+            "Per-segment fact validation failed for %s after %d retries: %s",
+            segment_id,
+            _MAX_RETRIES,
+            last_error,
+        )
+        if emitter is not None:
+            await emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id=agent_id,
+                    status="error",
+                    elapsed=round(time.monotonic() - t_start, 1),
+                    error_message=f"Fact validation failed for {title}",
+                ),
+            )
+        return segment, {}
+
+    # Parse output
+    cleaned = _strip_fences(raw_text)
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.error("Per-segment fact validation output is not valid JSON: %s", exc)
+        return segment, {}
+
+    validated_segment = parsed.get("validated_segment", segment)
+    report = parsed.get("report", {})
+
+    # Safety: ensure critical fields are preserved from original
+    for key in ("id", "scene_id", "visual_descriptions", "veo2_scene", "mood",
+                "narrative_role", "sources", "storyboard_image_urls"):
+        if key in segment:
+            validated_segment[key] = segment[key]
+
+    t_elapsed = round(time.monotonic() - t_start, 1)
+
+    if emitter is not None:
+        changes = report.get("changes", [])
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="done",
+                elapsed=t_elapsed,
+                facts=[
+                    f"{report.get('claims_checked', 0)} claims checked",
+                    f"{report.get('claims_removed', 0)} removed, "
+                    f"{report.get('claims_softened', 0)} softened",
+                ],
+            ),
+        )
+
+    logger.info(
+        "Per-segment fact validation for %s: %d checked, %d removed, %d softened in %.1fs",
+        segment_id,
+        report.get("claims_checked", 0),
+        report.get("claims_removed", 0),
+        report.get("claims_softened", 0),
+        t_elapsed,
+    )
+
+    return validated_segment, report
 
 
 # ---------------------------------------------------------------------------

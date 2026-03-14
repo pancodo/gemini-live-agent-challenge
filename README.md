@@ -2,6 +2,8 @@
 
 <img src="frontend/public/logo.png" alt="AI Historian" width="120" />
 
+*Logo generated with Gemini [Chat Link](https://gemini.google.com/share/a34bad9c7dd0)*
+
 # AI Historian
 
 **Upload any historical document. Watch it become a cinematic documentary in under 45 seconds.**
@@ -50,54 +52,69 @@ AI Historian is a real-time multimodal research and documentary engine. Drop any
 
 ```mermaid
 flowchart TD
-    subgraph Browser["Browser — React 19 / TypeScript"]
-        UI["PDF Viewer · Research Panel\nDocumentary Player · Voice Button"]
+    subgraph USER["👤 User / Frontend"]
+        direction LR
+        BROWSER["React 19 + TypeScript + Vite\nPDF Viewer · Research Panel\nDocumentary Player · Voice"]
     end
 
-    subgraph CloudRun["Google Cloud Run"]
-        API["historian-api\nFastAPI · Python 3.12\n2 CPU · 2 Gi"]
-        ORCH["agent-orchestrator\nResumablePipelineAgent + ADK\nPython 3.12 · 4 CPU · 4 Gi"]
-        RELAY["live-relay\nNode.js 20 WebSocket proxy\n1 CPU · 1 Gi"]
+    subgraph BRAIN["🧠 The Brain — Gemini Models"]
+        direction LR
+        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation"]
+        PRO["Gemini 2.0 Pro\nScripts · Visual Planning"]
+        LIVE_API["Gemini 2.5 Flash\nNative Audio\nReal-time Voice"]
+        IMAGEN["Imagen 3\nScene Images"]
+        VEO["Veo 2\nDramatic Video"]
     end
 
-    subgraph Pipeline["ADK Pipeline — 7 Phases with Checkpoint Resume"]
-        P1["Phase I — Document Analyzer\nDocument AI OCR → Semantic Chunker\nParallel Summarizer → Narrative Curator\n→ scene_briefs · visual_bible"]
-        P2["Phase II — Scene Research\nParallelAgent: N × google_search agents\none per scene brief → research_0…N\n+ Aggregator merges all research"]
-        P3["Phase III — Script Orchestrator\ngemini-2.0-pro → SegmentScript list\nFirestore WriteBatch · segment_update SSE"]
-        P35["Phase III.5 — Fact Validator\ngemini-2.0-flash hallucination firewall\ncross-references narration vs research"]
-        P40["Phase 4.0 — Narrative Visual Planner\ngemini-2.0-pro → VisualStoryboard\nper-scene subjects · frame concepts"]
-        P4["Phase IV — Visual Research\n6-stage micro-pipeline per scene\nweb + Wikipedia + Gemini multimodal\n→ VisualDetailManifest per scene"]
-        P5["Phase V — Visual Director\nImagen 3: 4 frames × N scenes concurrent\nVeo 2: async dramatic clips\nGCS singleton · Firestore batch update"]
+    subgraph LOGIC["⚙️ Backend Logic — Google Cloud Run"]
+        API["historian-api\nFastAPI · Python 3.12"]
+        ORCH["agent-orchestrator\nGoogle ADK\nPython 3.12"]
+        RELAY["live-relay\nNode.js 20\nWebSocket Proxy"]
+    end
+
+    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 7 Phases"]
+        direction LR
+        P1["I\nDocument\nAnalyzer"]
+        P2["II\nScene\nResearch"]
+        P3["III\nScript\nGenerator"]
+        P35["III.5\nFact\nValidator"]
+        P40["4.0\nVisual\nPlanner"]
+        P4["IV\nVisual\nResearch"]
+        P5["V\nVisual\nDirector"]
         P1 --> P2 --> P3 --> P35 --> P40 --> P4 --> P5
     end
 
-    subgraph GCP["Google Cloud Data and AI"]
-        FS[("Firestore\nsessions · agents\nsegments · manifests\nphase checkpoints")]
-        GCS[("Cloud Storage\nhistorian-docs uploads\nhistorian-assets images/videos")]
-        PS["Pub/Sub\nagent events"]
+    subgraph DATA["☁️ Google Cloud Services"]
+        FS[("Firestore\nSessions · Segments\nCheckpoints · Vectors")]
+        GCS[("Cloud Storage\nDocuments · Images\nVideos")]
         DAI["Document AI\nMultilingual OCR"]
-        VAI["Vertex AI\nImagen 3 · Veo 2"]
+        PS["Pub/Sub"]
         SM["Secret Manager"]
     end
 
-    GEMINI["Gemini Live API\ngemini-2.5-flash-native-audio\nreal-time voice · interruption"]
+    %% User to Backend (The Connections)
+    BROWSER -->|"REST + SSE"| API
+    BROWSER <-.->|"WebSocket\nPCM Audio"| RELAY
 
-    Browser -->|"REST + SSE adaptive drip"| API
-    Browser <-->|"WebSocket PCM 16kHz"| RELAY
-    RELAY <-->|"wss:// BidiGenerateContent"| GEMINI
+    %% Backend to Brain (GenAI SDK + ADK)
+    API -->|"Triggers pipeline"| ORCH
+    ORCH -->|"Google ADK\nSequentialAgent + ParallelAgent"| PIPELINE
+    P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
+    P3 & P40 -->|"GenAI SDK"| PRO
+    P5 -->|"Vertex AI\nGenAI SDK"| IMAGEN
+    P5 -.->|"Vertex AI\nAsync generation"| VEO
+    RELAY <-.->|"WebSocket\nBidiGenerateContent"| LIVE_API
 
-    API --> ORCH
-    ORCH --- Pipeline
-
-    P1 <--> DAI
-    P1 & P3 & P4 & P5 <--> FS
-    ORCH <-->|"checkpoint per phase"| FS
-    P1 & P5 <--> GCS
-    P5 <--> VAI
-    API <--> SM
-    ORCH <--> SM
-    API & ORCH --> PS
+    %% Backend to Data Layer
+    ORCH <-->|"Checkpoint resume"| FS
+    P1 --> DAI
+    P1 & P3 & P5 --> GCS
+    P3 & P4 & P5 --> FS
+    ORCH --> PS
+    API --> SM
 ```
+
+> **How to read this diagram:** The user uploads a document through the React frontend. The `historian-api` triggers the `agent-orchestrator`, which runs a 7-phase ADK pipeline. Each phase calls Gemini models via the **Google GenAI SDK** (accessed through the **ADK** framework). The `live-relay` service connects the user's voice to the **Gemini Live API** via WebSocket for real-time conversation. All services run on **Google Cloud Run**, with Firestore for state and Cloud Storage for media.
 
 ---
 

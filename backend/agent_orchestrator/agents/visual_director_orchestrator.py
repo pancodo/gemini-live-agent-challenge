@@ -29,9 +29,13 @@ All remaining scenes are then generated concurrently via ``asyncio.gather``.
 
 Veo 2 polling
 -------------
-After all Imagen 3 generation completes, the orchestrator polls every outstanding
-Veo 2 operation concurrently. When each finishes, Firestore is updated with the
-video GCS URI and another ``segment_update`` SSE event is emitted.
+Each segment's Veo 2 operation is polled in a fire-and-forget background task
+(``asyncio.create_task``) immediately after that segment's Imagen 3 frames
+complete. Background tasks run independently and never block the pipeline.
+When each finishes, Firestore is updated with the video GCS URI and a
+``segment_update`` SSE event is emitted. The public ``generate_video_background``
+method can also be called externally (e.g. from pipeline.py) to trigger Veo 2
+for a specific segment without blocking.
 
 Session state contract
 ----------------------
@@ -1543,6 +1547,167 @@ class VisualDirectorOrchestrator(BaseAgent):
         ),
     )
 
+    async def generate_video_background(
+        self,
+        ctx: InvocationContext,
+        scene_index: int,
+        segment: dict[str, Any],
+    ) -> None:
+        """Fire-and-forget: triggers Veo 2 and polls in background.
+
+        Safe to call via ``asyncio.create_task``. Triggers a Veo 2 generation
+        for the given segment, polls until complete (or timeout), then updates
+        Firestore with the video URL and emits a ``segment_update`` SSE event.
+
+        All exceptions are caught and logged -- this method never propagates
+        errors so that calling it as a background task cannot crash the
+        pipeline.
+
+        Args:
+            ctx: ADK invocation context (for session ID and state access).
+            scene_index: Zero-based index of the scene (for logging).
+            segment: SegmentScript dict containing at minimum ``id``,
+                ``scene_id``, ``veo2_scene``, and optionally ``mood``.
+        """
+        segment_id: str = segment.get("id", "unknown")
+        scene_id: str = segment.get("scene_id", "unknown")
+        session_id: str = ctx.session.id
+        veo2_scene: str | None = segment.get("veo2_scene")
+
+        if not veo2_scene:
+            logger.debug(
+                "Veo2 background: no veo2_scene for segment %s, skipping",
+                segment_id,
+            )
+            return
+
+        try:
+            # Build Vertex AI client
+            client = google_genai.Client(
+                vertexai=True,
+                project=self.firestore_project,
+                location="us-central1",
+            )
+            db = firestore.AsyncClient(project=self.firestore_project)
+
+            # Resolve narrative role for prompt enrichment
+            scene_briefs_raw: list[dict[str, Any]] = ctx.session.state.get(
+                "scene_briefs", []
+            )
+            narrative_role_map: dict[str, str] = {
+                b.get("scene_id", ""): b.get("narrative_role", "")
+                for b in scene_briefs_raw
+            }
+            narrative_role = narrative_role_map.get(scene_id, "")
+
+            # Resolve manifest for period lighting enrichment
+            manifests: dict[str, dict[str, Any]] = ctx.session.state.get(
+                "visual_research_manifest", {}
+            )
+            manifest = manifests.get(scene_id)
+
+            # Enrich the Veo 2 prompt
+            enriched_veo2 = _build_enriched_veo2_prompt(
+                veo2_scene,
+                narrative_role=narrative_role,
+                manifest=manifest,
+            )
+
+            # Trigger the Veo 2 generation
+            operation = await _trigger_veo2_generation(
+                client=client,
+                veo2_prompt=enriched_veo2,
+                session_id=session_id,
+                scene_id=scene_id,
+                bucket_name=self.gcs_bucket,
+            )
+
+            if operation is None:
+                logger.warning(
+                    "Veo2 background: trigger failed for scene %d (%s), skipping",
+                    scene_index,
+                    scene_id,
+                )
+                await _mark_segment_video_skipped(
+                    db, session_id, segment_id, reason="trigger_failed",
+                )
+                return
+
+            # Poll with hard timeout
+            video_uri: str | None = None
+            timed_out = False
+            try:
+                video_uri = await asyncio.wait_for(
+                    _poll_veo2_operation(
+                        client, operation, segment_id, scene_id,
+                    ),
+                    timeout=_VEO2_HARD_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                timed_out = True
+                logger.warning(
+                    "Veo2 background: hard timeout (%.0fs) for scene %d (%s)",
+                    _VEO2_HARD_TIMEOUT_SECONDS,
+                    scene_index,
+                    scene_id,
+                )
+
+            if not video_uri:
+                reason = "timeout" if timed_out else "generation_failed"
+                await _mark_segment_video_skipped(
+                    db, session_id, segment_id, reason=reason,
+                )
+                if self.emitter:
+                    await self.emitter.emit(
+                        "segment_update",
+                        build_segment_update_event(
+                            segment_id=segment_id,
+                            scene_id=scene_id,
+                            status="complete",
+                        ),
+                    )
+                logger.info(
+                    "Veo2 background: video skipped for scene %d (%s), reason=%s",
+                    scene_index,
+                    scene_id,
+                    reason,
+                )
+                return
+
+            # Success: update session state, Firestore, and emit SSE
+            ctx.session.state.setdefault("video_urls", {})[segment_id] = video_uri
+
+            await _update_segment_video_in_firestore(
+                db, session_id, segment_id, video_uri,
+            )
+
+            if self.emitter:
+                await self.emitter.emit(
+                    "segment_update",
+                    build_segment_update_event(
+                        segment_id=segment_id,
+                        scene_id=scene_id,
+                        status="complete",
+                        video_url=video_uri,
+                    ),
+                )
+
+            logger.info(
+                "Veo2 background: video attached to scene %d (%s): %s",
+                scene_index,
+                scene_id,
+                video_uri,
+            )
+
+        except Exception as exc:
+            logger.error(
+                "Veo2 background task failed for scene %d (%s): %s",
+                scene_index,
+                scene_id,
+                exc,
+                exc_info=True,
+            )
+
     async def _run_async_impl(
         self,
         ctx: InvocationContext,
@@ -1702,15 +1867,115 @@ class VisualDirectorOrchestrator(BaseAgent):
         already_generated: dict[str, list[str]] = ctx.session.state.get(
             "image_urls", {}
         )
-        veo2_pending: list[tuple[str, str, Any]] = []
+        # Background Veo 2 tasks: fire-and-forget per segment.
+        # Each task polls independently after that segment's Imagen 3 completes.
+        # Tasks are collected only to log completion counts -- they never
+        # block the pipeline.
+        veo2_background_tasks: list[asyncio.Task[None]] = []
+        veo2_launched_count = 0
 
-        # Trigger Veo 2 for segments that Phase IV already processed inline
-        # (images done but veo2_scene wasn't available then -- script is now)
-        for seg in script_raw:
+        def _launch_veo2_poll_background(
+            segment_id: str,
+            scene_id: str,
+            operation: Any,
+        ) -> None:
+            """Launch a fire-and-forget background task to poll a Veo 2 operation.
+
+            The polling task updates Firestore and emits SSE when the video
+            completes (or marks as skipped on timeout/failure).  It never
+            blocks the pipeline.
+            """
+            nonlocal veo2_launched_count
+
+            async def _poll_and_update_bg() -> None:
+                """Background coroutine: poll Veo 2 with hard timeout."""
+                timed_out = False
+                video_uri: str | None = None
+                try:
+                    video_uri = await asyncio.wait_for(
+                        _poll_veo2_operation(
+                            client, operation, segment_id, scene_id,
+                        ),
+                        timeout=_VEO2_HARD_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    timed_out = True
+                    logger.warning(
+                        "Veo 2 background hard timeout (%.0fs) for segment %s / scene %s",
+                        _VEO2_HARD_TIMEOUT_SECONDS,
+                        segment_id,
+                        scene_id,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Veo 2 background poll failed for segment %s: %s",
+                        segment_id,
+                        exc,
+                        exc_info=True,
+                    )
+
+                if not video_uri:
+                    reason = "timeout" if timed_out else "generation_failed"
+                    await _mark_segment_video_skipped(
+                        db, session_id, segment_id, reason=reason,
+                    )
+                    if self.emitter:
+                        await self.emitter.emit(
+                            "segment_update",
+                            build_segment_update_event(
+                                segment_id=segment_id,
+                                scene_id=scene_id,
+                                status="complete",
+                            ),
+                        )
+                    logger.info(
+                        "Veo 2 background: video skipped for segment %s (reason=%s)",
+                        segment_id,
+                        reason,
+                    )
+                    return
+
+                # Success: update session state, Firestore, and emit SSE
+                ctx.session.state.setdefault("video_urls", {})[
+                    segment_id
+                ] = video_uri
+                await _update_segment_video_in_firestore(
+                    db, session_id, segment_id, video_uri,
+                )
+                if self.emitter:
+                    await self.emitter.emit(
+                        "segment_update",
+                        build_segment_update_event(
+                            segment_id=segment_id,
+                            scene_id=scene_id,
+                            status="complete",
+                            video_url=video_uri,
+                        ),
+                    )
+                logger.info(
+                    "Veo 2 background: video attached to segment %s: %s",
+                    segment_id,
+                    video_uri,
+                )
+
+            task = asyncio.create_task(
+                _poll_and_update_bg(),
+                name=f"veo2_bg_{segment_id}",
+            )
+            veo2_background_tasks.append(task)
+            veo2_launched_count += 1
+            logger.info(
+                "Launched Veo 2 background poll task for segment %s / scene %s",
+                segment_id,
+                scene_id,
+            )
+
+        # Fire Veo 2 background tasks for segments that Phase IV already
+        # processed inline (images done but veo2_scene may need triggering)
+        for i, seg in enumerate(script_raw):
             seg_id = seg.get("id", "")
             scene_id_v = seg.get("scene_id", "")
             role_v = narrative_role_map.get(scene_id_v, "")
-            # Only trigger Veo 2 for climax moments with a veo2_scene description
             veo2_worthy = role_v == "climax" and bool(seg.get("veo2_scene"))
             if seg_id in already_generated and seg.get("veo2_scene") and not veo2_worthy:
                 logger.info(
@@ -1719,9 +1984,8 @@ class VisualDirectorOrchestrator(BaseAgent):
                     role_v,
                 )
             if seg_id in already_generated and veo2_worthy:
-                scene_id = seg.get("scene_id", "unknown")
-                manifest_v = manifests.get(scene_id)
-                # Enrich the Veo 2 prompt (Change 4)
+                scene_id_bg = seg.get("scene_id", "unknown")
+                manifest_v = manifests.get(scene_id_bg)
                 enriched_veo2 = _build_enriched_veo2_prompt(
                     seg["veo2_scene"],
                     narrative_role=role_v,
@@ -1731,11 +1995,11 @@ class VisualDirectorOrchestrator(BaseAgent):
                     client=client,
                     veo2_prompt=enriched_veo2,
                     session_id=session_id,
-                    scene_id=scene_id,
+                    scene_id=scene_id_bg,
                     bucket_name=self.gcs_bucket,
                 )
                 if operation:
-                    veo2_pending.append((seg_id, scene_id, operation))
+                    _launch_veo2_poll_background(seg_id, scene_id_bg, operation)
 
         # Collect segments that still need Imagen 3 (Phase IV didn't process inline)
         pending_image_segs = [s for s in script_raw if s.get("id", "") not in already_generated]
@@ -1748,8 +2012,10 @@ class VisualDirectorOrchestrator(BaseAgent):
             # Scene 0 (if still pending) runs ahead
             first_pending = pending_image_segs[0]
             result = await _generate(first_pending)
+            # If _run_segment_generation returned a Veo 2 operation, poll it
+            # in the background instead of batching
             if isinstance(result, tuple):
-                veo2_pending.append(result)
+                _launch_veo2_poll_background(*result)
 
             # Remaining pending scenes run concurrently
             if len(pending_image_segs) > 1:
@@ -1759,7 +2025,7 @@ class VisualDirectorOrchestrator(BaseAgent):
                 )
                 for r in remaining_results:
                     if isinstance(r, tuple):
-                        veo2_pending.append(r)
+                        _launch_veo2_poll_background(*r)
                     elif isinstance(r, Exception):
                         logger.warning(
                             "Phase V: segment generation raised exception: %s", r
@@ -1776,103 +2042,19 @@ class VisualDirectorOrchestrator(BaseAgent):
         ctx.session.state["image_urls"] = image_url_store
 
         # ------------------------------------------------------------------
-        # Poll all pending Veo 2 operations concurrently
+        # Veo 2 background tasks: log launch count, do NOT await them.
+        # They run independently and update Firestore + emit SSE on completion.
         # ------------------------------------------------------------------
-        if veo2_pending:
+        if veo2_launched_count:
             logger.info(
-                "Phase V: polling %d Veo 2 operation(s) for session %s",
-                len(veo2_pending),
+                "Phase V: %d Veo 2 background task(s) running for session %s "
+                "(fire-and-forget, not blocking pipeline)",
+                veo2_launched_count,
                 session_id,
             )
 
-            async def _poll_and_update(
-                segment_id: str,
-                scene_id: str,
-                operation: Any,
-            ) -> None:
-                """Poll one Veo 2 operation with hard timeout.
-
-                If polling exceeds ``_VEO2_HARD_TIMEOUT_SECONDS``, the video
-                is gracefully skipped: Firestore is updated with a skip marker,
-                a segment_update SSE is emitted (without video_url), and the
-                pipeline continues without raising.
-                """
-                timed_out = False
-                video_uri: str | None = None
-                try:
-                    video_uri = await asyncio.wait_for(
-                        _poll_veo2_operation(
-                            client, operation, segment_id, scene_id
-                        ),
-                        timeout=_VEO2_HARD_TIMEOUT_SECONDS,
-                    )
-                except asyncio.TimeoutError:
-                    video_uri = None
-                    timed_out = True
-                    logger.warning(
-                        "Veo 2 hard timeout (%.0fs) for segment %s / scene %s",
-                        _VEO2_HARD_TIMEOUT_SECONDS,
-                        segment_id,
-                        scene_id,
-                    )
-
-                if not video_uri:
-                    # Graceful skip: mark in Firestore + emit segment_update
-                    reason = "timeout" if timed_out else "generation_failed"
-                    await _mark_segment_video_skipped(
-                        db, session_id, segment_id, reason=reason,
-                    )
-                    if self.emitter:
-                        await self.emitter.emit(
-                            "segment_update",
-                            build_segment_update_event(
-                                segment_id=segment_id,
-                                scene_id=scene_id,
-                                status="complete",
-                            ),
-                        )
-                    logger.info(
-                        "Veo 2 video skipped for segment %s (reason=%s)",
-                        segment_id,
-                        reason,
-                    )
-                    return
-
-                # Store in session state
-                ctx.session.state.setdefault("video_urls", {})[
-                    segment_id
-                ] = video_uri
-
-                # Update Firestore
-                await _update_segment_video_in_firestore(
-                    db, session_id, segment_id, video_uri
-                )
-
-                # Emit SSE so frontend can attach the video to the segment
-                if self.emitter:
-                    await self.emitter.emit(
-                        "segment_update",
-                        build_segment_update_event(
-                            segment_id=segment_id,
-                            scene_id=scene_id,
-                            status="complete",
-                            video_url=video_uri,
-                        ),
-                    )
-
-                logger.info(
-                    "Veo 2 video attached to segment %s: %s",
-                    segment_id,
-                    video_uri,
-                )
-
-            await asyncio.gather(
-                *[_poll_and_update(*pending) for pending in veo2_pending],
-                return_exceptions=True,
-            )
-
         # ------------------------------------------------------------------
-        # Final summary
+        # Final summary (images only -- Veo 2 completes asynchronously)
         # ------------------------------------------------------------------
         t_elapsed = round(time.monotonic() - t_start, 1)
         total_images = sum(len(v) for v in image_url_store.values())
@@ -1895,8 +2077,8 @@ class VisualDirectorOrchestrator(BaseAgent):
                     facts=[
                         f"{len(image_url_store)}/{len(script_raw)} segments with images",
                         f"{total_images} total Imagen 3 frames generated",
-                        f"{total_videos} Veo 2 videos generated",
-                        f"Phase V completed in {t_elapsed}s",
+                        f"{veo2_launched_count} Veo 2 video(s) generating in background",
+                        f"Phase V images completed in {t_elapsed}s",
                     ],
                 ),
             )
