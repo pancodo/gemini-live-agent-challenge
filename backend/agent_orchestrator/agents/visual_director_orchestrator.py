@@ -56,6 +56,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import timedelta
 from functools import partial
@@ -79,6 +80,8 @@ from .historical_period_profiles import (
 from .sse_helpers import (
     SSEEmitter,
     build_agent_status_event,
+    build_beat_visual_assigned_event,
+    build_narration_beat_event,
     build_pipeline_phase_event,
     build_segment_update_event,
     build_stats_update_event,
@@ -1850,6 +1853,423 @@ class VisualDirectorOrchestrator(BaseAgent):
                 exc_info=True,
             )
 
+    async def _generate_beat_visuals(
+        self,
+        ctx: InvocationContext,
+        client: google_genai.Client,
+        db: firestore.AsyncClient,
+    ) -> None:
+        """Generate per-beat Imagen 3 and Veo 2 visuals based on Visual Interleave assignments.
+
+        Reads ``session.state["beat_visual_plan"]`` (written by Phase 3.3 Visual
+        Interleave Agent) and generates media for beats assigned ``cinematic`` or
+        ``video`` visual types. Beats with ``illustration`` type are skipped since
+        Phase 3.2 already generated their images.
+
+        After generation, updates the matching beat dicts in
+        ``session.state["beats"]`` with ``cinematicUrl`` or ``videoUrl`` fields
+        and re-emits ``narration_beat`` SSE events with the new URLs.
+
+        This method is a no-op if ``beat_visual_plan`` is not present in session
+        state (backward compatible with pipelines that skip Phase 3.3).
+
+        Args:
+            ctx: ADK invocation context.
+            client: Shared google-genai Vertex AI client.
+            db: Async Firestore client.
+        """
+        session_id: str = ctx.session.id
+
+        beat_visual_plan: dict[str, list[dict[str, Any]]] | None = (
+            ctx.session.state.get("beat_visual_plan")
+        )
+        if not beat_visual_plan:
+            logger.debug(
+                "Phase V beat visuals: no beat_visual_plan in session state, skipping."
+            )
+            return
+
+        beats_store: dict[str, list[dict[str, Any]]] = ctx.session.state.get(
+            "beats", {}
+        )
+        if not beats_store:
+            logger.warning(
+                "Phase V beat visuals: beat_visual_plan present but no beats in "
+                "session state for session %s -- skipping.",
+                session_id,
+            )
+            return
+
+        # Read visual_bible and script for negative prompt / era context
+        visual_bible: str = ctx.session.state.get("visual_bible", "")
+        script_raw: list[dict[str, Any]] = ctx.session.state.get("script", [])
+        script_map: dict[str, dict[str, Any]] = {
+            s.get("id", ""): s for s in script_raw
+        }
+
+        # GCS bucket + semaphore
+        bucket_name = self.gcs_bucket
+        semaphore = asyncio.Semaphore(6)
+
+        # ------------------------------------------------------------------
+        # Collect cinematic and video beats across all segments
+        # ------------------------------------------------------------------
+        cinematic_tasks: list[
+            tuple[str, int, dict[str, Any], dict[str, Any]]
+        ] = []  # (segment_id, beat_index, assignment, segment_dict)
+        video_beats: list[
+            tuple[str, int, dict[str, Any], dict[str, Any]]
+        ] = []  # (segment_id, beat_index, assignment, segment_dict)
+
+        for segment_id, assignments in beat_visual_plan.items():
+            seg_dict = script_map.get(segment_id, {})
+            for assignment in assignments:
+                beat_index: int = assignment.get("beat_index", 0)
+                visual_type: str = assignment.get("visual_type", "illustration")
+
+                # Emit assignment notification
+                if self.emitter:
+                    await self.emitter.emit(
+                        "beat_visual_assigned",
+                        build_beat_visual_assigned_event(
+                            segment_id=segment_id,
+                            beat_index=beat_index,
+                            visual_type=visual_type,
+                        ),
+                    )
+
+                if visual_type == "illustration":
+                    # Phase 3.2 already generated -- skip
+                    continue
+                elif visual_type == "cinematic":
+                    cinematic_tasks.append(
+                        (segment_id, beat_index, assignment, seg_dict)
+                    )
+                elif visual_type == "video":
+                    video_beats.append(
+                        (segment_id, beat_index, assignment, seg_dict)
+                    )
+
+        logger.info(
+            "Phase V beat visuals: %d cinematic beats, %d video beats to generate "
+            "for session %s",
+            len(cinematic_tasks),
+            len(video_beats),
+            session_id,
+        )
+
+        if not cinematic_tasks and not video_beats:
+            return
+
+        # ------------------------------------------------------------------
+        # Helper: build negative prompt from segment context
+        # ------------------------------------------------------------------
+        def _beat_negative_prompt(seg_dict: dict[str, Any]) -> str:
+            """Build a negative prompt for a beat's Imagen 3 call."""
+            era: str = seg_dict.get("era", "")
+            title: str = seg_dict.get("title", "")
+            period_additions = get_period_negative_prompt_additions(era)
+            negative = _BASE_NEGATIVE_PROMPT
+            if era:
+                negative = (
+                    f"modern {era}, contemporary version, 21st century, "
+                    f"tourists, modern infrastructure, {negative}"
+                )
+            if period_additions:
+                negative = f"{negative}, {period_additions}"
+            excerpt = ""
+            site_negatives = _build_site_negative_additions(era, title, excerpt)
+            if site_negatives:
+                negative = f"{negative}, {site_negatives}"
+            return negative
+
+        # ------------------------------------------------------------------
+        # Generate cinematic beats concurrently via Imagen 3
+        # ------------------------------------------------------------------
+        async def _gen_cinematic(
+            segment_id: str,
+            beat_index: int,
+            assignment: dict[str, Any],
+            seg_dict: dict[str, Any],
+        ) -> tuple[str, int, str | None]:
+            """Generate one Imagen 3 frame for a cinematic beat.
+
+            Returns:
+                (segment_id, beat_index, signed_url_or_none)
+            """
+            generation_prompt: str = assignment.get("generation_prompt", "")
+            if not generation_prompt:
+                logger.warning(
+                    "Beat %d of %s has cinematic type but no generation_prompt",
+                    beat_index,
+                    segment_id,
+                )
+                return segment_id, beat_index, None
+
+            # Prefix with visual_bible snippet for style consistency
+            if visual_bible:
+                generation_prompt = (
+                    f"{visual_bible[:200].strip()}, {generation_prompt}"
+                )
+
+            negative = _beat_negative_prompt(seg_dict)
+            uid = uuid.uuid4().hex[:8]
+            blob_name = (
+                f"sessions/{session_id}/beats/"
+                f"{segment_id}_beat{beat_index}_cinematic_{uid}.jpg"
+            )
+
+            async with semaphore:
+                limiter = self.imagen_rate_limiter or _fallback_imagen_limiter
+                async with limiter.acquire(caller=f"beat_cinematic:{blob_name}"):
+                    try:
+                        response = await client.aio.models.generate_images(
+                            model=_IMAGEN_MODEL,
+                            prompt=generation_prompt,
+                            config=genai_types.GenerateImagesConfig(
+                                number_of_images=1,
+                                aspect_ratio="16:9",
+                                negative_prompt=negative,
+                                safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
+                                person_generation="allow_adult",
+                                output_mime_type="image/jpeg",
+                                output_compression_quality=90,
+                                enhance_prompt=False,
+                            ),
+                        )
+                        if not response.generated_images:
+                            logger.warning(
+                                "Imagen 3 returned no images for beat %d of %s",
+                                beat_index,
+                                segment_id,
+                            )
+                            return segment_id, beat_index, None
+
+                        image_bytes = (
+                            response.generated_images[0].image.image_bytes
+                        )
+                        if not image_bytes:
+                            return segment_id, beat_index, None
+
+                        gcs_uri = await _upload_image_bytes_async(
+                            image_bytes, bucket_name, blob_name
+                        )
+                        signed_url = _sign_gcs_url(gcs_uri, bucket_name)
+                        return segment_id, beat_index, signed_url
+
+                    except Exception as exc:
+                        logger.warning(
+                            "Imagen 3 beat generation failed for beat %d of %s: %s",
+                            beat_index,
+                            segment_id,
+                            exc,
+                        )
+                        return segment_id, beat_index, None
+
+        if cinematic_tasks:
+            cinematic_results = await asyncio.gather(
+                *[
+                    _gen_cinematic(seg_id, bi, assn, sd)
+                    for seg_id, bi, assn, sd in cinematic_tasks
+                ],
+                return_exceptions=True,
+            )
+
+            for result in cinematic_results:
+                if isinstance(result, Exception):
+                    logger.error(
+                        "Cinematic beat generation exception: %s", result
+                    )
+                    continue
+                seg_id, bi, signed_url = result
+                if signed_url and seg_id in beats_store:
+                    # Update the matching beat dict
+                    for beat_dict in beats_store[seg_id]:
+                        if beat_dict.get("beat_index") == bi:
+                            beat_dict["cinematicUrl"] = signed_url
+                            break
+
+                    # Re-emit narration_beat with cinematicUrl
+                    if self.emitter:
+                        beat_dict_match = next(
+                            (
+                                b
+                                for b in beats_store[seg_id]
+                                if b.get("beat_index") == bi
+                            ),
+                            None,
+                        )
+                        if beat_dict_match:
+                            await self.emitter.emit(
+                                "narration_beat",
+                                build_narration_beat_event(
+                                    segment_id=seg_id,
+                                    beat_index=bi,
+                                    total_beats=len(beats_store[seg_id]),
+                                    narration_text=beat_dict_match.get(
+                                        "narration_text", ""
+                                    ),
+                                    image_url=beat_dict_match.get("image_url"),
+                                    direction_text=beat_dict_match.get(
+                                        "direction_text", ""
+                                    ),
+                                    visual_type="cinematic",
+                                    cinematic_url=signed_url,
+                                ),
+                            )
+
+            logger.info(
+                "Phase V beat visuals: %d cinematic beats processed for session %s",
+                len(cinematic_tasks),
+                session_id,
+            )
+
+        # ------------------------------------------------------------------
+        # Generate video beats via Veo 2 (after cinematic completes)
+        # ------------------------------------------------------------------
+        if video_beats:
+            veo2_ops: list[
+                tuple[str, int, Any, dict[str, Any]]
+            ] = []  # (segment_id, beat_index, operation, seg_dict)
+
+            for seg_id, bi, assignment, seg_dict in video_beats:
+                generation_prompt = assignment.get("generation_prompt", "")
+                if not generation_prompt:
+                    logger.warning(
+                        "Beat %d of %s has video type but no generation_prompt",
+                        bi,
+                        seg_id,
+                    )
+                    continue
+
+                output_uri = (
+                    f"gs://{bucket_name}/sessions/{session_id}/beats/"
+                    f"{seg_id}_beat{bi}_video/"
+                )
+                try:
+                    operation = await client.aio.models.generate_videos(
+                        model=_VEO2_MODEL,
+                        prompt=generation_prompt,
+                        config=genai_types.GenerateVideosConfig(
+                            aspect_ratio="16:9",
+                            number_of_videos=1,
+                            duration_seconds=4,
+                            enhance_prompt=True,
+                            person_generation="dont_allow",
+                            output_gcs_uri=output_uri,
+                        ),
+                    )
+                    if operation:
+                        veo2_ops.append((seg_id, bi, operation, seg_dict))
+                        logger.info(
+                            "Triggered Veo 2 for beat %d of %s -> %s",
+                            bi,
+                            seg_id,
+                            output_uri,
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "Veo 2 trigger failed for beat %d of %s: %s",
+                        bi,
+                        seg_id,
+                        exc,
+                    )
+
+            # Poll all Veo 2 operations concurrently
+            if veo2_ops:
+
+                async def _poll_beat_veo2(
+                    seg_id: str,
+                    bi: int,
+                    operation: Any,
+                ) -> tuple[str, int, str | None]:
+                    """Poll a single Veo 2 beat operation with hard timeout."""
+                    try:
+                        video_uri = await asyncio.wait_for(
+                            _poll_veo2_operation(
+                                client, operation, seg_id, f"beat_{bi}"
+                            ),
+                            timeout=_VEO2_HARD_TIMEOUT_SECONDS,
+                        )
+                        if video_uri:
+                            signed = _sign_video_url(video_uri, bucket_name)
+                            return seg_id, bi, signed
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "Veo 2 beat timeout for beat %d of %s", bi, seg_id
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "Veo 2 beat poll failed for beat %d of %s: %s",
+                            bi,
+                            seg_id,
+                            exc,
+                        )
+                    return seg_id, bi, None
+
+                poll_results = await asyncio.gather(
+                    *[
+                        _poll_beat_veo2(seg_id, bi, op)
+                        for seg_id, bi, op, _ in veo2_ops
+                    ],
+                    return_exceptions=True,
+                )
+
+                for result in poll_results:
+                    if isinstance(result, Exception):
+                        logger.error(
+                            "Veo 2 beat poll exception: %s", result
+                        )
+                        continue
+                    seg_id, bi, signed_video = result
+                    if signed_video and seg_id in beats_store:
+                        for beat_dict in beats_store[seg_id]:
+                            if beat_dict.get("beat_index") == bi:
+                                beat_dict["videoUrl"] = signed_video
+                                break
+
+                        # Re-emit narration_beat with videoUrl
+                        if self.emitter:
+                            beat_dict_match = next(
+                                (
+                                    b
+                                    for b in beats_store[seg_id]
+                                    if b.get("beat_index") == bi
+                                ),
+                                None,
+                            )
+                            if beat_dict_match:
+                                await self.emitter.emit(
+                                    "narration_beat",
+                                    build_narration_beat_event(
+                                        segment_id=seg_id,
+                                        beat_index=bi,
+                                        total_beats=len(beats_store[seg_id]),
+                                        narration_text=beat_dict_match.get(
+                                            "narration_text", ""
+                                        ),
+                                        image_url=beat_dict_match.get(
+                                            "image_url"
+                                        ),
+                                        direction_text=beat_dict_match.get(
+                                            "direction_text", ""
+                                        ),
+                                        visual_type="video",
+                                        video_url=signed_video,
+                                    ),
+                                )
+
+            logger.info(
+                "Phase V beat visuals: %d video beats processed (%d Veo 2 ops) "
+                "for session %s",
+                len(video_beats),
+                len(veo2_ops),
+                session_id,
+            )
+
+        # Persist updated beats back to session state
+        ctx.session.state["beats"] = beats_store
+
     async def _run_async_impl(
         self,
         ctx: InvocationContext,
@@ -2186,6 +2606,23 @@ class VisualDirectorOrchestrator(BaseAgent):
         # Persist image URL store to session state
         # ------------------------------------------------------------------
         ctx.session.state["image_urls"] = image_url_store
+
+        # ------------------------------------------------------------------
+        # Beat-aware visual generation (Phase 3.3 Visual Interleave)
+        # ------------------------------------------------------------------
+        # If the Visual Interleave Agent (Phase 3.3) produced a beat_visual_plan,
+        # generate per-beat Imagen 3 cinematic frames and Veo 2 video clips.
+        # This runs AFTER all segment-level images are done so the frontend
+        # already has fallback visuals.
+        try:
+            await self._generate_beat_visuals(ctx, client, db)
+        except Exception as exc:
+            logger.error(
+                "Phase V beat-aware generation failed for session %s: %s",
+                session_id,
+                exc,
+                exc_info=True,
+            )
 
         # ------------------------------------------------------------------
         # Veo 2 background tasks: log launch count, do NOT await them.

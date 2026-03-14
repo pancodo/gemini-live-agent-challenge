@@ -65,6 +65,9 @@ export interface AgentState {
   errorMessage?: string;
 }
 
+// ── Beat Visual Types ─────────────────────────────────────────
+export type BeatVisualType = 'illustration' | 'cinematic' | 'video';
+
 // ── Segments ─────────────────────────────────────────────────
 export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending' | 'storyboard_ready' | 'beats_ready';
 
@@ -106,6 +109,7 @@ export type SSEEventType =
   | 'storyboard_image_ready'
   | 'segment_playable'
   | 'narration_beat'
+  | 'beat_visual_assigned'
   | 'error';
 
 export interface AgentStatusEvent {
@@ -203,6 +207,13 @@ export interface SegmentPlayableEvent {
   segmentId: string;
 }
 
+export interface BeatVisualAssignedEvent {
+  type: 'beat_visual_assigned';
+  segmentId: string;
+  beatIndex: number;
+  visualType: BeatVisualType;
+}
+
 export interface NarrationBeatEvent {
   type: 'narration_beat';
   segmentId: string;
@@ -211,6 +222,9 @@ export interface NarrationBeatEvent {
   narrationText: string;
   imageUrl: string | null;
   directionText: string;
+  visualType?: BeatVisualType;
+  cinematicUrl?: string | null;
+  videoUrl?: string | null;
 }
 
 export interface NarrationBeat {
@@ -220,6 +234,9 @@ export interface NarrationBeat {
   narrationText: string;
   imageUrl: string | null;
   directionText: string;
+  visualType?: BeatVisualType;
+  cinematicUrl?: string | null;
+  videoUrl?: string | null;
 }
 
 export type SSEEvent =
@@ -235,6 +252,7 @@ export type SSEEvent =
   | StoryboardImageReadyEvent
   | SegmentPlayableEvent
   | NarrationBeatEvent
+  | BeatVisualAssignedEvent
   | ErrorEvent;
 
 // ── Documentary Branching ─────────────────────────────────────
