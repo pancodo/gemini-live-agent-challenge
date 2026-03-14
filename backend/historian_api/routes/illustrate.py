@@ -52,7 +52,7 @@ CURRENT SCENE:
 Title: {segment_title}
 Mood: {mood}
 Narration: {narration_excerpt}
-
+{composition_directive}
 DOCUMENT CONTEXT:
 {rag_context}
 
@@ -63,7 +63,7 @@ Then generate ONE cinematic illustration that directly answers the viewer's
 question. The illustration must:
 - Match the Visual Bible style exactly
 - Be historically accurate to the era and region
-- Use cinematic 16:9 composition
+- Use cinematic 16:9 {composition_framing}
 - Convey the mood: {mood}
 - Contain NO modern elements or anachronisms
 
@@ -166,12 +166,22 @@ async def illustrate(
         logger.warning("RAG retrieval failed for session %s: %s", session_id, exc)
 
     # ── Build prompt ──────────────────────────────────────────────
+    composition = body.composition
+    composition_directive = (
+        f"Composition: {composition}" if composition else ""
+    )
+    composition_framing = (
+        f"composition — {composition}" if composition else "composition"
+    )
+
     prompt = ILLUSTRATION_PROMPT.format(
         query=body.query,
         visual_bible=visual_bible or "(no visual bible available)",
         segment_title=segment_title or "(no current segment)",
         mood=mood,
         narration_excerpt=narration_excerpt or "(no narration)",
+        composition_directive=composition_directive,
+        composition_framing=composition_framing,
         rag_context=rag_context or "(no document context retrieved)",
     )
 
@@ -266,6 +276,8 @@ async def illustrate(
                 "caption": direction_text,
                 "imageUrl": signed_url,
                 "gcsUri": gcs_uri,
+                "mood": mood,
+                "composition": body.composition,
                 "segmentId": body.current_segment_id,
                 "createdAt": firestore.SERVER_TIMESTAMP,
             })

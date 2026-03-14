@@ -66,7 +66,7 @@ export interface AgentState {
 }
 
 // ── Segments ─────────────────────────────────────────────────
-export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending';
+export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending' | 'storyboard_ready';
 
 export type PortraitEra = 'default' | 'ancient' | 'modern';
 
@@ -101,6 +101,10 @@ export type SSEEventType =
   | 'stats_update'
   | 'live_illustration'
   | 'geo_update'
+  | 'storyboard_scene_start'
+  | 'storyboard_text_chunk'
+  | 'storyboard_image_ready'
+  | 'segment_playable'
   | 'error';
 
 export interface AgentStatusEvent {
@@ -171,6 +175,33 @@ export interface GeoUpdateEvent {
   geo: SegmentGeo;
 }
 
+export interface StoryboardSceneStartEvent {
+  type: 'storyboard_scene_start';
+  sceneId: string;
+  segmentId: string;
+  title: string;
+  mood: string;
+}
+
+export interface StoryboardTextChunkEvent {
+  type: 'storyboard_text_chunk';
+  sceneId: string;
+  text: string;
+}
+
+export interface StoryboardImageReadyEvent {
+  type: 'storyboard_image_ready';
+  sceneId: string;
+  segmentId: string;
+  imageUrl: string;
+  caption: string;
+}
+
+export interface SegmentPlayableEvent {
+  type: 'segment_playable';
+  segmentId: string;
+}
+
 export type SSEEvent =
   | AgentStatusEvent
   | AgentSourceEvaluationEvent
@@ -179,6 +210,10 @@ export type SSEEvent =
   | StatsUpdateEvent
   | LiveIllustrationEvent
   | GeoUpdateEvent
+  | StoryboardSceneStartEvent
+  | StoryboardTextChunkEvent
+  | StoryboardImageReadyEvent
+  | SegmentPlayableEvent
   | ErrorEvent;
 
 // ── Documentary Branching ─────────────────────────────────────

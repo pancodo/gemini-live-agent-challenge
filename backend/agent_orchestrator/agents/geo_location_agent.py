@@ -95,6 +95,229 @@ Return ONLY a JSON object: {{"lat": <number>, "lng": <number>, "modern_name": "<
 """
 
 
+# ---------------------------------------------------------------------------
+# Per-segment geo extraction (Workstream B)
+# ---------------------------------------------------------------------------
+
+
+async def extract_geo_for_segment(
+    *,
+    segment: dict[str, Any],
+    scene_brief: dict[str, Any],
+    session_id: str,
+    emitter: SSEEmitter | None = None,
+) -> dict[str, Any] | None:
+    """Extract and geocode geographic data for a single segment.
+
+    This is the per-segment entry point used by the streaming pipeline.
+    Returns the SegmentGeo frontend dict, or None on failure.
+
+    Args:
+        segment: SegmentScript dict with id, scene_id, title, narration_script.
+        scene_brief: The scene brief dict for this segment.
+        session_id: Parent session ID for Firestore writes.
+        emitter: Optional SSE emitter for status events.
+
+    Returns:
+        SegmentGeo.to_frontend_dict() or None on failure.
+    """
+    import asyncio
+
+    segment_id = segment.get("id", "unknown")
+    scene_id = segment.get("scene_id", "unknown")
+    title = segment.get("title", "")
+    script_text = segment.get("narration_script", "")
+
+    era = scene_brief.get("era", segment.get("mood", "historical"))
+    location = scene_brief.get("location", "")
+
+    agent_id = f"geo_mapper_{scene_id}"
+    t_start = time.monotonic()
+
+    # Emit status
+    if emitter is not None:
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="searching",
+                query=f"Mapping locations for: {title}",
+            ),
+        )
+
+    # Initialize Gemini client
+    project_id = os.environ.get("GCP_PROJECT_ID", "")
+    client = google_genai.Client(
+        vertexai=True if project_id else False,
+        project=project_id or None,
+        location="us-central1" if project_id else None,
+    )
+
+    # Extract locations via Gemini
+    prompt = _EXTRACTION_PROMPT.format(
+        title=title,
+        era=era,
+        location=location,
+        script=script_text,
+    )
+
+    geo_data: dict | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(
+                model=_MODEL,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+            text = response.text or "{}"
+            text = text.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+            geo_data = json.loads(text)
+            break
+        except Exception as e:
+            logger.warning(
+                "Per-segment geo extraction attempt %d failed for %s: %s",
+                attempt + 1,
+                segment_id,
+                e,
+            )
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(2 ** attempt)
+
+    if not geo_data:
+        if emitter is not None:
+            await emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id=agent_id,
+                    status="error",
+                    error_message=f"Failed to extract geo data for {title}",
+                ),
+            )
+        return None
+
+    # Validate and build SegmentGeo
+    events: list[GeoEvent] = []
+    for raw_event in geo_data.get("events", []):
+        try:
+            lat = float(raw_event.get("lat", 0))
+            lng = float(raw_event.get("lng", 0))
+            if abs(lat) > 90:
+                lat, lng = lng, lat
+            lat = max(-90.0, min(90.0, lat))
+            lng = max(-180.0, min(180.0, lng))
+
+            events.append(
+                GeoEvent(
+                    name=str(raw_event.get("name", "Unknown")),
+                    lat=lat,
+                    lng=lng,
+                    type=raw_event.get("type", "city"),
+                    era=raw_event.get("era"),
+                    description=raw_event.get("description"),
+                )
+            )
+        except (ValueError, TypeError) as e:
+            logger.warning("Skipping invalid geo event: %s", e)
+
+    routes: list[GeoRoute] = []
+    for raw_route in geo_data.get("routes", []):
+        try:
+            points = []
+            for p in raw_route.get("points", []):
+                if isinstance(p, (list, tuple)) and len(p) >= 2:
+                    points.append((float(p[0]), float(p[1])))
+            if len(points) >= 2:
+                routes.append(
+                    GeoRoute(
+                        name=str(raw_route.get("name", "Route")),
+                        points=points,
+                        style=raw_route.get("style", "trade"),
+                    )
+                )
+        except (ValueError, TypeError) as e:
+            logger.warning("Skipping invalid geo route: %s", e)
+
+    # Calculate center
+    raw_center = geo_data.get("center", [])
+    if isinstance(raw_center, list) and len(raw_center) >= 2:
+        center = (float(raw_center[0]), float(raw_center[1]))
+    elif events:
+        avg_lat = sum(e.lat for e in events) / len(events)
+        avg_lng = sum(e.lng for e in events) / len(events)
+        center = (avg_lat, avg_lng)
+    else:
+        center = (30.0, 30.0)
+
+    zoom = int(geo_data.get("zoom", 4))
+    zoom = max(2, min(8, zoom))
+
+    segment_geo = SegmentGeo(
+        segment_id=segment_id,
+        center=center,
+        zoom=zoom,
+        events=events,
+        routes=routes,
+    )
+
+    geo_frontend = segment_geo.to_frontend_dict()
+
+    # Write to Firestore
+    try:
+        from google.cloud import firestore as _firestore
+
+        db = _firestore.AsyncClient(project=project_id)
+        seg_ref = (
+            db.collection("sessions")
+            .document(session_id)
+            .collection("segments")
+            .document(segment_id)
+        )
+        await seg_ref.set({"geo": geo_frontend}, merge=True)
+    except Exception as e:
+        logger.warning(
+            "Per-segment geo Firestore write failed for %s: %s",
+            segment_id,
+            e,
+        )
+
+    # Emit SSE events
+    if emitter is not None:
+        await emitter.emit(
+            "geo_update",
+            build_geo_update_event(
+                segment_id=segment_id,
+                geo=geo_frontend,
+            ),
+        )
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="done",
+                elapsed=round(time.monotonic() - t_start, 1),
+                facts=[e.name for e in events],
+            ),
+        )
+
+    logger.info(
+        "Per-segment geo extraction for %s: %d locations in %.1fs",
+        segment_id,
+        len(events),
+        round(time.monotonic() - t_start, 1),
+    )
+
+    return geo_frontend
+
+
 class GeoLocationAgent(BaseAgent):
     """Extracts and geocodes geographic data from documentary scripts.
 
