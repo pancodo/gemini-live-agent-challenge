@@ -1,8 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Segment } from '../../types';
+import type { Segment, BeatVisualType } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useVoiceStore } from '../../store/voiceStore';
+import { VisualSourceBadge } from '../ui';
+
+function beatTypeToSource(visualType: BeatVisualType | undefined): 'interleaved' | 'imagen' | 'veo' {
+  switch (visualType) {
+    case 'cinematic': return 'imagen';
+    case 'video': return 'veo';
+    default: return 'interleaved';
+  }
+}
 
 /**
  * Module-level cached canvas for sampleImageColor.
@@ -353,6 +362,19 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           className="illustration-shimmer absolute inset-0 pointer-events-none"
           style={{ zIndex: 1 }}
         />
+      )}
+
+      {/* Visual source badge — top-right pill showing interleaved/imagen/veo */}
+      {hasBeatVisual && (
+        <div
+          className="absolute top-4 right-4 z-10 pointer-events-none"
+          style={{ opacity: 'var(--chrome-opacity, 1)', transition: 'opacity 0.4s ease' }}
+        >
+          <VisualSourceBadge
+            source={beatTypeToSource(currentBeatVisualType as BeatVisualType)}
+            compact
+          />
+        </div>
       )}
 
       {/* Vignette overlay */}
