@@ -272,6 +272,68 @@ def build_branch_segment_ready_event(
     }
 
 
+def build_storyboard_scene_start_event(
+    *,
+    scene_id: str,
+    segment_id: str,
+    title: str,
+    mood: str,
+) -> dict[str, Any]:
+    """Build a storyboard_scene_start SSE event payload.
+
+    Emitted when the creative director begins working on a scene during
+    Phase 3.1 (Narrative Director). Allows the frontend to create a
+    skeleton storyboard card before text/image content arrives.
+    """
+    return {
+        "type": "storyboard_scene_start",
+        "sceneId": scene_id,
+        "segmentId": segment_id,
+        "title": title,
+        "mood": mood,
+    }
+
+
+def build_storyboard_text_chunk_event(
+    *,
+    scene_id: str,
+    text: str,
+) -> dict[str, Any]:
+    """Build a storyboard_text_chunk SSE event payload.
+
+    Emitted as creative direction text streams from Gemini during
+    Phase 3.1. Each chunk contains a portion of the creative direction
+    note for the given scene.
+    """
+    return {
+        "type": "storyboard_text_chunk",
+        "sceneId": scene_id,
+        "text": text,
+    }
+
+
+def build_storyboard_image_ready_event(
+    *,
+    scene_id: str,
+    segment_id: str,
+    image_url: str,
+    caption: str,
+) -> dict[str, Any]:
+    """Build a storyboard_image_ready SSE event payload.
+
+    Emitted when an interleaved storyboard image has been uploaded to GCS
+    and a signed HTTPS URL is available. The frontend can render the image
+    immediately without GCS authentication.
+    """
+    return {
+        "type": "storyboard_image_ready",
+        "sceneId": scene_id,
+        "segmentId": segment_id,
+        "imageUrl": image_url,
+        "caption": caption,
+    }
+
+
 def build_live_illustration_event(
     *,
     segment_id: str,
