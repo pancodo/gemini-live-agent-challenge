@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ResearchPanel } from '../components/workspace/ResearchPanel';
 import { ExpeditionLog } from '../components/workspace/ExpeditionLog';
+import { StoryboardStream } from '../components/workspace/StoryboardStream';
 import { HistorianPanel } from '../components/workspace/HistorianPanel';
 import { useSessionStore } from '../store/sessionStore';
 import { useResearchStore } from '../store/researchStore';
@@ -92,6 +93,10 @@ export function WorkspacePage() {
   // Do not reset the research store on unmount — the player route
   // reads segments from this store immediately after navigation.
 
+  const hasStoryboardFrames = useResearchStore(
+    (s) => Object.keys(s.storyboardFrames).length > 0,
+  );
+
   const hasReadySegment = useResearchStore(
     (s) => Object.values(s.segments).some(
       (seg) => seg.status === 'ready' || seg.status === 'complete' || seg.status === 'visual_ready',
@@ -119,28 +124,28 @@ export function WorkspacePage() {
     }
   }, [status, sessionId, setSegment]);
 
-  const firstReadyId = useResearchStore((s) => {
-    const entry = Object.values(s.segments).find(
-      (seg) => seg.status === 'ready' || seg.status === 'complete' || seg.status === 'visual_ready',
+  // Auto-play: navigate to player as soon as the first playable segment arrives
+  // (fires during 'processing', not only after 'ready'). Respects autoWatch setting.
+  // Resets the fired flag when the setting is toggled off so re-enabling fires again.
+  const firstPlayableId = useResearchStore((s) => {
+    const seg = Object.values(s.segments).find(
+      (seg) => (seg.status === 'ready' || seg.status === 'complete' || seg.status === 'visual_ready')
+        && seg.imageUrls?.length > 0,
     );
-    return entry?.id ?? null;
+    return seg?.id ?? null;
   });
 
-  // Auto-watch: navigate to player when status is ready/playing (if enabled).
-  // Works on mount if status is already 'ready' — no transition needed.
-  // Resets the fired flag when the setting is toggled off so re-enabling fires again.
   useEffect(() => {
     if (!settings.autoWatch) {
       autoWatchFired.current = false;
       return;
     }
     if (autoWatchFired.current) return;
-    if (status !== 'ready' && status !== 'playing') return;
-    if (!firstReadyId) return;
+    if (!firstPlayableId) return;
 
     autoWatchFired.current = true;
-    triggerIrisWs(`/player/${firstReadyId}`);
-  }, [settings.autoWatch, status, firstReadyId, triggerIrisWs]);
+    triggerIrisWs(`/player/${firstPlayableId}`);
+  }, [settings.autoWatch, firstPlayableId, triggerIrisWs]);
 
   if (!sessionId) return <Navigate to="/" replace />;
 
@@ -149,7 +154,38 @@ export function WorkspacePage() {
       <WorkspaceLayout>
         {/* Right panel — content switches on session status */}
         <div className="flex flex-col h-full">
-          {status === 'processing' && <ExpeditionLog />}
+          {status === 'processing' && (
+            <AnimatePresence mode="wait">
+              {hasStoryboardFrames ? (
+                <motion.div
+                  key="storyboard-split"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex h-full"
+                >
+                  <div className="w-[38%] shrink-0 border-r border-[var(--bg4)] overflow-hidden">
+                    <ExpeditionLog />
+                  </div>
+                  <div className="w-[62%] overflow-hidden">
+                    <StoryboardStream />
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="expedition-only"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="h-full"
+                >
+                  <ExpeditionLog />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
 
           {(status === 'ready' || status === 'playing') && (
             <div className="flex flex-col h-full">
