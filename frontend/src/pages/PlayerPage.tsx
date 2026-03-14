@@ -29,7 +29,8 @@ export function PlayerPage() {
     const { segments, setSegment } = useResearchStore.getState();
     const storeEmpty = Object.keys(segments).length === 0;
     const segmentMissing = segmentId != null && segments[segmentId] == null;
-    if (!storeEmpty && !segmentMissing) return;
+    const segmentHasNoImages = segmentId != null && segments[segmentId] != null && (segments[segmentId].imageUrls?.length ?? 0) === 0;
+    if (!storeEmpty && !segmentMissing && !segmentHasNoImages) return;
 
     const controller = new AbortController();
     getSegments(sessionId, controller.signal)
