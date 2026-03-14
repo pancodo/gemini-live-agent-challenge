@@ -1,75 +1,115 @@
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
- * CaptionTrack — live captions synced to Gemini speech.
+ * CaptionTrack — sentence-level caption display synced to Gemini speech.
  *
- * Shows a rolling window of the historian's transcription directly
- * as Gemini delivers it. No artificial delay or buffering — the
- * outputTranscription fragments from Gemini ARE the timing source,
- * arriving in sync with the audio stream.
+ * Displays one sentence at a time (not a rolling word window). When a
+ * sentence boundary is detected, the current sentence fades out and
+ * the next fades in fresh. Between beat transitions, captions clear
+ * briefly for visual punctuation.
  */
-const MAX_VISIBLE_WORDS = 16;
+
+function extractCurrentSentence(text: string): { sentence: string; index: number } {
+  if (!text.trim()) return { sentence: '', index: 0 };
+
+  // Split on sentence boundaries
+  const sentences = text.match(/[^.!?]+[.!?]+\s*/g);
+  if (!sentences || sentences.length === 0) {
+    // No complete sentence yet — show the in-progress text
+    return { sentence: text.trim(), index: 0 };
+  }
+
+  // Show the last complete sentence, or in-progress text after it
+  const lastSentence = sentences[sentences.length - 1].trim();
+  const afterLastSentence = text.slice(text.lastIndexOf(lastSentence) + lastSentence.length).trim();
+
+  if (afterLastSentence.length > 3) {
+    // New sentence in progress — show it
+    return { sentence: afterLastSentence, index: sentences.length };
+  }
+
+  // Show the last complete sentence
+  return { sentence: lastSentence, index: sentences.length - 1 };
+}
 
 export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const prevLenRef = useRef(0);
+  const beatTransitioning = usePlayerStore((s) => s.beatTransitioning);
+  const prevSentenceRef = useRef('');
 
-  const words = captionText.trim() ? captionText.trim().split(/\s+/) : [];
+  const { sentence, index } = useMemo(
+    () => extractCurrentSentence(captionText),
+    [captionText],
+  );
 
-  // Reset tracking on new turn (caption gets shorter or empty)
-  if (words.length < prevLenRef.current) {
-    prevLenRef.current = 0;
+  // Track previous sentence for fade animation
+  const isNewSentence = sentence !== prevSentenceRef.current && sentence.length > 0;
+  if (sentence.length > 0) {
+    prevSentenceRef.current = sentence;
   }
 
-  // How many words are new since last render
-  const newStart = prevLenRef.current;
-  prevLenRef.current = words.length;
+  const isEmpty = !sentence || beatTransitioning;
 
-  // Rolling window
-  const windowStart = Math.max(0, words.length - MAX_VISIBLE_WORDS);
-  const visible = words.slice(windowStart);
-
-  const isEmpty = visible.length === 0;
+  // Split into words for word-by-word reveal
+  const words = sentence ? sentence.split(/\s+/) : [];
 
   return (
     <div
-      className="flex justify-center px-6"
+      className="flex flex-col items-center px-6"
       style={{
         opacity: isEmpty ? 0 : 1,
-        transition: 'opacity 0.3s ease',
+        transition: 'opacity 0.2s ease',
       }}
     >
-      <p
-        className="text-center leading-relaxed"
+      {/* Gold horizontal rule — narration indicator */}
+      <motion.div
         style={{
-          maxWidth: 800,
-          fontFamily: 'var(--font-serif)',
-          fontWeight: 300,
-          fontStyle: 'italic',
-          fontSize: 26,
-          letterSpacing: '0.02em',
-          color: 'var(--player-text)',
-          textShadow: 'var(--player-caption-shadow)',
+          width: '35%',
+          height: 1,
+          background: 'var(--glow-primary)',
+          opacity: 0.4,
+          marginBottom: 16,
         }}
-      >
-        {visible.map((word, i) => {
-          const globalIdx = windowStart + i;
-          const isNew = globalIdx >= newStart;
-          return (
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: isEmpty ? 0 : 1 }}
+        transition={{ duration: 0.8, ease: 'easeOut' }}
+      />
+
+      <AnimatePresence mode="wait">
+        <motion.p
+          key={`sentence-${index}`}
+          className="text-center leading-relaxed"
+          style={{
+            maxWidth: 800,
+            fontFamily: 'var(--font-serif)',
+            fontWeight: 300,
+            fontStyle: 'italic',
+            fontSize: 26,
+            letterSpacing: '0.02em',
+            color: 'var(--player-text)',
+            textShadow: 'var(--player-caption-shadow)',
+          }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+        >
+          {words.map((word, i) => (
             <span
-              key={globalIdx}
+              key={`${index}-${i}`}
               className="inline-block mr-[0.3em]"
               style={{
-                opacity: isNew ? 0 : 1,
-                animation: isNew ? 'caption-fade-in 0.3s ease forwards' : undefined,
+                opacity: isNewSentence ? 0 : 1,
+                animation: isNewSentence ? `caption-fade-in 0.3s ease ${i * 0.04}s forwards` : undefined,
               }}
             >
               {word}
             </span>
-          );
-        })}
-      </p>
+          ))}
+        </motion.p>
+      </AnimatePresence>
     </div>
   );
 }

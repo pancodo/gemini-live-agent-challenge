@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { usePlayerStore } from '../store/playerStore';
 
 /**
  * Reads AnalyserNode frequency data each rAF frame and drives
@@ -9,34 +10,37 @@ import { useEffect, useRef } from 'react';
  *   --vig-spread:   110% -> 140%
  *   --cap-shadow:   28px -> 48px
  *
+ * Beat pulse: when beatTransitioning is true, energy is multiplied
+ * by 1.8 for 2 seconds, creating a visual "breath" on beat changes.
+ *
  * Ken Burns speed is controlled via Web Animations API playbackRate
- * instead of CSS custom properties. Mutating animation-duration via
- * setProperty causes visible jumps because the browser re-snapshots
- * the duration and restarts timing. playbackRate smoothly scales
- * the running animation without any restart.
- *
- * All setProperty calls target #player-container instead of :root
- * to avoid invalidating style calculations document-wide.
- *
- * The analyser can be null (no-op) or swapped dynamically
- * (e.g. switching between capture and playback analysers).
+ * instead of CSS custom properties (no restart jank).
  */
 export function useAudioVisualSync(analyser: AnalyserNode | null) {
   const rafRef = useRef(0);
+  const beatPulseRef = useRef(1.0);
+  const beatPulseDecayRef = useRef(0);
+
+  useEffect(() => {
+    // Subscribe to beatTransitioning changes for beat pulse
+    let prev = false;
+    const unsub = usePlayerStore.subscribe((state) => {
+      if (state.beatTransitioning && !prev) {
+        beatPulseRef.current = 1.8;
+        beatPulseDecayRef.current = Date.now();
+      }
+      prev = state.beatTransitioning;
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!analyser) return;
 
     const data = new Uint8Array(analyser.frequencyBinCount);
-
-    // Cache DOM queries once at effect setup — not per frame.
-    const kenEl = document.querySelector('.ken-burns-stage');
     const container = document.getElementById('player-container');
-    // Cache the animation reference once; it won't change while the stage is mounted.
-    const kenAnim = kenEl?.getAnimations()[0] ?? null;
 
     function tick() {
-      // Skip all work when the tab is hidden — saves GPU and CPU entirely.
       if (document.visibilityState === 'hidden') {
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -44,22 +48,19 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
 
       analyser!.getByteFrequencyData(data);
 
-      // Compute normalized average energy (0..1)
       let sum = 0;
       for (let i = 0; i < data.length; i++) {
         sum += data[i];
       }
-      const energy = sum / data.length / 255;
+      let energy = sum / data.length / 255;
 
-      // Control Ken Burns animation speed via playbackRate (no CSS jump)
-      // Maps: 0.7x at silence -> 1.3x at narration peak
-      if (kenAnim) {
-        kenAnim.playbackRate = 0.7 + energy * 0.6;
+      // Beat pulse: decay from 1.8 back to 1.0 over 2 seconds
+      if (beatPulseRef.current > 1.0) {
+        const elapsed = (Date.now() - beatPulseDecayRef.current) / 2000;
+        beatPulseRef.current = Math.max(1.0, 1.8 - elapsed * 0.8);
+        energy = Math.min(1.0, energy * beatPulseRef.current);
       }
 
-      // Scope all CSS custom property writes to the player container
-      // to avoid invalidating the entire document style tree.
-      // Guard: container may be null on non-player routes — keep rAF alive regardless.
       if (container) {
         container.style.setProperty('--glow-opacity', `${0.5 + energy * 0.5}`);
         container.style.setProperty('--vig-spread', `${110 + energy * 30}%`);
@@ -74,12 +75,6 @@ export function useAudioVisualSync(analyser: AnalyserNode | null) {
     return () => {
       cancelAnimationFrame(rafRef.current);
 
-      // Reset Ken Burns playback rate
-      if (kenAnim) {
-        kenAnim.playbackRate = 1.0;
-      }
-
-      // Reset CSS custom properties on the scoped container
       if (container) {
         container.style.setProperty('--glow-opacity', '0.5');
         container.style.setProperty('--vig-spread', '110%');

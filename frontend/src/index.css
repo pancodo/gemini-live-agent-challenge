@@ -249,6 +249,13 @@ body {
   to   { transform: translate(40px, 25px) scale(1.08); }
 }
 
+/* ── Ambient Color Transition (smooth interpolation) ────── */
+@property --ambient-color {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
 /* ── Agent Card Animations ─────────────────────────────── */
 @property --border-angle {
   syntax: '<angle>';

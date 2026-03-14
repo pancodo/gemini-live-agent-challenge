@@ -1,21 +1,18 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Segment, BeatVisualType } from '../../types';
+import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useVoiceStore } from '../../store/voiceStore';
 import { VisualSourceBadge } from '../ui';
 
-function beatTypeToSource(visualType: BeatVisualType | undefined): 'interleaved' | 'imagen' | 'veo' {
-  switch (visualType) {
-    case 'cinematic': return 'imagen';
-    case 'video': return 'veo';
-    default: return 'interleaved';
-  }
-}
+type PoolEntry = {
+  url: string;
+  source: 'interleaved' | 'imagen' | 'veo';
+  kenBurnsIndex: number;
+};
 
 /**
  * Module-level cached canvas for sampleImageColor.
- * Avoids creating a new DOM element on every color sample call.
  */
 let _samplerCanvas: HTMLCanvasElement | null = null;
 function getSamplerCanvas(): HTMLCanvasElement {
@@ -27,11 +24,6 @@ function getSamplerCanvas(): HTMLCanvasElement {
   return _samplerCanvas;
 }
 
-/**
- * Sample the dominant color from an image by down-scaling to 4x4
- * and averaging the top row. Returns an rgba string for use as
- * the ambient glow color (YouTube ambient mode style).
- */
 function sampleImageColor(img: HTMLImageElement): string {
   const canvas = getSamplerCanvas();
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -46,31 +38,23 @@ function sampleImageColor(img: HTMLImageElement): string {
 
 interface KenBurnsStageProps {
   segment: Segment | null;
-  /** Called whenever the visible image index changes (or on initial mount). */
   onActiveImageChange?: (url: string | null) => void;
 }
 
-const CROSSFADE_DURATION_MS = 2000;
-const CYCLE_INTERVAL_MS = 7000;
+const GALLERY_CYCLE_MS = 5000;
 
 export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStageProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  /** Tracks whether the very first image for this segment has been revealed (blur-in transition). */
+  const [poolIndex, setPoolIndex] = useState(0);
   const hasRevealedFirstRef = useRef(false);
-  /** Previous image count — used to detect when new images arrive dynamically. */
-  const prevImageCountRef = useRef(0);
   const isKenBurnsPaused = usePlayerStore((s) => s.isKenBurnsPaused);
   const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const beats = usePlayerStore((s) => s.beats);
   const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
   const voiceState = useVoiceStore((s) => s.state);
 
-  // Determine what to show for current beat
+  // Determine current beat visual for source badge
   const currentBeat = beats[currentBeatIndex] ?? null;
-  const currentBeatVisualType = currentBeat?.visualType ?? 'illustration';
-  const effectiveBeatUrl = currentBeat?.cinematicUrl ?? currentBeat?.imageUrl ?? null;
   const beatVideoUrl = currentBeat?.videoUrl ?? null;
-  const hasBeatVisual = Boolean(effectiveBeatUrl || beatVideoUrl);
 
   const shouldPause =
     isKenBurnsPaused ||
@@ -80,49 +64,95 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
   const images = segment?.imageUrls ?? [];
   const hasVideo = Boolean(segment?.videoUrl);
 
-  // Cycle through images
+  // ── Build image pool: interleave beat images + segment Imagen frames ──
+  const imagePool = useMemo<PoolEntry[]>(() => {
+    const pool: PoolEntry[] = [];
+    const beatUrls: PoolEntry[] = [];
+    const segUrls: PoolEntry[] = [];
+
+    // Collect beat images
+    for (let i = 0; i < beats.length; i++) {
+      const b = beats[i];
+      const url = b?.cinematicUrl ?? b?.imageUrl ?? null;
+      if (url) {
+        beatUrls.push({
+          url,
+          source: b?.cinematicUrl ? 'imagen' : 'interleaved',
+          kenBurnsIndex: i % 4,
+        });
+      }
+    }
+
+    // Collect segment Imagen 3 frames
+    for (let i = 0; i < images.length; i++) {
+      segUrls.push({
+        url: images[i],
+        source: 'imagen',
+        kenBurnsIndex: (i + 2) % 4, // offset for visual variety
+      });
+    }
+
+    // Interleave: beat, seg, beat, seg, ...
+    const maxLen = Math.max(beatUrls.length, segUrls.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < beatUrls.length) pool.push(beatUrls[i]);
+      if (i < segUrls.length) pool.push(segUrls[i]);
+    }
+
+    // If no beat images, just use segment images
+    if (pool.length === 0) {
+      return segUrls;
+    }
+
+    return pool;
+  }, [beats, images]);
+
+  // ── Beat-aware pool reset: jump to beat's image on beat change ──
   useEffect(() => {
-    if (hasVideo || images.length <= 1 || shouldPause) return;
+    if (beats.length === 0 || imagePool.length === 0) return;
+    const beat = beats[currentBeatIndex];
+    const beatUrl = beat?.cinematicUrl ?? beat?.imageUrl ?? null;
+    if (!beatUrl) return;
+
+    // Find this beat's image in the pool
+    const idx = imagePool.findIndex((e) => e.url === beatUrl);
+    if (idx >= 0) {
+      setPoolIndex(idx);
+    }
+  }, [currentBeatIndex, beats, imagePool]);
+
+  // ── Gallery cycling: every 5s, advance to next image in pool ──
+  useEffect(() => {
+    if (imagePool.length <= 1 || shouldPause || hasVideo) return;
 
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
-    }, CYCLE_INTERVAL_MS);
+      setPoolIndex((prev) => (prev + 1) % imagePool.length);
+    }, GALLERY_CYCLE_MS);
 
     return () => clearInterval(interval);
-  }, [hasVideo, images.length, shouldPause]);
+  }, [imagePool.length, shouldPause, hasVideo]);
 
-  // Reset index and first-reveal flag when segment changes
+  // Reset on segment change
   useEffect(() => {
-    setCurrentIndex(0);
+    setPoolIndex(0);
     hasRevealedFirstRef.current = false;
-    prevImageCountRef.current = 0;
   }, [segment?.id]);
 
-  // Detect when new images arrive dynamically and update the cycle
-  useEffect(() => {
-    const prevCount = prevImageCountRef.current;
-    prevImageCountRef.current = images.length;
-
-    if (images.length > 0 && prevCount === 0) {
-      // First image(s) just arrived — mark for blur-in reveal
-      hasRevealedFirstRef.current = false;
-    }
-  }, [images.length]);
-
-  // Notify parent of active image URL whenever it changes
+  // Notify parent of active image
   useEffect(() => {
     if (!onActiveImageChange) return;
-    const url = images[currentIndex] ?? null;
-    onActiveImageChange(url);
-  }, [currentIndex, images, onActiveImageChange]);
+    const entry = imagePool[poolIndex];
+    onActiveImageChange(entry?.url ?? null);
+  }, [poolIndex, imagePool, onActiveImageChange]);
 
   const playState = shouldPause ? 'paused' : 'running';
 
-  // Ambient color sampling — writes --ambient-color to .player-root ancestor
+  // Current pool entry
+  const currentEntry = imagePool[poolIndex] ?? null;
+
+  // Ambient color sampling
   const handleImageLoad = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>, index: number) => {
-      // Only sample from the currently active image
-      if (index !== currentIndex) return;
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
       const imgEl = e.currentTarget;
       try {
         const color = sampleImageColor(imgEl);
@@ -133,25 +163,8 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         // Canvas taint from CORS — silently ignore
       }
     },
-    [currentIndex],
+    [],
   );
-
-  // Re-sample when currentIndex changes (image may already be loaded)
-  useEffect(() => {
-    const activeImg = document.querySelector<HTMLImageElement>(
-      `.player-stage img[data-index="${currentIndex}"]`,
-    );
-    if (activeImg?.complete && activeImg.naturalWidth > 0) {
-      try {
-        const color = sampleImageColor(activeImg);
-        document
-          .querySelector<HTMLElement>('.player-root')
-          ?.style.setProperty('--ambient-color', color);
-      } catch {
-        // Canvas taint — ignore
-      }
-    }
-  }, [currentIndex]);
 
   if (!segment) {
     return (
@@ -162,13 +175,12 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     );
   }
 
-  if (images.length === 0 && !hasVideo) {
+  if (imagePool.length === 0 && !hasVideo) {
     return (
       <div
         className="absolute inset-0 flex flex-col items-center justify-center"
         style={{ background: 'var(--player-bg)' }}
       >
-        {/* Ornamental pulse ring */}
         <div
           className="kb-skeleton-pulse"
           style={{
@@ -190,7 +202,6 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         >
           Loading visuals…
         </p>
-        {/* Vignette overlay */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -213,7 +224,6 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
         />
-        {/* Vignette overlay */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -226,42 +236,14 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
   }
 
   return (
-    // key={segment.id} forces a full remount on every segment change so that:
-    // 1. All ken-burns @keyframe animations restart from 0% rather than
-    //    continuing from wherever they were in the previous segment's cycle.
-    // 2. currentIndex is implicitly reset to 0 because the component remounts.
     <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
-      {/* Beat visuals are PRIMARY — interleaved TEXT+IMAGE/VIDEO from Gemini */}
-      <AnimatePresence mode="wait">
-        {/* Illustration or Cinematic beat — show image */}
-        {effectiveBeatUrl && currentBeatVisualType !== 'video' && (
-          <motion.div
-            key={`beat-${currentBeatIndex}`}
-            className="absolute inset-0"
-            style={{ zIndex: 2 }}
-            initial={{ opacity: 0, scale: 1.02 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1.2, ease: 'easeOut' }}
-          >
-            <img
-              src={effectiveBeatUrl}
-              alt={`Beat ${currentBeatIndex + 1}`}
-              className="h-full w-full object-cover"
-              style={{
-                animation: `ken-burns-${currentBeatIndex % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
-                animationPlayState: playState,
-              }}
-            />
-          </motion.div>
-        )}
-
-        {/* Video beat — show video clip */}
-        {beatVideoUrl && currentBeatVisualType === 'video' && (
+      {/* Video beat overlay */}
+      <AnimatePresence>
+        {beatVideoUrl && currentBeat?.visualType === 'video' && (
           <motion.div
             key={`beat-video-${currentBeatIndex}`}
             className="absolute inset-0"
-            style={{ zIndex: 2 }}
+            style={{ zIndex: 3 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -279,52 +261,32 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         )}
       </AnimatePresence>
 
-      {/* Imagen 3 Ken Burns images — FALLBACK when no beat image, ambient background when beat active */}
-      <div
-        className="absolute inset-0"
-        style={{
-          opacity: hasBeatVisual ? 0.15 : 1,
-          transition: 'opacity 1.2s ease-in-out',
-        }}
-      >
-        {images.map((url, i) => {
-          const isActive = i === currentIndex;
-          // Determine if this image should play the initial blur-in reveal
-          const isFirstReveal = isActive && !hasRevealedFirstRef.current;
-          return (
-            <motion.img
-              key={`${segment.id}-${i}`}
-              src={url}
+      {/* Image gallery — continuous cycling with parallax depth transitions */}
+      <AnimatePresence mode="sync">
+        {currentEntry && (
+          <motion.div
+            key={`pool-${poolIndex}`}
+            className="absolute inset-0"
+            style={{ zIndex: 2 }}
+            initial={{ opacity: 0, scale: 1.06, y: '1.5%', filter: 'blur(2px)' }}
+            animate={{ opacity: 1, scale: 1, y: '0%', filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.97, filter: 'blur(6px)' }}
+            transition={{ duration: 1.4, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <img
+              src={currentEntry.url}
               alt=""
               role="presentation"
-              data-index={i}
-              onLoad={(e) => {
-                handleImageLoad(e, i);
-                // Mark first image as revealed after it loads
-                if (isFirstReveal) {
-                  hasRevealedFirstRef.current = true;
-                }
-              }}
-              initial={isFirstReveal ? { filter: 'blur(20px)', opacity: 0 } : false}
-              animate={isFirstReveal
-                ? { filter: 'blur(0px)', opacity: isActive ? 1 : 0 }
-                : { opacity: isActive ? 1 : 0 }
-              }
-              transition={isFirstReveal
-                ? { duration: 1.5, ease: 'easeOut' }
-                : { duration: CROSSFADE_DURATION_MS / 1000, ease: 'easeInOut' }
-              }
-              className="absolute inset-0 w-full h-full object-cover"
+              onLoad={handleImageLoad}
+              className="h-full w-full object-cover"
               style={{
-                animation: `ken-burns-${i % 4} var(--ken-speed) ease-in-out infinite alternate`,
-                animationPlayState: isActive ? playState : 'paused',
-                pointerEvents: isActive ? 'auto' : 'none',
-                willChange: isActive ? 'transform, opacity' : 'auto',
+                animation: `ken-burns-${currentEntry.kenBurnsIndex} var(--ken-speed, 28s) ease-in-out infinite alternate`,
+                animationPlayState: playState,
               }}
             />
-          );
-        })}
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Live illustration overlay */}
       <AnimatePresence>
@@ -349,7 +311,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             }}
             className="absolute inset-0 w-full h-full object-cover"
             style={{
-              zIndex: 3,
+              zIndex: 4,
               willChange: 'transform, opacity',
             }}
           />
@@ -364,14 +326,14 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         />
       )}
 
-      {/* Visual source badge — top-right pill showing interleaved/imagen/veo */}
-      {hasBeatVisual && (
+      {/* Visual source badge — dynamically shows current image source */}
+      {currentEntry && (
         <div
           className="absolute top-4 right-4 z-10 pointer-events-none"
           style={{ opacity: 'var(--chrome-opacity, 1)', transition: 'opacity 0.4s ease' }}
         >
           <VisualSourceBadge
-            source={beatTypeToSource(currentBeatVisualType as BeatVisualType)}
+            source={currentEntry.source}
             compact
           />
         </div>
