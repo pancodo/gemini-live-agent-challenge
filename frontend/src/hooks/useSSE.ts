@@ -32,6 +32,7 @@ export function useSSE(sessionId: string | null): void {
 
   const {
     setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource,
+    addStoryboardScene, appendStoryboardText, setStoryboardImage,
   } = useResearchStore(
     useShallow((s) => ({
       setAgent: s.setAgent,
@@ -41,6 +42,9 @@ export function useSSE(sessionId: string | null): void {
       addPhaseMessage: s.addPhaseMessage,
       setScanEntities: s.setScanEntities,
       addEvaluatedSource: s.addEvaluatedSource,
+      addStoryboardScene: s.addStoryboardScene,
+      appendStoryboardText: s.appendStoryboardText,
+      setStoryboardImage: s.setStoryboardImage,
     }))
   );
 
@@ -118,6 +122,22 @@ export function useSSE(sessionId: string | null): void {
           }
           break;
 
+        case 'storyboard_scene_start':
+          addStoryboardScene(event.sceneId, event.segmentId, event.title, event.mood);
+          break;
+
+        case 'storyboard_text_chunk':
+          appendStoryboardText(event.sceneId, event.text);
+          break;
+
+        case 'storyboard_image_ready':
+          setStoryboardImage(event.sceneId, event.imageUrl, event.caption);
+          break;
+
+        case 'segment_playable':
+          setSegment(event.segmentId, { status: 'ready' });
+          break;
+
         case 'error':
           // If error targets a specific agent, mark it as errored with message
           if (event.agentId) {
@@ -129,7 +149,7 @@ export function useSSE(sessionId: string | null): void {
           break;
       }
     },
-    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo],
+    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage],
   );
 
   const processEventRef = useRef(processEvent);
@@ -154,7 +174,13 @@ export function useSSE(sessionId: string | null): void {
 
           const event = JSON.parse(e.data as string) as SSEEvent;
           retryCountRef.current = 0; // reset on successful message
-          pendingRef.current.push(event);
+
+          // Bypass drip buffer for text chunks to give live streaming feel
+          if (event.type === 'storyboard_text_chunk') {
+            processEventRef.current(event);
+          } else {
+            pendingRef.current.push(event);
+          }
         } catch {
           /* ignore malformed SSE data */
         }
