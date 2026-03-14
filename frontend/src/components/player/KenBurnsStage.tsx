@@ -56,8 +56,12 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
   const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
   const voiceState = useVoiceStore((s) => s.state);
 
-  // Beat image takes priority when available
-  const currentBeatImage = beats[currentBeatIndex]?.imageUrl ?? null;
+  // Determine what to show for current beat
+  const currentBeat = beats[currentBeatIndex] ?? null;
+  const currentBeatVisualType = currentBeat?.visualType ?? 'illustration';
+  const effectiveBeatUrl = currentBeat?.cinematicUrl ?? currentBeat?.imageUrl ?? null;
+  const beatVideoUrl = currentBeat?.videoUrl ?? null;
+  const hasBeatVisual = Boolean(effectiveBeatUrl || beatVideoUrl);
 
   const shouldPause =
     isKenBurnsPaused ||
@@ -218,9 +222,10 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     //    continuing from wherever they were in the previous segment's cycle.
     // 2. currentIndex is implicitly reset to 0 because the component remounts.
     <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
-      {/* Beat images are PRIMARY — interleaved TEXT+IMAGE from Gemini */}
+      {/* Beat visuals are PRIMARY — interleaved TEXT+IMAGE/VIDEO from Gemini */}
       <AnimatePresence mode="wait">
-        {currentBeatImage && (
+        {/* Illustration or Cinematic beat — show image */}
+        {effectiveBeatUrl && currentBeatVisualType !== 'video' && (
           <motion.div
             key={`beat-${currentBeatIndex}`}
             className="absolute inset-0"
@@ -231,7 +236,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             transition={{ duration: 1.2, ease: 'easeOut' }}
           >
             <img
-              src={currentBeatImage}
+              src={effectiveBeatUrl}
               alt={`Beat ${currentBeatIndex + 1}`}
               className="h-full w-full object-cover"
               style={{
@@ -241,13 +246,35 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             />
           </motion.div>
         )}
+
+        {/* Video beat — show video clip */}
+        {beatVideoUrl && currentBeatVisualType === 'video' && (
+          <motion.div
+            key={`beat-video-${currentBeatIndex}`}
+            className="absolute inset-0"
+            style={{ zIndex: 2 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+          >
+            <video
+              src={beatVideoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="h-full w-full object-cover"
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Imagen 3 Ken Burns images — FALLBACK when no beat image, ambient background when beat active */}
       <div
         className="absolute inset-0"
         style={{
-          opacity: currentBeatImage ? 0.2 : 1,
+          opacity: hasBeatVisual ? 0.15 : 1,
           transition: 'opacity 1.2s ease-in-out',
         }}
       >
