@@ -276,10 +276,10 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
               : scrambledTitle}
           </h3>
           <span
-            className="font-sans text-[10px] text-[var(--muted)] uppercase tracking-[0.15em] shrink-0 mt-1.5"
-            style={{ fontVariantNumeric: 'tabular-nums' }}
+            className="font-serif text-[12px] text-[var(--gold)] tracking-[0.1em] shrink-0 mt-1"
+            style={{ opacity: 0.5 }}
           >
-            {String(index + 1).padStart(2, '0')}
+            {['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'][index] ?? String(index + 1)}
           </span>
         </div>
 
@@ -356,7 +356,7 @@ export const SegmentCard = memo(function SegmentCard({ segment, index }: Segment
         {segment.script && (
           <div className="mb-3">
             <p
-              className={`font-sans text-[13.5px] text-[var(--text)] leading-relaxed opacity-70 ${scriptExpanded ? '' : 'line-clamp-3'}`}
+              className={`font-sans text-[13.5px] text-[var(--text)] leading-relaxed opacity-70 drop-cap ${scriptExpanded ? '' : 'line-clamp-3'}`}
             >
               {segment.script}
             </p>
