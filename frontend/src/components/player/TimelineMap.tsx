@@ -256,9 +256,9 @@ function TimelineMapInner({
     if (pulseRafRef.current) cancelAnimationFrame(pulseRafRef.current);
     pulseRafRef.current = 0;
     for (const id of ALL_PIN_LAYERS) {
-      try { map.removeLayer(id); } catch { /* ok */ }
+      if (map.getLayer(id)) map.removeLayer(id);
     }
-    try { map.removeSource(PIN_SOURCE); } catch { /* ok */ }
+    if (map.getSource(PIN_SOURCE)) map.removeSource(PIN_SOURCE);
   }, []);
 
   const clearRoutes = useCallback(() => {
