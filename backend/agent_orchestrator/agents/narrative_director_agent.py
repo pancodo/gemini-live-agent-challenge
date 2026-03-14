@@ -60,6 +60,7 @@ from .sse_helpers import (
     build_storyboard_text_chunk_event,
     build_stats_update_event,
 )
+from .signing_helpers import get_signing_credentials as _get_signing_creds
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,7 @@ class NarrativeDirectorAgent(BaseAgent):
                             signed_url: str = await loop.run_in_executor(
                                 None,
                                 lambda bl=blob: bl.generate_signed_url(
+                                    credentials=_get_signing_creds(),
                                     expiration=timedelta(hours=4),
                                     method="GET",
                                     version="v4",

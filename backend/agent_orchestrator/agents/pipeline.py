@@ -124,9 +124,11 @@ def _sign_gcs_url(gcs_uri: str, bucket_name: str) -> str:
     if not gcs_uri.startswith("gs://"):
         return gcs_uri
     blob_path = gcs_uri.replace(f"gs://{bucket_name}/", "")
+    from .signing_helpers import get_signing_credentials
     client = gcs_storage.Client()
     blob = client.bucket(bucket_name).blob(blob_path)
     return blob.generate_signed_url(
+        credentials=get_signing_credentials(),
         expiration=timedelta(hours=4),
         method="GET",
         version="v4",
