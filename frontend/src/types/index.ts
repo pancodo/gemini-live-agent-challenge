@@ -158,6 +158,7 @@ export interface LiveIllustration {
   imageUrl: string;
   caption: string;
   receivedAt: number;
+  query?: string;
 }
 
 export interface LiveIllustrationEvent {

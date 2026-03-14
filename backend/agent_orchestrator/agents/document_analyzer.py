@@ -1018,6 +1018,7 @@ class DocumentAnalyzerAgent(BaseAgent):
                 build_agent_status_event(
                     agent_id="narrative_curator",
                     status="done",
+                    query="Curating narrative arc from document analysis",
                     elapsed=round(t_curator_elapsed, 1),
                     facts=[b.title for b in scene_briefs],
                 ),
@@ -1027,6 +1028,7 @@ class DocumentAnalyzerAgent(BaseAgent):
                 build_agent_status_event(
                     agent_id="document_analyzer",
                     status="done",
+                    query="Analyzing document structure and extracting scenes",
                     elapsed=round(t_total_elapsed, 1),
                     facts=[
                         f"{total_pages} pages processed",

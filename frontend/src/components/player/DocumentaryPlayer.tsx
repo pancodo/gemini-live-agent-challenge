@@ -17,6 +17,7 @@ import { TimelineMap } from './TimelineMap';
 import { downloadImage, downloadImages, downloadVideo } from '../../utils/downloadImage';
 import { toast } from 'sonner';
 import type { MapViewMode } from '../../types';
+import { useSettings } from '../../hooks/useSettings';
 
 /**
  * PipelinePhaseLabel — Shows the current (latest) pipeline phase name.
@@ -76,6 +77,12 @@ export function DocumentaryPlayer() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [mapHintDismissed, setMapHintDismissed] = useState(false);
+  const [mapDiscoveryVisible, setMapDiscoveryVisible] = useState(false);
+  const [settings, updateSetting] = useSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const updateSettingRef = useRef(updateSetting);
+  updateSettingRef.current = updateSetting;
   const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
@@ -140,14 +147,20 @@ export function DocumentaryPlayer() {
   const hasPrev = currentIndexInReady > 0;
   const hasNext = currentIndexInReady < readySegments.length - 1;
 
-  // ── Idle timer (auto-hide chrome after 3s) ───────────────────
+  // ── Idle timer (auto-hide chrome — 8s first visit, 3s thereafter) ──
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     const reset = () => {
       setIdle(false);
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setIdle(true), 3000);
+      const delay = !settingsRef.current.hasSeenSegmentControls ? 8000 : 3000;
+      timerRef.current = setTimeout(() => {
+        setIdle(true);
+        if (!settingsRef.current.hasSeenSegmentControls) {
+          updateSettingRef.current('hasSeenSegmentControls', true);
+        }
+      }, delay);
     };
 
     window.addEventListener('mousemove', reset);
@@ -162,6 +175,64 @@ export function DocumentaryPlayer() {
       clearTimeout(timerRef.current);
     };
   }, [setIdle]);
+
+  // Auto-start narration is intentionally disabled — voice activation
+  // should be an explicit user action (press Space or click voice button).
+  // The voice button is always visible in the bottom-right corner.
+
+  // ── Auto-show keyboard shortcuts on first visit ────────────────
+  useEffect(() => {
+    if (settingsRef.current.hasSeenPlayerShortcuts) return;
+    const showTimer = setTimeout(() => setShortcutsOpen(true), 1500);
+    const hideTimer = setTimeout(() => {
+      setShortcutsOpen(false);
+      updateSettingRef.current('hasSeenPlayerShortcuts', true);
+    }, 6500);
+    return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Map discovery hint on first visit ──────────────────────────
+  useEffect(() => {
+    if (settingsRef.current.hasSeenMapDiscovery) return;
+    const showTimer = setTimeout(() => setMapDiscoveryVisible(true), 4000);
+    const hideTimer = setTimeout(() => {
+      setMapDiscoveryVisible(false);
+      updateSettingRef.current('hasSeenMapDiscovery', true);
+    }, 8000);
+    return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Interruption hint on first historian speech ────────────────
+  const hasShownInterruptHintRef = useRef(false);
+
+  useEffect(() => {
+    if (voiceState !== 'historian_speaking') return;
+    if (hasShownInterruptHintRef.current) return;
+    hasShownInterruptHintRef.current = true;
+    if (settingsRef.current.hasSeenInterruptHint) return;
+
+    const timer = setTimeout(() => {
+      toast('Speak anytime to ask a question or redirect the narrative', {
+        duration: 6000,
+      });
+      updateSettingRef.current('hasSeenInterruptHint', true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [voiceState]);
+
+  // ── Illustration toast (connects question to visual change) ────
+  const prevIllustrationRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!liveIllustration) return;
+    if (liveIllustration.imageUrl === prevIllustrationRef.current) return;
+    prevIllustrationRef.current = liveIllustration.imageUrl;
+
+    toast(liveIllustration.query ? 'Illustrating your question' : 'Scene illustrated', {
+      description: liveIllustration.caption,
+      duration: 4000,
+    });
+  }, [liveIllustration]);
 
   // ── Segment navigation ───────────────────────────────────────
   const navigateSegment = useCallback(
@@ -543,44 +614,77 @@ export function DocumentaryPlayer() {
             )}
 
             {/* Map view toggle */}
-            <button
-              onClick={cycleMapMode}
-              className="p-2 rounded transition-colors duration-200"
-              style={{
-                color: mapViewMode !== 'ken-burns'
-                  ? 'var(--glow-primary)'
-                  : 'var(--player-text-secondary)',
-                background: mapViewMode !== 'ken-burns'
-                  ? 'rgba(196,149,106,0.15)'
-                  : 'transparent',
-                border: mapViewMode !== 'ken-burns'
-                  ? '1px solid var(--player-border)'
-                  : '1px solid transparent',
-                borderRadius: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-              aria-label={`Map view: ${mapViewMode}`}
-              title={`Map: ${mapViewMode === 'ken-burns' ? 'off' : mapViewMode} (M)`}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            <div className="relative">
+              <button
+                onClick={() => {
+                  cycleMapMode();
+                  if (mapDiscoveryVisible) {
+                    setMapDiscoveryVisible(false);
+                    updateSetting('hasSeenMapDiscovery', true);
+                  }
+                }}
+                className={`p-2 rounded transition-colors duration-200${mapDiscoveryVisible ? ' globe-pulse' : ''}`}
+                style={{
+                  color: mapViewMode !== 'ken-burns'
+                    ? 'var(--glow-primary)'
+                    : 'var(--player-text-secondary)',
+                  background: mapViewMode !== 'ken-burns'
+                    ? 'rgba(196,149,106,0.15)'
+                    : 'transparent',
+                  border: mapViewMode !== 'ken-burns'
+                    ? '1px solid var(--player-border)'
+                    : '1px solid transparent',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+                aria-label={`Map view: ${mapViewMode}`}
+                title={`Map: ${mapViewMode === 'ken-burns' ? 'off' : mapViewMode} (M)`}
               >
-                {/* Globe/map icon */}
-                <circle cx="8" cy="8" r="6" />
-                <path d="M2 8h12" />
-                <path d="M8 2c-2 2-2 4 0 6s2 4 0 6" />
-              </svg>
-            </button>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {/* Globe/map icon */}
+                  <circle cx="8" cy="8" r="6" />
+                  <path d="M2 8h12" />
+                  <path d="M8 2c-2 2-2 4 0 6s2 4 0 6" />
+                </svg>
+              </button>
+              <AnimatePresence>
+                {mapDiscoveryVisible && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.3 }}
+                    className="absolute top-full mt-2 right-0 z-50"
+                    style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 10,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      color: 'var(--glow-primary)',
+                      whiteSpace: 'nowrap',
+                      background: 'var(--player-surface)',
+                      border: '1px solid var(--player-border)',
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                    }}
+                  >
+                    Map available <span style={{ color: 'var(--muted)' }}>(M)</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Shortcuts hint */}
             <div className="relative">
@@ -701,7 +805,7 @@ export function DocumentaryPlayer() {
         }}
       >
         <div
-          className="flex items-center justify-between px-8 py-5"
+          className="flex items-center justify-between pl-8 pr-20 py-5"
           style={{
             background:
               'linear-gradient(to top, var(--player-overlay) 0%, transparent 100%)',
