@@ -193,10 +193,11 @@ export function VoiceLayer() {
     const currentState = useVoiceStore.getState().state;
     if (currentState === 'idle') {
       // Queue text — sent reliably when onReady fires (no fragile setTimeout)
+      // Do NOT start mic capture here — this is for narration playback only.
+      // Mic activates separately when user presses Space to ask a question.
       pendingGreetingRef.current = text;
       connect();
-      capture.start().catch(() => { disconnect(); reset(); });
-      transition('listening');
+      transition('historian_speaking');
     } else {
       sendTextStableRef.current(text);
     }
