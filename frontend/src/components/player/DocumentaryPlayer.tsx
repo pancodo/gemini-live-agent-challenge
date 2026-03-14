@@ -485,11 +485,22 @@ export function DocumentaryPlayer() {
         cycleMapMode();
       } else if (e.key === ' ') {
         e.preventDefault();
-        // Delegate to VoiceButton's toggle which handles WebSocket connection,
-        // mic capture, and proper state transitions — not just state label changes.
-        const begin = useVoiceStore.getState().beginConsultation;
-        if (voiceState === 'idle' && begin) {
-          begin();
+        if (voiceState === 'idle') {
+          // In the player, start voice with segment narration (not generic greeting).
+          // sendTextToHistorian auto-connects if idle.
+          const send = useVoiceStore.getState().sendTextToHistorian;
+          const seg = useResearchStore.getState().segments[currentSegmentId ?? ''];
+          if (send && seg?.script) {
+            send(
+              `You are narrating the segment titled "${seg.title}". ` +
+              `Deliver this naturally in your historian voice. Do not introduce yourself. ` +
+              `\n\nScript:\n${seg.script}`
+            );
+          } else {
+            // Fallback to generic greeting if no segment
+            const begin = useVoiceStore.getState().beginConsultation;
+            if (begin) begin();
+          }
         } else if (voiceState === 'listening') {
           setVoiceState('idle');
         }
