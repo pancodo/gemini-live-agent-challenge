@@ -86,10 +86,10 @@ def get_gcs() -> storage.Client:
 
 def _make_document_url(session_id: str) -> str:
     """Generate a 24-hour signed GET URL for the uploaded PDF."""
-    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    from .session import get_signing_credentials
     blob = get_gcs().bucket(GCS_BUCKET).blob(f"{session_id}/document.pdf")
     return blob.generate_signed_url(
-        credentials=credentials,
+        credentials=get_signing_credentials(),
         version="v4",
         expiration=timedelta(hours=24),
         method="GET",

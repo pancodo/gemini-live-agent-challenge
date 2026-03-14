@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 
 import type { BranchNode, LiveIllustration, MapViewMode, SegmentGeo } from '../types';
 
@@ -58,8 +59,17 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   clearIris: () => set({ irisTargetPath: null }),
   branchGraph: [],
   activeBranchId: null,
-  addBranchNode: (node) =>
-    set((state) => ({ branchGraph: [...state.branchGraph, node] })),
+  addBranchNode: (node) => {
+    set((state) => ({ branchGraph: [...state.branchGraph, node] }));
+    toast('New chapter created', {
+      description: node.triggerQuestion,
+      duration: 5000,
+      action: {
+        label: 'Go to chapter',
+        onClick: () => usePlayerStore.getState().open(node.segmentId),
+      },
+    });
+  },
   setActiveBranch: (segmentId) => set({ activeBranchId: segmentId }),
   isConversationMode: false,
   setConversationMode: (isConversationMode) => set({ isConversationMode }),

@@ -577,7 +577,8 @@ export function AgentModal({ agentId, agent, sessionId, onClose }: AgentModalPro
                   animate={{ x: 0, opacity: 1 }}
                   exit={reducedMotion ? { opacity: 0 } : { x: '100%', opacity: 0 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 32, mass: 0.9 }}
-                  className="fixed right-0 top-0 bottom-0 z-50 flex flex-col w-[520px] max-w-[95vw] bg-[var(--bg2)] border-l border-[var(--bg4)] shadow-2xl overflow-hidden"
+                  className="fixed right-0 bottom-0 z-50 flex flex-col w-[520px] max-w-[95vw] bg-[var(--bg2)] border-l border-[var(--bg4)] shadow-2xl overflow-hidden"
+                  style={{ top: 'var(--topnav-height, 44px)' }}
                 >
                   {/* ── Header ── */}
                   <div className="flex flex-col gap-3 px-5 pt-5 pb-3 shrink-0">

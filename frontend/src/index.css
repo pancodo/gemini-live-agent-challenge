@@ -306,23 +306,28 @@ body {
   --mouse-x: 50%;
   --mouse-y: 50%;
   position: relative;
-  contain: layout paint;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, border-left-color 0.2s ease;
 }
-.agent-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    400px circle at var(--mouse-x) var(--mouse-y),
-    rgba(196, 149, 106, 0.10),
-    transparent 40%
-  );
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-  border-radius: inherit;
+.agent-card:not(.searching):not(.evaluating):hover {
+  border-color: rgba(139, 94, 26, 0.35) !important;
+  box-shadow: 0 2px 12px rgba(139, 94, 26, 0.10), 0 0 0 1px rgba(139, 94, 26, 0.08);
 }
-.agent-card:hover::after { opacity: 1; }
+
+/* Done-state accent — green left border */
+.agent-card.done {
+  border-left: 2px solid var(--green);
+  box-shadow: 0 1px 4px rgba(46, 110, 68, 0.06);
+}
+
+/* Error-state accent — red left border */
+.agent-card.error {
+  border-left: 2px solid #c0392b;
+}
+
+/* Searching-state accent — teal left border (visible between rotating-border frames) */
+.agent-card.searching {
+  border-left: 2px solid var(--teal);
+}
 
 /* ── Skeleton Animations ───────────────────────────────── */
 @keyframes shimmer {
@@ -341,6 +346,14 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+/* Segment card ready-state elevation */
+.seg-card.ready,
+.seg-card.complete,
+.seg-card.visual_ready {
+  border-color: rgba(139, 94, 26, 0.25);
+  box-shadow: 0 2px 8px rgba(139, 94, 26, 0.08);
+}
+
 .seg-card.ready .seg-title {
   -webkit-text-fill-color: initial;
   animation: content-reveal 0.4s ease-out;
@@ -355,7 +368,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 20px 0;
+  margin: 12px 0;
   cursor: pointer;
   background: none;
   border: none;
@@ -780,4 +793,14 @@ body {
   opacity: 0;
   transform: translateY(20px);
   pointer-events: none;
+}
+
+/* ── Globe pulse for map discovery hint ── */
+@keyframes globe-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(196,149,106,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(196,149,106,0); }
+  100% { box-shadow: 0 0 0 0 rgba(196,149,106,0); }
+}
+.globe-pulse {
+  animation: globe-pulse-ring 1.5s ease-out 2;
 }

@@ -495,6 +495,7 @@ class FactValidatorAgent(BaseAgent):
                     build_agent_status_event(
                         agent_id="fact_validator",
                         status="error",
+                        query="Cross-referencing narration against research evidence",
                         elapsed=round(time.monotonic() - t_start, 1),
                     ),
                 )
@@ -585,6 +586,7 @@ class FactValidatorAgent(BaseAgent):
                     build_agent_status_event(
                         agent_id="fact_validator",
                         status="error",
+                        query="Cross-referencing narration against research evidence",
                         elapsed=round(time.monotonic() - t_start, 1),
                     ),
                 )
@@ -614,6 +616,7 @@ class FactValidatorAgent(BaseAgent):
                     build_agent_status_event(
                         agent_id="fact_validator",
                         status="done",
+                        query="Cross-referencing narration against research evidence",
                         elapsed=t_elapsed,
                         facts=[
                             f"Segment count mismatch ({len(validated_segments)} vs {num_segments})",
@@ -659,6 +662,7 @@ class FactValidatorAgent(BaseAgent):
                 build_agent_status_event(
                     agent_id="fact_validator",
                     status="done",
+                    query="Cross-referencing narration against research evidence",
                     elapsed=t_elapsed,
                     facts=[
                         f"{total_checked} claims checked across {num_segments} segments",

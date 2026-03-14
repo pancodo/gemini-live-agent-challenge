@@ -412,6 +412,7 @@ async def _run_scene_pipeline(
                     build_agent_status_event(
                         agent_id=f"visual_research_{scene_id}",
                         status="error",
+                        query=scene_brief.get("title", scene_id),
                         elapsed=round(time.monotonic() - t_start, 1),
                     ),
                 )
@@ -437,6 +438,7 @@ async def _run_scene_pipeline(
                 build_agent_status_event(
                     agent_id=f"visual_research_{scene_id}",
                     status="error",
+                    query=scene_brief.get("title", scene_id),
                     elapsed=round(time.monotonic() - t_start, 1),
                 ),
             )
@@ -463,6 +465,7 @@ async def _run_scene_pipeline(
                 build_agent_status_event(
                     agent_id=f"visual_research_{scene_id}",
                     status="error",
+                    query=scene_brief.get("title", scene_id),
                     elapsed=round(time.monotonic() - t_start, 1),
                 ),
             )
@@ -578,6 +581,7 @@ async def _run_scene_pipeline(
             build_agent_status_event(
                 agent_id=f"visual_research_{scene_id}",
                 status="done",
+                query=scene_brief.get("title", scene_id),
                 elapsed=t_elapsed,
                 facts=[
                     f"{manifest.sources_accepted} sources accepted, "
@@ -841,6 +845,7 @@ class VisualResearchOrchestrator(BaseAgent):
                 build_agent_status_event(
                     agent_id="visual_research_orchestrator",
                     status="done",
+                    query="Researching period-accurate visual references for all scenes",
                     elapsed=t_elapsed,
                     facts=[
                         f"{manifests_written}/{len(pairs)} visual manifests completed",

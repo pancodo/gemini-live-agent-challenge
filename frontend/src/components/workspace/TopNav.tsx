@@ -163,8 +163,21 @@ export function TopNav() {
     [handleSave],
   );
 
+  // Measure total nav height (header + phase bar) and expose as CSS variable
+  // so the AgentModal drawer can position itself below the navbar.
+  const navRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      document.documentElement.style.setProperty('--topnav-height', `${el.offsetHeight}px`);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="sticky top-0 z-100">
+    <div ref={navRef} className="sticky top-0 z-100">
     <header
       className="flex items-center justify-between h-[44px] px-5 bg-[var(--bg2)] border-b border-[var(--bg4)]"
       role="banner"

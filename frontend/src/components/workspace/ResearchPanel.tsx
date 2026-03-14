@@ -118,7 +118,7 @@ function StatButton({ label, value, popover }: StatButtonProps) {
         onClick={() => setOpen((o) => !o)}
         className="font-sans text-[10px] uppercase tracking-[0.1em] text-[var(--muted)] hover:text-[var(--gold-d)] transition-colors cursor-pointer group"
       >
-        <span ref={spanRef} className="stat-value text-[var(--gold)] font-medium mr-1 group-hover:text-[var(--gold-d)]">
+        <span ref={spanRef} className="stat-value text-[16px] text-[var(--gold)] font-medium mr-1 group-hover:text-[var(--gold-d)]">
           {value}
         </span>
         {label}
@@ -291,7 +291,9 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
     ? agent.status
     : agent.status === 'error'
       ? 'error'
-      : '';
+      : agent.status === 'done'
+        ? 'done'
+        : '';
 
   const isActive = agent.status === 'searching' || agent.status === 'evaluating';
 
@@ -301,9 +303,9 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
       variants={itemVariants}
       onMouseMove={handleMouseMove}
       onClick={() => onClick(agent.id)}
-      className={`agent-card ${statusClass} relative rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] p-3 cursor-pointer overflow-hidden`}
-      whileHover={reducedMotion ? undefined : { scale: 1.01 }}
-      whileTap={reducedMotion ? undefined : { scale: 0.98 }}
+      className={`agent-card ${statusClass} group relative rounded-lg border border-[var(--bg4)] bg-[var(--bg)] p-3 cursor-pointer hover:z-10`}
+      whileHover={reducedMotion ? undefined : { y: -1 }}
+      whileTap={reducedMotion ? undefined : { scale: 0.99 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       role="button"
       tabIndex={0}
@@ -369,7 +371,10 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
           </AnimatePresence>
         </div>
 
-        {/* Elapsed timer */}
+        {/* Details hint + Elapsed timer */}
+        <span className="font-sans text-[9px] text-[var(--muted)] uppercase tracking-[0.1em] opacity-0 group-hover:opacity-60 transition-opacity shrink-0">
+          Details &#8599;
+        </span>
         <ElapsedTimer
           startElapsed={agent.elapsed}
           isActive={isActive}
@@ -557,10 +562,10 @@ export function ResearchPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Scrollable content area */}
-      <div className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4">
+      <div className="flex-1 flex flex-col gap-2 overflow-y-auto overflow-x-hidden px-5 pt-3 pb-16">
         {/* Section Header */}
         <div>
-          <h2 className="font-serif text-[10px] uppercase tracking-[0.4em] text-[var(--gold)] mb-2">
+          <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em] text-[var(--gold)] mb-1 text-center">
             Research Activity
           </h2>
         </div>
@@ -570,7 +575,7 @@ export function ResearchPanel() {
           variants={listVariants}
           initial="hidden"
           animate="show"
-          className="space-y-1"
+          className="space-y-2"
         >
           <AnimatePresence>
             {activePhases.map((phase) => {
@@ -629,8 +634,8 @@ export function ResearchPanel() {
 
       {/* Sticky stats footer — always visible */}
       <div
-        className="sticky bottom-0 shrink-0 flex gap-4 px-4 py-2 border-t"
-        style={{ borderColor: 'rgba(139,94,26,0.12)', background: 'var(--bg2)' }}
+        className="sticky bottom-0 shrink-0 flex justify-center gap-6 px-5 py-3 border-t"
+        style={{ borderColor: 'rgba(139,94,26,0.12)', background: 'var(--bg2)', boxShadow: '0 -4px 12px rgba(0,0,0,0.04)' }}
       >
         {([
           { label: 'Sources', value: sourcesFound, popover: <SourcesPopover agents={agents} /> },
