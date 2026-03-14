@@ -60,6 +60,8 @@ interface PlayerStore {
   resetBeats: () => void;
   /** Set narration active state */
   setIsNarrating: (v: boolean) => void;
+  /** Update an existing beat's visual type and/or URLs */
+  updateBeatVisual: (segmentId: string, beatIndex: number, updates: Partial<NarrationBeat>) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -140,6 +142,19 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
     })),
   resetBeats: () => set({ beats: [], currentBeatIndex: 0, isNarrating: false }),
   setIsNarrating: (isNarrating) => set({ isNarrating }),
+  updateBeatVisual: (segmentId, beatIndex, updates) =>
+    set((state) => {
+      const segBeats = state.beatsMap[segmentId];
+      if (!segBeats) return {};
+      const updatedBeats = segBeats.map((b) =>
+        b.beatIndex === beatIndex ? { ...b, ...updates } : b,
+      );
+      const newMap = { ...state.beatsMap, [segmentId]: updatedBeats };
+      if (segmentId === state.currentSegmentId) {
+        return { beatsMap: newMap, beats: updatedBeats };
+      }
+      return { beatsMap: newMap };
+    }),
   liveIllustration: null,
   setLiveIllustration: (ill) => {
     if (_illustrationTimerHandle !== null) {
