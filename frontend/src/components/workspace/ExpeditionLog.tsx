@@ -326,12 +326,22 @@ export function ExpeditionLog() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
-        <h2
-          className="text-[12px] font-serif uppercase tracking-[0.35em] text-[var(--gold)]"
-          style={{ fontWeight: 700 }}
-        >
-          Expedition Log
-        </h2>
+        <div className="flex items-center justify-center gap-3">
+          <svg width="60" height="16" viewBox="0 0 60 16" fill="none" style={{ opacity: 0.45 }}>
+            <path d="M58 8 C50 8, 46 2, 38 2 C32 2, 28 6, 28 10 C28 14, 32 15, 35 13 C36 12, 36 10, 34 10 C32 10, 31 12, 32 13" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M28 10 C24 12, 14 13, 2 9" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <h2
+            className="text-[12px] font-serif uppercase tracking-[0.35em] text-[var(--gold)] shrink-0"
+            style={{ fontWeight: 700 }}
+          >
+            Expedition Log
+          </h2>
+          <svg width="60" height="16" viewBox="0 0 60 16" fill="none" style={{ opacity: 0.45, transform: 'scaleX(-1)' }}>
+            <path d="M58 8 C50 8, 46 2, 38 2 C32 2, 28 6, 28 10 C28 14, 32 15, 35 13 C36 12, 36 10, 34 10 C32 10, 31 12, 32 13" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M28 10 C24 12, 14 13, 2 9" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
         {searchingCount > 0 && (
           <motion.span
             key={searchingCount}
