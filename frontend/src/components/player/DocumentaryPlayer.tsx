@@ -220,6 +220,8 @@ export function DocumentaryPlayer() {
     if (!sendTextToHistorian) return;
     if (!currentSegment) return;
     if (beats.length === 0) return;
+    // Skip if full script was already sent via Space key
+    if (autoNarratedRef.current.has(currentSegment.id)) return;
 
     const beat = beats[currentBeatIndex];
     if (!beat) return;
@@ -491,6 +493,8 @@ export function DocumentaryPlayer() {
           const send = useVoiceStore.getState().sendTextToHistorian;
           const seg = useResearchStore.getState().segments[currentSegmentId ?? ''];
           if (send && seg?.script) {
+            // Mark as narrated so beat effects don't double-send
+            autoNarratedRef.current.add(seg.id);
             send(
               `You are narrating the segment titled "${seg.title}". ` +
               `Deliver this naturally in your historian voice. Do not introduce yourself. ` +
