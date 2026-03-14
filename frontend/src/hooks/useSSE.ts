@@ -145,6 +145,7 @@ export function useSSE(sessionId: string | null): void {
 
         case 'narration_beat':
           addBeat({
+            segmentId: event.segmentId,
             beatIndex: event.beatIndex,
             totalBeats: event.totalBeats,
             narrationText: event.narrationText,
@@ -190,8 +191,8 @@ export function useSSE(sessionId: string | null): void {
           const event = JSON.parse(e.data as string) as SSEEvent;
           retryCountRef.current = 0; // reset on successful message
 
-          // Bypass drip buffer for text chunks to give live streaming feel
-          if (event.type === 'storyboard_text_chunk') {
+          // Bypass drip buffer for text chunks and narration beats for live feel
+          if (event.type === 'storyboard_text_chunk' || event.type === 'narration_beat') {
             processEventRef.current(event);
           } else {
             pendingRef.current.push(event);

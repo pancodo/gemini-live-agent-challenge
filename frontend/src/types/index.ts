@@ -66,7 +66,7 @@ export interface AgentState {
 }
 
 // ── Segments ─────────────────────────────────────────────────
-export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending' | 'storyboard_ready';
+export type SegmentStatus = 'generating' | 'ready' | 'visual_ready' | 'complete' | 'pending' | 'storyboard_ready' | 'beats_ready';
 
 export type PortraitEra = 'default' | 'ancient' | 'modern';
 
@@ -214,6 +214,7 @@ export interface NarrationBeatEvent {
 }
 
 export interface NarrationBeat {
+  segmentId: string;
   beatIndex: number;
   totalBeats: number;
   narrationText: string;
