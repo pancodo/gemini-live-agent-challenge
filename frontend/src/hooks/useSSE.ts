@@ -48,10 +48,11 @@ export function useSSE(sessionId: string | null): void {
     }))
   );
 
-  const { setSegmentGeo, addBeat } = usePlayerStore(
+  const { setSegmentGeo, addBeat, updateBeatVisual } = usePlayerStore(
     useShallow((s) => ({
       setSegmentGeo: s.setSegmentGeo,
       addBeat: s.addBeat,
+      updateBeatVisual: s.updateBeatVisual,
     })),
   );
 
@@ -151,6 +152,15 @@ export function useSSE(sessionId: string | null): void {
             narrationText: event.narrationText,
             imageUrl: event.imageUrl,
             directionText: event.directionText,
+            visualType: event.visualType,
+            cinematicUrl: event.cinematicUrl,
+            videoUrl: event.videoUrl,
+          });
+          break;
+
+        case 'beat_visual_assigned':
+          updateBeatVisual(event.segmentId, event.beatIndex, {
+            visualType: event.visualType,
           });
           break;
 
@@ -165,7 +175,7 @@ export function useSSE(sessionId: string | null): void {
           break;
       }
     },
-    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage, addBeat],
+    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage, addBeat, updateBeatVisual],
   );
 
   const processEventRef = useRef(processEvent);
@@ -192,7 +202,7 @@ export function useSSE(sessionId: string | null): void {
           retryCountRef.current = 0; // reset on successful message
 
           // Bypass drip buffer for text chunks and narration beats for live feel
-          if (event.type === 'storyboard_text_chunk' || event.type === 'narration_beat') {
+          if (event.type === 'storyboard_text_chunk' || event.type === 'narration_beat' || event.type === 'beat_visual_assigned') {
             processEventRef.current(event);
           } else {
             pendingRef.current.push(event);
