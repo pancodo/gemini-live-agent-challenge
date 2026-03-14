@@ -57,6 +57,7 @@ import os
 import re
 import time
 from collections.abc import AsyncGenerator
+from datetime import timedelta
 from functools import partial
 from typing import Any
 
@@ -342,21 +343,40 @@ _VEO2_DEFAULT_ATMOSPHERE: str = "atmospheric particles drifting through light be
 def _frames_for_segment(
     segment: dict[str, Any],
     narrative_role: str,
+    manifest: dict[str, Any] | None = None,
 ) -> list[int]:
     """Return the Imagen 3 frame indices to generate for this segment.
 
-    Frame selection is driven by narrative role so visual spending matches
-    dramatic weight: opening and coda scenes get one frame; the climax gets
-    three; rising action and resolution get two.
+    Priority 1: If a Phase IV ``VisualDetailManifest`` provides ``frame_prompts``,
+    the AI has already decided the optimal number of frames. Use that count
+    (capped at 4 for API budget).
+
+    Priority 2: Fall back to the hardcoded ``_NARRATIVE_FRAME_PLAN`` driven by
+    narrative role so visual spending matches dramatic weight.
 
     Args:
         segment: SegmentScript dict (used for logging only here).
         narrative_role: The scene's position in the documentary arc
             (from the matching SceneBrief).
+        manifest: Optional VisualDetailManifest dict for this scene.
 
     Returns:
         Ordered list of frame indices (0-3) to generate.
     """
+    # Priority 1: AI-driven frame count from manifest
+    if manifest and manifest.get("frame_prompts"):
+        frame_count = len(manifest["frame_prompts"])
+        frame_count = min(frame_count, 4)  # Cap at 4 for API budget
+        plan = list(range(frame_count))
+        logger.debug(
+            "Segment %s (manifest-driven): generating %d frame(s) %s",
+            segment.get("id", "unknown"),
+            len(plan),
+            plan,
+        )
+        return plan
+
+    # Priority 2: Hardcoded plan (legacy fallback)
     plan = _NARRATIVE_FRAME_PLAN.get(narrative_role, _DEFAULT_FRAME_PLAN)
     logger.debug(
         "Segment %s (narrative_role=%r): generating %d frame(s) %s",
@@ -628,6 +648,7 @@ async def _batch_check_existing_frames(
     session_id: str,
     segments: list[dict[str, Any]],
     narrative_role_map: dict[str, str],
+    manifests: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Check GCS for existing Imagen 3 frames across all segments.
 
@@ -640,6 +661,8 @@ async def _batch_check_existing_frames(
         session_id: Active session ID.
         segments: List of SegmentScript dicts.
         narrative_role_map: Maps scene_id -> narrative_role for frame planning.
+        manifests: Optional dict mapping scene_id -> VisualDetailManifest dict
+            for AI-driven frame count determination.
 
     Returns:
         Dict mapping blob_name to ``gs://{bucket_name}/{blob_name}`` for hits.
@@ -649,7 +672,8 @@ async def _batch_check_existing_frames(
         segment_id = seg.get("id", "unknown")
         scene_id = seg.get("scene_id", "unknown")
         narrative_role = narrative_role_map.get(scene_id, "")
-        frame_indices = _frames_for_segment(seg, narrative_role)
+        manifest = (manifests or {}).get(scene_id)
+        frame_indices = _frames_for_segment(seg, narrative_role, manifest=manifest)
         for frame_idx in frame_indices:
             blob_name = (
                 f"sessions/{session_id}/images/{segment_id}/frame_{frame_idx}.jpg"
@@ -673,6 +697,51 @@ async def _batch_check_existing_frames(
         total_checked - len(hits),
     )
     return hits
+
+
+# ---------------------------------------------------------------------------
+# GCS URL signing: convert gs:// URIs to 4-hour signed HTTPS URLs
+# ---------------------------------------------------------------------------
+
+
+def _sign_gcs_url(gcs_uri: str, bucket_name: str) -> str:
+    """Convert a ``gs://`` URI to a 4-hour signed HTTPS URL.
+
+    Non-``gs://`` URIs (e.g. already-signed HTTPS URLs) are returned as-is.
+
+    Args:
+        gcs_uri: GCS URI in the form ``gs://{bucket}/{path}``.
+        bucket_name: Expected GCS bucket name (used to strip the prefix).
+
+    Returns:
+        Signed HTTPS URL valid for 4 hours, or the original URI on error.
+    """
+    if not gcs_uri.startswith("gs://"):
+        return gcs_uri
+    try:
+        blob_path = gcs_uri.replace(f"gs://{bucket_name}/", "")
+        client = _get_storage_client()
+        blob = _get_bucket(client, bucket_name).blob(blob_path)
+        return blob.generate_signed_url(
+            expiration=timedelta(hours=4),
+            method="GET",
+            version="v4",
+        )
+    except Exception as exc:
+        logger.warning("Failed to sign GCS URL %s: %s", gcs_uri, exc)
+        return gcs_uri
+
+
+def _sign_image_urls(image_urls: list[str], bucket_name: str) -> list[str]:
+    """Sign a list of GCS image URIs, returning signed HTTPS URLs."""
+    return [_sign_gcs_url(uri, bucket_name) for uri in image_urls]
+
+
+def _sign_video_url(video_url: str | None, bucket_name: str) -> str | None:
+    """Sign a single GCS video URI if present."""
+    if not video_url:
+        return video_url
+    return _sign_gcs_url(video_url, bucket_name)
 
 
 # ---------------------------------------------------------------------------
@@ -955,6 +1024,7 @@ async def _generate_one_frame(
     enhance_prompt: bool = True,
     existing_cache: dict[str, str] | None = None,
     imagen_rate_limiter: GlobalRateLimiter | None = None,
+    reference_images: list[Any] | None = None,
 ) -> str | None:
     """Generate a single Imagen 3 frame, upload to GCS, return GCS URI.
 
@@ -980,6 +1050,9 @@ async def _generate_one_frame(
         existing_cache: Optional dict mapping blob names to GCS URIs for
             frames that already exist in GCS (cache hits skip generation).
         imagen_rate_limiter: Optional ``GlobalRateLimiter`` for Imagen 3 calls.
+        reference_images: Optional list of ``ReferenceImage`` objects for
+            pixel-level style reference (e.g. storyboard images from Phase 3.1).
+            Falls back gracefully if the API rejects them.
 
     Returns:
         GCS URI string or ``None`` on failure.
@@ -992,49 +1065,72 @@ async def _generate_one_frame(
     limiter = imagen_rate_limiter or _fallback_imagen_limiter
 
     async with limiter.acquire(caller=f"imagen3:{blob_name}"):
-        try:
-            response = await client.aio.models.generate_images(
-                model=_IMAGEN_MODEL,
-                prompt=prompt,
-                config=genai_types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio="16:9",
-                    negative_prompt=negative_prompt,
-                    safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
-                    person_generation="allow_adult",
-                    output_mime_type="image/jpeg",
-                    output_compression_quality=90,
-                    enhance_prompt=enhance_prompt,
-                ),
-            )
+        # Build the config dict — reference_images added only if present.
+        config = genai_types.GenerateImagesConfig(
+            number_of_images=1,
+            aspect_ratio="16:9",
+            negative_prompt=negative_prompt,
+            safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
+            person_generation="allow_adult",
+            output_mime_type="image/jpeg",
+            output_compression_quality=90,
+            enhance_prompt=enhance_prompt,
+        )
 
-            if not response.generated_images:
+        # Try with reference images first, fall back without on API rejection.
+        for attempt, use_refs in enumerate(
+            ([True, False] if reference_images else [False])
+        ):
+            try:
+                kwargs: dict[str, Any] = {
+                    "model": _IMAGEN_MODEL,
+                    "prompt": prompt,
+                    "config": config,
+                }
+                if use_refs and reference_images:
+                    kwargs["reference_images"] = reference_images
+
+                response = await client.aio.models.generate_images(**kwargs)
+
+                if not response.generated_images:
+                    logger.warning(
+                        "Imagen 3 returned no images for %s (content likely filtered)",
+                        blob_name,
+                    )
+                    return None
+
+                image_bytes: bytes | None = (
+                    response.generated_images[0].image.image_bytes
+                )
+                if not image_bytes:
+                    logger.warning(
+                        "Imagen 3 image_bytes is empty for %s", blob_name
+                    )
+                    return None
+
+                gcs_uri = await _upload_image_bytes_async(
+                    image_bytes, bucket_name, blob_name
+                )
+                logger.debug("Uploaded Imagen 3 frame to %s", gcs_uri)
+                return gcs_uri
+
+            except Exception as exc:
+                if use_refs and attempt == 0:
+                    logger.warning(
+                        "Imagen 3 with reference_images failed for %s, "
+                        "retrying without: %s",
+                        blob_name,
+                        exc,
+                    )
+                    continue
                 logger.warning(
-                    "Imagen 3 returned no images for %s (content likely filtered)",
+                    "Imagen 3 frame generation failed for %s: %s",
                     blob_name,
+                    exc,
                 )
                 return None
 
-            image_bytes: bytes | None = (
-                response.generated_images[0].image.image_bytes
-            )
-            if not image_bytes:
-                logger.warning(
-                    "Imagen 3 image_bytes is empty for %s", blob_name
-                )
-                return None
-
-            gcs_uri = await _upload_image_bytes_async(
-                image_bytes, bucket_name, blob_name
-            )
-            logger.debug("Uploaded Imagen 3 frame to %s", gcs_uri)
-            return gcs_uri
-
-        except Exception as exc:
-            logger.warning(
-                "Imagen 3 frame generation failed for %s: %s", blob_name, exc
-            )
-            return None
+        return None
 
 
 async def _generate_segment_images(
@@ -1074,9 +1170,46 @@ async def _generate_segment_images(
         List of GCS URIs for successfully generated frames (0-4 items).
     """
     segment_id: str = segment.get("id", "unknown")
+
+    # --- Fix 4.1: Load storyboard image as Imagen 3 STYLE reference ---
+    reference_images: list[Any] = []
+    if storyboard_uri:
+        try:
+            from google.cloud import storage as gcs_storage
+            from google.genai.types import RawReferenceImage, ReferenceImage
+
+            blob_path = storyboard_uri.replace(f"gs://{bucket_name}/", "")
+            gcs_client = gcs_storage.Client()
+            storyboard_bytes = (
+                gcs_client.bucket(bucket_name).blob(blob_path).download_as_bytes()
+            )
+            reference_images = [
+                ReferenceImage(
+                    reference_image=RawReferenceImage(
+                        reference_id=1,
+                        reference_type="STYLE",
+                        image={
+                            "image_bytes": storyboard_bytes,
+                            "mime_type": "image/jpeg",
+                        },
+                    )
+                )
+            ]
+            logger.info(
+                "Loaded storyboard reference image for segment %s from %s",
+                segment_id,
+                storyboard_uri,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not load storyboard reference for segment %s: %s",
+                segment_id,
+                exc,
+            )
+
     frame_tasks = []
 
-    for frame_idx in _frames_for_segment(segment, narrative_role):
+    for frame_idx in _frames_for_segment(segment, narrative_role, manifest=manifest):
         prompt, negative = _build_imagen_prompt(
             segment, manifest, visual_bible, frame_idx,
             narrative_role=narrative_role,
@@ -1113,6 +1246,7 @@ async def _generate_segment_images(
                 enhance_prompt=use_enhance,
                 existing_cache=existing_cache,
                 imagen_rate_limiter=imagen_rate_limiter,
+                reference_images=reference_images if reference_images else None,
             )
         )
 
@@ -1389,7 +1523,7 @@ async def _run_segment_generation(
                 agent_id=f"visual_director_{scene_id}",
                 status="searching",  # teal pulse dot in frontend
                 query=(
-                    f"Generating {len(_frames_for_segment(segment, narrative_role))} frame(s) for "
+                    f"Generating {len(_frames_for_segment(segment, narrative_role, manifest=manifest))} frame(s) for "
                     f"{segment.get('title', scene_id)}"
                 ),
             ),
@@ -1416,17 +1550,20 @@ async def _run_segment_generation(
         "Segment %s: generated %d/%d frames in %.1fs (manifest=%s)",
         segment_id,
         len(image_urls),
-        len(_frames_for_segment(segment, narrative_role)),
+        len(_frames_for_segment(segment, narrative_role, manifest=manifest)),
         t_elapsed,
         used_manifest,
     )
 
-    # Persist image URLs to shared store (for session state)
-    image_url_store[segment_id] = image_urls
+    # Sign image URLs before persisting or emitting
+    signed_image_urls = _sign_image_urls(image_urls, bucket_name)
 
-    # Update Firestore with imageUrls + status="complete"
+    # Persist signed image URLs to shared store (for session state)
+    image_url_store[segment_id] = signed_image_urls
+
+    # Update Firestore with signed imageUrls + status="complete"
     await _update_segment_images_in_firestore(
-        db, session_id, segment_id, image_urls
+        db, session_id, segment_id, signed_image_urls
     )
 
     # Emit segment_update -- frontend DocumentaryPlayer can start loading
@@ -1439,7 +1576,7 @@ async def _run_segment_generation(
                 status="complete",
                 title=segment.get("title"),
                 mood=segment.get("mood"),
-                image_urls=image_urls,
+                image_urls=signed_image_urls,
             ),
         )
         await emitter.emit(
@@ -1449,7 +1586,7 @@ async def _run_segment_generation(
                 status="done",
                 elapsed=t_elapsed,
                 facts=[
-                    f"{len(image_urls)}/{len(_frames_for_segment(segment, narrative_role))} frames generated",
+                    f"{len(image_urls)}/{len(_frames_for_segment(segment, narrative_role, manifest=manifest))} frames generated",
                     (
                         "Used enriched Phase IV manifest prompt"
                         if used_manifest
@@ -1673,11 +1810,14 @@ class VisualDirectorOrchestrator(BaseAgent):
                 )
                 return
 
+            # Sign the video URL before persisting or emitting
+            signed_video_url = _sign_video_url(video_uri, self.gcs_bucket)
+
             # Success: update session state, Firestore, and emit SSE
-            ctx.session.state.setdefault("video_urls", {})[segment_id] = video_uri
+            ctx.session.state.setdefault("video_urls", {})[segment_id] = signed_video_url
 
             await _update_segment_video_in_firestore(
-                db, session_id, segment_id, video_uri,
+                db, session_id, segment_id, signed_video_url or video_uri,
             )
 
             if self.emitter:
@@ -1687,7 +1827,7 @@ class VisualDirectorOrchestrator(BaseAgent):
                         segment_id=segment_id,
                         scene_id=scene_id,
                         status="complete",
-                        video_url=video_uri,
+                        video_url=signed_video_url,
                     ),
                 )
 
@@ -1695,7 +1835,7 @@ class VisualDirectorOrchestrator(BaseAgent):
                 "Veo2 background: video attached to scene %d (%s): %s",
                 scene_index,
                 scene_id,
-                video_uri,
+                signed_video_url,
             )
 
         except Exception as exc:
@@ -1823,6 +1963,7 @@ class VisualDirectorOrchestrator(BaseAgent):
             session_id=session_id,
             segments=script_raw,
             narrative_role_map=narrative_role_map,
+            manifests=manifests,
         )
 
         # ------------------------------------------------------------------
@@ -1934,12 +2075,15 @@ class VisualDirectorOrchestrator(BaseAgent):
                     )
                     return
 
+                # Sign the video URL before persisting or emitting
+                signed_vid = _sign_video_url(video_uri, self.gcs_bucket)
+
                 # Success: update session state, Firestore, and emit SSE
                 ctx.session.state.setdefault("video_urls", {})[
                     segment_id
-                ] = video_uri
+                ] = signed_vid
                 await _update_segment_video_in_firestore(
-                    db, session_id, segment_id, video_uri,
+                    db, session_id, segment_id, signed_vid or video_uri,
                 )
                 if self.emitter:
                     await self.emitter.emit(
@@ -1948,13 +2092,13 @@ class VisualDirectorOrchestrator(BaseAgent):
                             segment_id=segment_id,
                             scene_id=scene_id,
                             status="complete",
-                            video_url=video_uri,
+                            video_url=signed_vid,
                         ),
                     )
                 logger.info(
                     "Veo 2 background: video attached to segment %s: %s",
                     segment_id,
-                    video_uri,
+                    signed_vid,
                 )
 
             task = asyncio.create_task(
