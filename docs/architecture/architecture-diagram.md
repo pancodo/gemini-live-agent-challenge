@@ -90,101 +90,76 @@ Dotted lines (`-.->`) represent async, streaming, or WebSocket connections.
 
 ---
 
-## The Diagram
+## The Diagram (v3 — Competition-Aligned)
 
-The following is the complete, ready-to-paste Mermaid architecture diagram.
+Restructured around the 4 sections judges explicitly look for:
+1. **User/Frontend** — how the user interacts
+2. **The Brain** — where Gemini models sit and how they're accessed (GenAI SDK / ADK)
+3. **The Logic** — backend hosted on Google Cloud
+4. **The Connections** — how pieces talk to each other
 
 ```mermaid
 flowchart TD
-    User["User / Browser<br/>React 19 + TypeScript + Vite"]
-
-    subgraph frontend["Frontend Layer"]
-        PDF["PDF Viewer"]
-        Research["Research Panel<br/>React.memo + useShallow"]
-        Player["Documentary Player"]
-        Voice["Voice Button + Waveform"]
-        SSE["useSSE<br/>adaptive drip 1/3/8 events per tick"]
+    subgraph USER["👤 User / Frontend"]
+        direction LR
+        BROWSER["React 19 + TypeScript + Vite\nPDF Viewer · Research Panel\nDocumentary Player · Voice"]
     end
 
-    User --> frontend
-
-    subgraph gcloud["Google Cloud"]
-
-        subgraph cloudrun["Cloud Run Services"]
-            API["historian-api<br/>FastAPI / Python 3.12"]
-            ORCH["agent-orchestrator<br/>ResumablePipelineAgent + ADK<br/>Python 3.12"]
-            RELAY["live-relay<br/>Node.js 20 WebSocket Proxy"]
-        end
-
-        subgraph adk["ADK Pipeline - 7 Phases with Checkpoint Resume"]
-            direction LR
-            P1["Phase I<br/>Document Analyzer"]
-            P2["Phase II<br/>Scene Research<br/>ParallelAgent + Aggregator"]
-            P3["Phase III<br/>Script Orchestrator<br/>WriteBatch"]
-            P35["Phase III.5<br/>Fact Validator"]
-            P40["Phase 4.0<br/>Narrative Visual Planner"]
-            P4["Phase IV<br/>Visual Research"]
-            P5["Phase V<br/>Visual Director<br/>GCS singleton"]
-            P1 --> P2 --> P3 --> P35 --> P40 --> P4 --> P5
-        end
-
-        subgraph vertex["Vertex AI"]
-            GEMINI_FLASH["Gemini 2.0 Flash"]
-            GEMINI_PRO["Gemini 2.0 Pro"]
-            IMAGEN["Imagen 3"]
-            VEO["Veo 2"]
-        end
-
-        subgraph storage["Data Layer"]
-            FIRESTORE[("Firestore<br/>sessions + checkpoints")]
-            GCS[("Cloud Storage")]
-        end
-
-        DOCAI["Document AI<br/>OCR Processor"]
-        PUBSUB["Pub/Sub"]
-        SECRET["Secret Manager"]
-        LIMITER["GlobalRateLimiter<br/>Gemini limit=12<br/>Imagen limit=8"]
-
+    subgraph BRAIN["🧠 The Brain — Gemini Models"]
+        direction LR
+        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation"]
+        PRO["Gemini 2.0 Pro\nScripts · Visual Planning"]
+        LIVE_API["Gemini 2.5 Flash\nNative Audio\nReal-time Voice"]
+        IMAGEN["Imagen 3\nScene Images"]
+        VEO["Veo 2\nDramatic Video"]
     end
 
-    LIVE_API["Gemini Live API<br/>2.5 Flash Native Audio"]
+    subgraph LOGIC["⚙️ Backend Logic — Google Cloud Run"]
+        API["historian-api\nFastAPI · Python 3.12"]
+        ORCH["agent-orchestrator\nGoogle ADK\nPython 3.12"]
+        RELAY["live-relay\nNode.js 20\nWebSocket Proxy"]
+    end
 
-    %% Frontend to Cloud Run
-    frontend -- "REST + SSE adaptive drip" --> API
-    Voice -. "WebSocket<br/>PCM Audio 16kHz" .-> RELAY
+    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 7 Phases"]
+        direction LR
+        P1["I\nDocument\nAnalyzer"]
+        P2["II\nScene\nResearch"]
+        P3["III\nScript\nGenerator"]
+        P35["III.5\nFact\nValidator"]
+        P40["4.0\nVisual\nPlanner"]
+        P4["IV\nVisual\nResearch"]
+        P5["V\nVisual\nDirector"]
+        P1 --> P2 --> P3 --> P35 --> P40 --> P4 --> P5
+    end
 
-    %% API to Orchestrator
-    API -- "Trigger pipeline" --> ORCH
-    API -- "Read state" --> FIRESTORE
-    API -- "Signed URLs" --> GCS
+    subgraph DATA["☁️ Google Cloud Services"]
+        FS[("Firestore\nSessions · Segments\nCheckpoints · Vectors")]
+        GCS[("Cloud Storage\nDocuments · Images\nVideos")]
+        DAI["Document AI\nMultilingual OCR"]
+        PS["Pub/Sub"]
+        SM["Secret Manager"]
+    end
 
-    %% Orchestrator internals
-    ORCH --- adk
-    ORCH -. "SSE events" .-> API
-    ORCH -- "checkpoint per phase" --> FIRESTORE
+    %% User to Backend (The Connections)
+    BROWSER -->|"REST + SSE"| API
+    BROWSER <-.->|"WebSocket\nPCM Audio"| RELAY
 
-    %% ADK to AI models via rate limiter
-    P1 -- "OCR" --> DOCAI
-    P1 -- "Summarize" --> LIMITER --> GEMINI_FLASH
-    P2 -- "Google Search<br/>Grounding" --> GEMINI_FLASH
-    P3 -- "Script" --> GEMINI_PRO
-    P35 -- "Validate" --> GEMINI_FLASH
-    P40 -- "Storyboard" --> GEMINI_PRO
-    P4 -- "Research" --> GEMINI_FLASH
-    P5 -- "Images" --> LIMITER --> IMAGEN
-    P5 -. "Async video" .-> VEO
+    %% Backend to Brain (GenAI SDK + ADK)
+    API -->|"Triggers pipeline"| ORCH
+    ORCH -->|"Google ADK\nSequentialAgent + ParallelAgent"| PIPELINE
+    P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
+    P3 & P40 -->|"GenAI SDK"| PRO
+    P5 -->|"Vertex AI\nGenAI SDK"| IMAGEN
+    P5 -.->|"Vertex AI\nAsync generation"| VEO
+    RELAY <-.->|"WebSocket\nBidiGenerateContent"| LIVE_API
 
-    %% Live relay
-    RELAY -. "WebSocket<br/>Bidirectional Audio" .-> LIVE_API
-
-    %% Data flows
-    ORCH -- "Session state<br/>Agent logs" --> FIRESTORE
-    P3 -- "WriteBatch<br/>all segments" --> FIRESTORE
-    P4 -- "VisualManifests" --> FIRESTORE
-    P5 -- "Images + Videos<br/>GCS singleton" --> GCS
-    P5 -- "imageUrls + videoUrl<br/>batch update" --> FIRESTORE
-    DOCAI -- "OCR text" --> GCS
-    PUBSUB -. "Agent events" .-> ORCH
+    %% Backend to Data Layer
+    ORCH <-->|"Checkpoint resume"| FS
+    P1 --> DAI
+    P1 & P3 & P5 --> GCS
+    P3 & P4 & P5 --> FS
+    ORCH --> PS
+    API --> SM
 ```
 
 ---
@@ -254,15 +229,14 @@ To preview locally before pushing:
 
 ---
 
-## Judging Checklist Coverage
+## Judging Checklist Coverage (FAQ Q5)
 
-The diagram satisfies all architecture diagram requirements from the judging criteria:
+The diagram is structured around the 4 sections judges explicitly require:
 
-| Requirement | Covered |
-|---|---|
-| User/Frontend shown | Yes - User node + Frontend subgraph |
-| Gemini model location shown | Yes - Vertex AI subgraph + Gemini Live API external node |
-| Gemini access method shown | Yes - GenAI SDK via ADK, WebSocket via live-relay |
-| Backend logic on Google Cloud | Yes - Cloud Run subgraph with all three services |
-| All component connections shown | Yes - every edge labeled with protocol |
-| Google Cloud services visible | Yes - Firestore, GCS, Document AI, Pub/Sub, Secret Manager |
+| FAQ Requirement | Section | How it's shown |
+|---|---|---|
+| **User/Frontend**: How the user interacts | `👤 User / Frontend` subgraph | React 19 app with PDF Viewer, Research Panel, Documentary Player, Voice |
+| **The Brain**: Where Gemini sits and how it's accessed | `🧠 The Brain — Gemini Models` subgraph | 5 Gemini models; edges labeled "GenAI SDK", "Google ADK", "Vertex AI" |
+| **The Logic**: Backend on Google Cloud | `⚙️ Backend Logic — Google Cloud Run` subgraph | 3 Cloud Run services + ADK Pipeline subgraph |
+| **The Connections**: How pieces talk | Labeled edges throughout | REST+SSE, WebSocket, GenAI SDK, ADK, Vertex AI, checkpoint resume |
+| Google Cloud services visible | `☁️ Google Cloud Services` subgraph | Firestore, Cloud Storage, Document AI, Pub/Sub, Secret Manager |
