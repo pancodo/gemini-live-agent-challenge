@@ -2,7 +2,7 @@
 
 <img src="frontend/public/logo.png" alt="AI Historian" width="120" />
 
-*Logo generated with [Gemini](https://gemini.google.com/share/a34bad9c7dd0)*
+*Logo generated with Gemini [Chat Link](https://gemini.google.com/share/a34bad9c7dd0)*
 
 # AI Historian
 
