@@ -1,40 +1,55 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
- * CaptionTrack — live-synced captions from historian narration.
+ * CaptionTrack — delayed captions synced to audio playback.
  *
- * Accumulates transcription fragments from Gemini and displays them
- * as a rolling window. Words appear exactly when the historian says them
- * (no artificial animation delay). Older words scroll out naturally.
+ * Gemini's outputTranscription arrives faster than audio playback.
+ * This component buffers incoming caption text and releases words
+ * with a delay to approximately match the historian's speech rate.
  */
 const MAX_VISIBLE_WORDS = 18;
+const WORD_RELEASE_MS = 350; // ~2.8 words per second (natural speech pace)
 
 export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const wordsRef = useRef<string[]>([]);
-  const prevTextRef = useRef('');
+  const [displayedWords, setDisplayedWords] = useState<string[]>([]);
+  const allWordsRef = useRef<string[]>([]);
+  const releasedCountRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const prevCaptionRef = useRef('');
 
-  // Detect if caption grew (new words appended) or reset (new turn)
-  if (captionText !== prevTextRef.current) {
-    if (captionText.length > prevTextRef.current.length && captionText.startsWith(prevTextRef.current.slice(0, 20))) {
-      // Accumulating — extract new words
-      const allWords = captionText.trim().split(/\s+/);
-      wordsRef.current = allWords;
-    } else if (captionText.length < prevTextRef.current.length || captionText === '') {
-      // New turn or reset
-      wordsRef.current = captionText.trim() ? captionText.trim().split(/\s+/) : [];
-    } else {
-      // Different text entirely — replace
-      wordsRef.current = captionText.trim() ? captionText.trim().split(/\s+/) : [];
+  // When captionText changes, update the word buffer
+  useEffect(() => {
+    if (captionText === prevCaptionRef.current) return;
+    prevCaptionRef.current = captionText;
+
+    if (!captionText.trim()) {
+      // Caption cleared — new turn
+      allWordsRef.current = [];
+      releasedCountRef.current = 0;
+      setDisplayedWords([]);
+      return;
     }
-    prevTextRef.current = captionText;
-  }
 
-  const allWords = wordsRef.current;
-  const windowStart = Math.max(0, allWords.length - MAX_VISIBLE_WORDS);
-  const visibleWords = allWords.slice(windowStart);
-  const isEmpty = allWords.length === 0;
+    allWordsRef.current = captionText.trim().split(/\s+/);
+  }, [captionText]);
+
+  // Timer to release words gradually
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      const all = allWordsRef.current;
+      if (releasedCountRef.current < all.length) {
+        releasedCountRef.current += 1;
+        const start = Math.max(0, releasedCountRef.current - MAX_VISIBLE_WORDS);
+        setDisplayedWords(all.slice(start, releasedCountRef.current));
+      }
+    }, WORD_RELEASE_MS);
+
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  const isEmpty = displayedWords.length === 0;
 
   return (
     <div
@@ -57,8 +72,8 @@ export function CaptionTrack() {
           textShadow: 'var(--player-caption-shadow)',
         }}
       >
-        {visibleWords.map((word, i) => (
-          <span key={`${windowStart + i}`} className="inline-block mr-[0.3em]">
+        {displayedWords.map((word, i) => (
+          <span key={i} className="inline-block mr-[0.3em]">
             {word}
           </span>
         ))}
