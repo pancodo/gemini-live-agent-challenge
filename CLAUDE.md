@@ -477,16 +477,22 @@ Each agent card is a five-state visual machine:
 ## ADK Agent Architecture
 
 ```
-SequentialAgent (pipeline)
-  └── scan_agent           (Agent, gemini-2.0-flash)
-  └── ParallelAgent
-        └── researcher_0   (Agent, google_search, gemini-2.0-flash)
-        └── researcher_1   (Agent, google_search, gemini-2.0-flash)
-        └── researcher_N   (Agent, google_search, gemini-2.0-flash)
-  └── aggregator_agent     (Agent, reads all research_{n} state keys)
-  └── script_agent         (Agent, gemini-2.0-pro)
-  └── geo_location_agent   (BaseAgent, gemini-2.0-flash, Google Maps grounding)
-  └── visual_director      (Agent, calls Imagen 3 + Veo 2)
+SequentialAgent (pipeline) — 11 Phases
+  └── document_analyzer        (BaseAgent, Phase I — OCR + chunking + curation)
+  └── scene_research           (BaseAgent, Phase II — builds ParallelAgent)
+        └── ParallelAgent
+              └── researcher_0   (Agent, google_search, gemini-2.0-flash)
+              └── researcher_N   (Agent, google_search, gemini-2.0-flash)
+        └── aggregator_agent     (Agent, reads all research_{n} state keys)
+  └── script_orch              (BaseAgent, Phase III — gemini-2.0-pro, WriteBatch)
+  └── narrative_director       (BaseAgent, Phase 3.1 — Gemini TEXT+IMAGE storyboard)
+  └── beat_illustration        (BaseAgent, Phase 3.2 — Gemini TEXT+IMAGE player beats)
+  └── visual_interleave        (BaseAgent, Phase 3.3 — assigns visual_type per beat)
+  └── fact_validator           (BaseAgent, Phase III.5 — hallucination firewall)
+  └── geo_location_agent       (BaseAgent, Phase 3.8 — Google Maps grounding)
+  └── narrative_visual_planner (Agent, Phase 4.0 — gemini-2.0-pro, VisualStoryboard)
+  └── visual_research_orch     (BaseAgent, Phase IV — 6-stage visual detail pipeline)
+  └── visual_director_orch     (BaseAgent, Phase V — beat-aware Imagen 3 + Veo 2)
 ```
 
 ### Critical ADK Constraints
@@ -497,9 +503,18 @@ SequentialAgent (pipeline)
 
 ### Pipeline Phases
 
-The pipeline runs as a SequentialAgent. Between Phase III (Script Generation) and Phase IV (Visual Research), Phase 3.8 performs geographic mapping:
+The pipeline runs as a SequentialAgent with 11 phases. Phases 3.1–3.3 use Gemini's native interleaved TEXT+IMAGE output (`response_modalities=["TEXT","IMAGE"]`) to generate narration and illustrations in a single call:
 
-- **Phase 3.8 — Geographic Mapping** (`geo_location_agent`): Extracts geographic locations from scripts and scene briefs, geocodes via Gemini + Google Maps grounding, writes SegmentGeo to Firestore and emits `geo_update` SSE events.
+- **Phase 3.1 — Narrative Director** (`narrative_director`): One Gemini call per scene produces both a creative direction note (text) and a storyboard illustration (image). Outputs stored as GCS URIs in `storyboard_images`.
+- **Phase 3.2 — Beat Illustration** (`beat_illustration`): Pre-generates narration beats with TEXT+IMAGE for the documentary player. Beat 0 is emitted immediately (fast path); beats 1–N are concurrent. Beat images are the **primary visual path** for the player.
+- **Phase 3.3 — Visual Interleave** (`visual_interleave`): Assigns each beat a `visual_type` (illustration / cinematic / video) determining which generation path Phase V uses.
+- **Phase III.5 — Fact Validator** (`fact_validator`): LLM-judge cross-references narration claims against research. Overwrites script in place.
+- **Phase 3.8 — Geographic Mapping** (`geo_location_agent`): Extracts geographic locations, geocodes via Gemini + Google Maps grounding, writes SegmentGeo to Firestore and emits `geo_update` SSE events.
+- **Phase V — Visual Director** (`visual_director_orch`): Beat-aware generation — `illustration` beats keep Phase 3.2 images, `cinematic` beats get Imagen 3, `video` beats get Veo 2.
+
+Two pipeline executors exist:
+- **`ResumablePipelineAgent`** (batch mode): checkpoint-aware, runs all 11 phases sequentially with phase-level resume
+- **`StreamingPipelineAgent`** (streaming mode): runs global phases (I+II) once, then processes per-segment in parallel for faster first-segment delivery
 
 ---
 

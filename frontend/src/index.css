@@ -839,3 +839,113 @@ body {
 .globe-pulse {
   animation: globe-pulse-ring 1.5s ease-out 2;
 }
+
+/* ── Visual Source Badges ────────────────────────────── */
+.visual-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  line-height: 1;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.visual-source-pill__icon {
+  font-size: 8px;
+  line-height: 1;
+}
+.visual-source-pill__label {
+  line-height: 1;
+}
+
+/* Interleaved — gold with shimmer sweep */
+.interleaved-badge {
+  background: linear-gradient(
+    135deg,
+    rgba(139, 94, 26, 0.15) 0%,
+    rgba(196, 149, 106, 0.25) 50%,
+    rgba(139, 94, 26, 0.15) 100%
+  );
+  background-size: 200% 100%;
+  color: var(--gold);
+  border-color: rgba(139, 94, 26, 0.35);
+  animation: badge-shimmer 2.5s ease-in-out infinite;
+}
+@keyframes badge-shimmer {
+  0%   { background-position: 100% 0; }
+  50%  { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
+}
+
+/* Imagen 3 — teal, static */
+.imagen-badge {
+  background: rgba(30, 94, 94, 0.15);
+  color: var(--teal);
+  border-color: rgba(30, 94, 94, 0.3);
+}
+
+/* Veo 2 — green, static */
+.veo-badge {
+  background: rgba(46, 110, 68, 0.15);
+  color: var(--green);
+  border-color: rgba(46, 110, 68, 0.3);
+}
+
+/* Composing — muted, pulse */
+.composing-badge {
+  background: var(--bg3);
+  color: var(--muted);
+  border-color: var(--bg4);
+}
+.composing-badge .visual-source-pill__icon {
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Compact variant — translucent for player overlay */
+.visual-source-pill--compact {
+  padding: 3px 10px;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.visual-source-pill--compact.interleaved-badge {
+  background: linear-gradient(
+    135deg,
+    rgba(139, 94, 26, 0.25) 0%,
+    rgba(196, 149, 106, 0.35) 50%,
+    rgba(139, 94, 26, 0.25) 100%
+  );
+  background-size: 200% 100%;
+  color: rgba(255, 220, 170, 0.9);
+  border-color: rgba(196, 149, 106, 0.3);
+  animation: badge-shimmer 2.5s ease-in-out infinite;
+}
+.visual-source-pill--compact.imagen-badge {
+  background: rgba(30, 94, 94, 0.3);
+  color: rgba(180, 230, 230, 0.9);
+  border-color: rgba(30, 94, 94, 0.35);
+}
+.visual-source-pill--compact.veo-badge {
+  background: rgba(46, 110, 68, 0.3);
+  color: rgba(180, 240, 200, 0.9);
+  border-color: rgba(46, 110, 68, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interleaved-badge,
+  .visual-source-pill--compact.interleaved-badge {
+    animation: none;
+  }
+  .composing-badge .visual-source-pill__icon {
+    animation: none;
+  }
+}
