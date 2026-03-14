@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo, memo, useCallback, type MouseEvent } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useResearchStore, type StoryboardFrame } from '../../store/researchStore';
-import { Badge } from '../ui';
+import { Badge, VisualSourceBadge } from '../ui';
 
 // ── Motion Variants ─────────────────────────────────────
 
@@ -183,7 +183,7 @@ const StoryboardFrameCard = memo(function StoryboardFrameCard({ frame, index }: 
       whileHover={reducedMotion ? undefined : { scale: 1.005 }}
       transition={{ type: 'spring', stiffness: 400, damping: 20 }}
     >
-      {/* Header: index + title + mood badge */}
+      {/* Header: index + title + source badge + mood badge */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
@@ -196,9 +196,14 @@ const StoryboardFrameCard = memo(function StoryboardFrameCard({ frame, index }: 
             {frame.title}
           </h3>
         </div>
-        {frame.mood && (
-          <Badge variant={moodVariant(frame.mood)}>{frame.mood}</Badge>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <VisualSourceBadge
+            source={fullText && frame.imageUrl ? 'interleaved' : 'composing'}
+          />
+          {frame.mood && (
+            <Badge variant={moodVariant(frame.mood)}>{frame.mood}</Badge>
+          )}
+        </div>
       </div>
 
       {/* Two-column layout: text (left) + image (right) */}
