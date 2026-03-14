@@ -722,7 +722,9 @@ def _sign_gcs_url(gcs_uri: str, bucket_name: str) -> str:
         blob_path = gcs_uri.replace(f"gs://{bucket_name}/", "")
         client = _get_storage_client()
         blob = _get_bucket(client, bucket_name).blob(blob_path)
+        from .signing_helpers import get_signing_credentials
         return blob.generate_signed_url(
+            credentials=get_signing_credentials(),
             expiration=timedelta(hours=4),
             method="GET",
             version="v4",
