@@ -212,6 +212,28 @@ export function WorkspacePage() {
               </motion.div>
             )}
 
+            {status === 'error' && (
+              <motion.div
+                key="error-panel"
+                className="flex flex-col items-center justify-center h-full gap-4 p-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+              >
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <p className="text-[12px] text-[var(--text)] font-sans tracking-wide">
+                  Pipeline encountered an error
+                </p>
+                <button
+                  onClick={() => window.location.href = '/'}
+                  className="text-[11px] font-sans uppercase tracking-[0.15em] text-[var(--gold)] border border-[var(--gold)] rounded px-4 py-2 hover:bg-[var(--gold)] hover:text-[var(--bg)] transition-colors cursor-pointer"
+                >
+                  Upload New Document
+                </button>
+              </motion.div>
+            )}
+
             {(status === 'idle' || status === 'uploading') && (
               <motion.div
                 key="preparing"
