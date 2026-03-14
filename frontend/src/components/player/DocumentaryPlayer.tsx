@@ -84,6 +84,7 @@ export function DocumentaryPlayer() {
   settingsRef.current = settings;
   const updateSettingRef = useRef(updateSetting);
   updateSettingRef.current = updateSetting;
+  const [showPlayOverlay, setShowPlayOverlay] = useState(true);
   const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
@@ -333,9 +334,20 @@ export function DocumentaryPlayer() {
     };
   }, [setIdle]);
 
-  // Auto-start narration is intentionally disabled — voice activation
-  // should be an explicit user action (press Space or click voice button).
-  // The voice button is always visible in the bottom-right corner.
+  // ── Play overlay handler — starts documentary narration ─────────
+  const handlePlay = useCallback(() => {
+    setShowPlayOverlay(false);
+    const send = useVoiceStore.getState().sendTextToHistorian;
+    const seg = currentSegmentId ? useResearchStore.getState().segments[currentSegmentId] : null;
+    if (send && seg?.script) {
+      autoNarratedRef.current.add(seg.id);
+      send(
+        `You are narrating the segment titled "${seg.title}". ` +
+        `Deliver this naturally in your historian voice. Do not introduce yourself. ` +
+        `\n\nScript:\n${seg.script}`
+      );
+    }
+  }, [currentSegmentId]);
 
   // ── Auto-show keyboard shortcuts on first visit ────────────────
   useEffect(() => {
@@ -624,6 +636,78 @@ export function DocumentaryPlayer() {
             >
               Got it
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Layer 1.3: Cinematic play overlay — starts documentary */}
+      <AnimatePresence>
+        {showPlayOverlay && currentSegment && (
+          <motion.div
+            key="play-overlay"
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center cursor-pointer"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 100%)',
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            onClick={handlePlay}
+          >
+            {/* Play button ring */}
+            <motion.div
+              className="flex items-center justify-center rounded-full"
+              style={{
+                width: 80,
+                height: 80,
+                border: '2px solid rgba(232,221,208,0.6)',
+                background: 'rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(8px)',
+              }}
+              whileHover={{ scale: 1.1, borderColor: 'rgba(196,149,106,0.8)' }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+            >
+              <svg width="28" height="32" viewBox="0 0 28 32" fill="none">
+                <path d="M4 2L26 16L4 30V2Z" fill="rgba(232,221,208,0.9)" />
+              </svg>
+            </motion.div>
+
+            {/* Segment title */}
+            <motion.p
+              className="mt-6 text-center"
+              style={{
+                fontFamily: 'var(--font-serif)',
+                fontSize: 22,
+                fontWeight: 400,
+                color: 'rgba(232,221,208,0.9)',
+                textShadow: '0 2px 20px rgba(0,0,0,0.8)',
+                letterSpacing: '0.03em',
+              }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+            >
+              {currentSegment.title}
+            </motion.p>
+
+            {/* Hint text */}
+            <motion.p
+              className="mt-3"
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: 10,
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: 'rgba(232,221,208,0.5)',
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6, duration: 0.4 }}
+            >
+              Click to begin narration
+            </motion.p>
           </motion.div>
         )}
       </AnimatePresence>
