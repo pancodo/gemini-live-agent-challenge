@@ -38,6 +38,9 @@ interface PlayerStore {
   /** True when the entire research+generation pipeline has finished */
   pipelineComplete: boolean;
   setPipelineComplete: (complete: boolean) => void;
+  /** Words-per-second rate for caption stagger timing */
+  captionWps: number;
+  setCaptionWps: (wps: number) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -70,6 +73,8 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   setMapViewMode: (mapViewMode) => set({ mapViewMode }),
   pipelineComplete: false,
   setPipelineComplete: (pipelineComplete) => set({ pipelineComplete }),
+  captionWps: 0,
+  setCaptionWps: (captionWps) => set({ captionWps }),
   liveIllustration: null,
   setLiveIllustration: (ill) => {
     if (_illustrationTimerHandle !== null) {
