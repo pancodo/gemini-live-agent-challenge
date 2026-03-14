@@ -1,50 +1,47 @@
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 
-interface CaptionTrackProps {
-  wordsPerSecond?: number;
-}
-
 /**
- * CaptionTrack — rolling caption window synchronized with narrator audio.
+ * CaptionTrack — live-synced captions from historian narration.
  *
- * Shows the last ~15 words of the historian's narration as a rolling window.
- * New words fade in with blur animation. Old words are already visible (no replay).
- * This prevents the "all words re-animate" issue when the caption text grows.
+ * Accumulates transcription fragments from Gemini and displays them
+ * as a rolling window. Words appear exactly when the historian says them
+ * (no artificial animation delay). Older words scroll out naturally.
  */
-const MAX_VISIBLE_WORDS = 15;
+const MAX_VISIBLE_WORDS = 18;
 
-export function CaptionTrack({ wordsPerSecond: _wps }: CaptionTrackProps) {
+export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const prevWordCountRef = useRef(0);
+  const wordsRef = useRef<string[]>([]);
+  const prevTextRef = useRef('');
 
-  const words = useMemo(() => {
-    if (!captionText.trim()) return [];
-    return captionText.trim().split(/\s+/);
-  }, [captionText]);
-
-  // Determine which words are "new" (just arrived) vs "old" (already shown)
-  const newWordsStart = prevWordCountRef.current;
-  // Update ref AFTER computing — so next render knows where old words end
-  prevWordCountRef.current = words.length;
-
-  // Show last N words as a rolling window
-  const windowStart = Math.max(0, words.length - MAX_VISIBLE_WORDS);
-  const visibleWords = words.slice(windowStart);
-
-  const isEmpty = words.length === 0;
-
-  // Reset ref when caption is cleared (new turn)
-  if (isEmpty) {
-    prevWordCountRef.current = 0;
+  // Detect if caption grew (new words appended) or reset (new turn)
+  if (captionText !== prevTextRef.current) {
+    if (captionText.length > prevTextRef.current.length && captionText.startsWith(prevTextRef.current.slice(0, 20))) {
+      // Accumulating — extract new words
+      const allWords = captionText.trim().split(/\s+/);
+      wordsRef.current = allWords;
+    } else if (captionText.length < prevTextRef.current.length || captionText === '') {
+      // New turn or reset
+      wordsRef.current = captionText.trim() ? captionText.trim().split(/\s+/) : [];
+    } else {
+      // Different text entirely — replace
+      wordsRef.current = captionText.trim() ? captionText.trim().split(/\s+/) : [];
+    }
+    prevTextRef.current = captionText;
   }
+
+  const allWords = wordsRef.current;
+  const windowStart = Math.max(0, allWords.length - MAX_VISIBLE_WORDS);
+  const visibleWords = allWords.slice(windowStart);
+  const isEmpty = allWords.length === 0;
 
   return (
     <div
       className="flex justify-center px-6"
       style={{
         opacity: isEmpty ? 0 : 1,
-        transition: 'opacity 0.4s ease',
+        transition: 'opacity 0.3s ease',
       }}
     >
       <p
@@ -60,23 +57,11 @@ export function CaptionTrack({ wordsPerSecond: _wps }: CaptionTrackProps) {
           textShadow: 'var(--player-caption-shadow)',
         }}
       >
-        {visibleWords.map((word, i) => {
-          const globalIndex = windowStart + i;
-          const isNew = globalIndex >= newWordsStart;
-          return (
-            <span
-              key={`${globalIndex}-${word}`}
-              className="inline-block mr-[0.3em]"
-              style={{
-                opacity: isNew ? 0 : 1,
-                animation: isNew ? 'caption-fade-in 0.4s ease forwards' : undefined,
-                animationDelay: isNew ? `${(globalIndex - newWordsStart) * 0.08}s` : undefined,
-              }}
-            >
-              {word}
-            </span>
-          );
-        })}
+        {visibleWords.map((word, i) => (
+          <span key={`${windowStart + i}`} className="inline-block mr-[0.3em]">
+            {word}
+          </span>
+        ))}
       </p>
     </div>
   );
