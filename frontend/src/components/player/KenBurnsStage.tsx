@@ -218,12 +218,37 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     //    continuing from wherever they were in the previous segment's cycle.
     // 2. currentIndex is implicitly reset to 0 because the component remounts.
     <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
-      {/* Regular Ken Burns images — dimmed when a beat image is active */}
+      {/* Beat images are PRIMARY — interleaved TEXT+IMAGE from Gemini */}
+      <AnimatePresence mode="wait">
+        {currentBeatImage && (
+          <motion.div
+            key={`beat-${currentBeatIndex}`}
+            className="absolute inset-0"
+            style={{ zIndex: 2 }}
+            initial={{ opacity: 0, scale: 1.02 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2, ease: 'easeOut' }}
+          >
+            <img
+              src={currentBeatImage}
+              alt={`Beat ${currentBeatIndex + 1}`}
+              className="h-full w-full object-cover"
+              style={{
+                animation: `ken-burns-${currentBeatIndex % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
+                animationPlayState: playState,
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Imagen 3 Ken Burns images — FALLBACK when no beat image, ambient background when beat active */}
       <div
         className="absolute inset-0"
         style={{
-          opacity: currentBeatImage ? 0.3 : 1,
-          transition: 'opacity 1s ease-in-out',
+          opacity: currentBeatImage ? 0.2 : 1,
+          transition: 'opacity 1.2s ease-in-out',
         }}
       >
         {images.map((url, i) => {
@@ -265,31 +290,6 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         })}
       </div>
 
-      {/* Beat image overlay — interleaved TEXT+IMAGE narration */}
-      <AnimatePresence mode="wait">
-        {currentBeatImage && (
-          <motion.div
-            key={`beat-${currentBeatIndex}`}
-            className="absolute inset-0"
-            style={{ zIndex: 2 }}
-            initial={{ opacity: 0, scale: 1.02 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1.2, ease: 'easeOut' }}
-          >
-            <img
-              src={currentBeatImage}
-              alt={`Beat ${currentBeatIndex + 1}`}
-              className="h-full w-full object-cover"
-              style={{
-                animation: `ken-burns-${currentBeatIndex % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
-                animationPlayState: playState,
-              }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Live illustration overlay */}
       <AnimatePresence>
         {liveIllustration && (
@@ -313,7 +313,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             }}
             className="absolute inset-0 w-full h-full object-cover"
             style={{
-              zIndex: 2,
+              zIndex: 3,
               willChange: 'transform, opacity',
             }}
           />
