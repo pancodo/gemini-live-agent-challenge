@@ -14,6 +14,8 @@ interface VoiceStore {
   beginConsultation: (() => void) | null;
   /** Set by VoiceLayer — sends a text message to the historian mid-session */
   sendTextToHistorian: ((text: string) => void) | null;
+  /** Set by VoiceLayer — pre-connects WebSocket without starting mic */
+  preconnect: (() => void) | null;
   /** Playback AnalyserNode — used by LivingPortrait for lip sync */
   analyserNode: AnalyserNode | null;
   setState: (state: VoiceState) => void;
@@ -25,6 +27,7 @@ interface VoiceStore {
   setUserTranscript: (text: string | null) => void;
   setBeginConsultation: (fn: (() => void) | null) => void;
   setSendTextToHistorian: (fn: ((text: string) => void) | null) => void;
+  setPreconnect: (fn: (() => void) | null) => void;
   setAnalyserNode: (node: AnalyserNode | null) => void;
   clearResume: () => void;
 }
@@ -38,6 +41,7 @@ export const useVoiceStore = create<VoiceStore>()((set) => ({
   userTranscript: null,
   beginConsultation: null,
   sendTextToHistorian: null,
+  preconnect: null,
   analyserNode: null,
   setState: (state) => set({ state }),
   setResume: (resumeSegmentId, resumeOffset) => set({ resumeSegmentId, resumeOffset }),
@@ -59,6 +63,7 @@ export const useVoiceStore = create<VoiceStore>()((set) => ({
   setUserTranscript: (userTranscript) => set({ userTranscript }),
   setBeginConsultation: (fn) => set({ beginConsultation: fn }),
   setSendTextToHistorian: (fn) => set({ sendTextToHistorian: fn }),
+  setPreconnect: (fn) => set({ preconnect: fn }),
   setAnalyserNode: (analyserNode) => set({ analyserNode }),
   clearResume: () => set({ resumeSegmentId: null, resumeOffset: 0, caption: null, userTranscript: null }),
 }));

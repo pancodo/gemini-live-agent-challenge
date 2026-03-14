@@ -1,15 +1,9 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Segment } from '../../types';
 import { usePlayerStore } from '../../store/playerStore';
 import { useVoiceStore } from '../../store/voiceStore';
 import { VisualSourceBadge } from '../ui';
-
-type PoolEntry = {
-  url: string;
-  source: 'interleaved' | 'imagen' | 'veo';
-  kenBurnsIndex: number;
-};
 
 /**
  * Module-level cached canvas for sampleImageColor.
@@ -41,20 +35,30 @@ interface KenBurnsStageProps {
   onActiveImageChange?: (url: string | null) => void;
 }
 
-const GALLERY_CYCLE_MS = 5000;
+/** Fallback cycle interval when no beats exist */
+const FALLBACK_CYCLE_MS = 7000;
+/** Delay before showing supplementary Imagen frame mid-beat */
+const SUPPLEMENTARY_DELAY_MS = 8000;
 
 export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStageProps) {
-  const [poolIndex, setPoolIndex] = useState(0);
-  const hasRevealedFirstRef = useRef(false);
   const isKenBurnsPaused = usePlayerStore((s) => s.isKenBurnsPaused);
   const liveIllustration = usePlayerStore((s) => s.liveIllustration);
   const beats = usePlayerStore((s) => s.beats);
   const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
   const voiceState = useVoiceStore((s) => s.state);
 
-  // Determine current beat visual for source badge
+  // Current beat visual
   const currentBeat = beats[currentBeatIndex] ?? null;
+  const primaryUrl = currentBeat?.cinematicUrl ?? currentBeat?.imageUrl ?? null;
   const beatVideoUrl = currentBeat?.videoUrl ?? null;
+  const hasBeatVisual = Boolean(primaryUrl || beatVideoUrl);
+
+  // Supplementary Imagen frame (mid-beat visual variety)
+  const [showSupplementary, setShowSupplementary] = useState(false);
+  const supplementaryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Fallback: cycle segment images when no beats exist
+  const [fallbackIndex, setFallbackIndex] = useState(0);
 
   const shouldPause =
     isKenBurnsPaused ||
@@ -64,91 +68,55 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
   const images = segment?.imageUrls ?? [];
   const hasVideo = Boolean(segment?.videoUrl);
 
-  // ── Build image pool: interleave beat images + segment Imagen frames ──
-  const imagePool = useMemo<PoolEntry[]>(() => {
-    const pool: PoolEntry[] = [];
-    const beatUrls: PoolEntry[] = [];
-    const segUrls: PoolEntry[] = [];
+  // Get supplementary image for current beat (Imagen frame from segment)
+  const supplementaryUrl = images.length > 0
+    ? images[currentBeatIndex % images.length]
+    : null;
 
-    // Collect beat images
-    for (let i = 0; i < beats.length; i++) {
-      const b = beats[i];
-      const url = b?.cinematicUrl ?? b?.imageUrl ?? null;
-      if (url) {
-        beatUrls.push({
-          url,
-          source: b?.cinematicUrl ? 'imagen' : 'interleaved',
-          kenBurnsIndex: i % 4,
-        });
-      }
-    }
-
-    // Collect segment Imagen 3 frames
-    for (let i = 0; i < images.length; i++) {
-      segUrls.push({
-        url: images[i],
-        source: 'imagen',
-        kenBurnsIndex: (i + 2) % 4, // offset for visual variety
-      });
-    }
-
-    // Interleave: beat, seg, beat, seg, ...
-    const maxLen = Math.max(beatUrls.length, segUrls.length);
-    for (let i = 0; i < maxLen; i++) {
-      if (i < beatUrls.length) pool.push(beatUrls[i]);
-      if (i < segUrls.length) pool.push(segUrls[i]);
-    }
-
-    // If no beat images, just use segment images
-    if (pool.length === 0) {
-      return segUrls;
-    }
-
-    return pool;
-  }, [beats, images]);
-
-  // ── Beat-aware pool reset: jump to beat's image on beat change ──
+  // ── Beat-driven: show supplementary image 8s into each beat ──
   useEffect(() => {
-    if (beats.length === 0 || imagePool.length === 0) return;
-    const beat = beats[currentBeatIndex];
-    const beatUrl = beat?.cinematicUrl ?? beat?.imageUrl ?? null;
-    if (!beatUrl) return;
+    setShowSupplementary(false);
+    clearTimeout(supplementaryTimerRef.current);
 
-    // Find this beat's image in the pool
-    const idx = imagePool.findIndex((e) => e.url === beatUrl);
-    if (idx >= 0) {
-      setPoolIndex(idx);
-    }
-  }, [currentBeatIndex, beats, imagePool]);
+    if (!hasBeatVisual || !supplementaryUrl || shouldPause) return;
+    // Don't show supplementary if it's the same as primary
+    if (supplementaryUrl === primaryUrl) return;
 
-  // ── Gallery cycling: every 5s, advance to next image in pool ──
+    supplementaryTimerRef.current = setTimeout(() => {
+      setShowSupplementary(true);
+    }, SUPPLEMENTARY_DELAY_MS);
+
+    return () => clearTimeout(supplementaryTimerRef.current);
+  }, [currentBeatIndex, hasBeatVisual, supplementaryUrl, primaryUrl, shouldPause]);
+
+  // ── Fallback: cycle segment images when no beats ──
   useEffect(() => {
-    if (imagePool.length <= 1 || shouldPause || hasVideo) return;
+    if (hasBeatVisual || hasVideo || images.length <= 1 || shouldPause) return;
 
     const interval = setInterval(() => {
-      setPoolIndex((prev) => (prev + 1) % imagePool.length);
-    }, GALLERY_CYCLE_MS);
+      setFallbackIndex((prev) => (prev + 1) % images.length);
+    }, FALLBACK_CYCLE_MS);
 
     return () => clearInterval(interval);
-  }, [imagePool.length, shouldPause, hasVideo]);
+  }, [hasBeatVisual, hasVideo, images.length, shouldPause]);
 
   // Reset on segment change
   useEffect(() => {
-    setPoolIndex(0);
-    hasRevealedFirstRef.current = false;
+    setFallbackIndex(0);
+    setShowSupplementary(false);
   }, [segment?.id]);
+
+  // Determine current visible URL for parent notification + ambient color
+  const visibleUrl = hasBeatVisual
+    ? (showSupplementary && supplementaryUrl ? supplementaryUrl : primaryUrl)
+    : (images[fallbackIndex] ?? null);
 
   // Notify parent of active image
   useEffect(() => {
-    if (!onActiveImageChange) return;
-    const entry = imagePool[poolIndex];
-    onActiveImageChange(entry?.url ?? null);
-  }, [poolIndex, imagePool, onActiveImageChange]);
+    if (onActiveImageChange) onActiveImageChange(visibleUrl);
+  }, [visibleUrl, onActiveImageChange]);
 
   const playState = shouldPause ? 'paused' : 'running';
-
-  // Current pool entry
-  const currentEntry = imagePool[poolIndex] ?? null;
 
   // Ambient color sampling
   const handleImageLoad = useCallback(
@@ -160,77 +128,43 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
           .querySelector<HTMLElement>('.player-root')
           ?.style.setProperty('--ambient-color', color);
       } catch {
-        // Canvas taint from CORS — silently ignore
+        // Canvas taint from CORS
       }
     },
     [],
   );
 
+  // Determine current visual source for badge
+  const currentSource: 'interleaved' | 'imagen' | 'veo' =
+    beatVideoUrl && currentBeat?.visualType === 'video' ? 'veo'
+    : showSupplementary && supplementaryUrl ? 'imagen'
+    : currentBeat?.cinematicUrl ? 'imagen'
+    : hasBeatVisual ? 'interleaved'
+    : 'imagen';
+
+  // ── Null / loading / video-only states ──
+
   if (!segment) {
-    return (
-      <div
-        className="absolute inset-0"
-        style={{ background: 'var(--player-bg)' }}
-      />
-    );
+    return <div className="absolute inset-0" style={{ background: 'var(--player-bg)' }} />;
   }
 
-  if (imagePool.length === 0 && !hasVideo) {
+  if (!hasBeatVisual && images.length === 0 && !hasVideo) {
     return (
-      <div
-        className="absolute inset-0 flex flex-col items-center justify-center"
-        style={{ background: 'var(--player-bg)' }}
-      >
-        <div
-          className="kb-skeleton-pulse"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            border: '1px solid rgba(196,149,106,0.3)',
-          }}
-        />
-        <p
-          className="mt-4"
-          style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: 11,
-            textTransform: 'uppercase',
-            letterSpacing: '0.3em',
-            color: 'var(--player-text-dim)',
-          }}
-        >
+      <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: 'var(--player-bg)' }}>
+        <div className="kb-skeleton-pulse" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid rgba(196,149,106,0.3)' }} />
+        <p className="mt-4" style={{ fontFamily: 'var(--font-serif)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.3em', color: 'var(--player-text-dim)' }}>
           Loading visuals…
         </p>
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
-          }}
-        />
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)' }} />
       </div>
     );
   }
 
-  if (hasVideo) {
+  if (hasVideo && !hasBeatVisual) {
     return (
       <div className="absolute inset-0">
-        <video
-          src={segment.videoUrl}
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
-          }}
-        />
+        <video src={segment.videoUrl} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)' }} />
       </div>
     );
   }
@@ -249,23 +183,16 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeOut' }}
           >
-            <video
-              src={beatVideoUrl}
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="h-full w-full object-cover"
-            />
+            <video src={beatVideoUrl} autoPlay muted loop playsInline className="h-full w-full object-cover" />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Image gallery — continuous cycling with parallax depth transitions */}
+      {/* PRIMARY: Beat illustration — changes on beat advance (audio-synced) */}
       <AnimatePresence mode="sync">
-        {currentEntry && (
+        {primaryUrl && !showSupplementary && (
           <motion.div
-            key={`pool-${poolIndex}`}
+            key={`beat-${currentBeatIndex}`}
             className="absolute inset-0"
             style={{ zIndex: 2 }}
             initial={{ opacity: 0, scale: 1.06, y: '1.5%', filter: 'blur(2px)' }}
@@ -274,19 +201,71 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             transition={{ duration: 1.4, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <img
-              src={currentEntry.url}
+              src={primaryUrl}
               alt=""
               role="presentation"
               onLoad={handleImageLoad}
               className="h-full w-full object-cover"
               style={{
-                animation: `ken-burns-${currentEntry.kenBurnsIndex} var(--ken-speed, 28s) ease-in-out infinite alternate`,
+                animation: `ken-burns-${currentBeatIndex % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
+                animationPlayState: playState,
+              }}
+            />
+          </motion.div>
+        )}
+
+        {/* SUPPLEMENTARY: Imagen 3 frame — crossfades in 8s after beat starts */}
+        {showSupplementary && supplementaryUrl && (
+          <motion.div
+            key={`supp-${currentBeatIndex}`}
+            className="absolute inset-0"
+            style={{ zIndex: 2 }}
+            initial={{ opacity: 0, scale: 1.04, filter: 'blur(2px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.97, filter: 'blur(6px)' }}
+            transition={{ duration: 1.5, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <img
+              src={supplementaryUrl}
+              alt=""
+              role="presentation"
+              onLoad={handleImageLoad}
+              className="h-full w-full object-cover"
+              style={{
+                animation: `ken-burns-${(currentBeatIndex + 2) % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
                 animationPlayState: playState,
               }}
             />
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* FALLBACK: Segment images when no beats exist */}
+      {!hasBeatVisual && images.length > 0 && (
+        <AnimatePresence mode="sync">
+          <motion.div
+            key={`fallback-${fallbackIndex}`}
+            className="absolute inset-0"
+            style={{ zIndex: 1 }}
+            initial={{ opacity: 0, scale: 1.04 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 1.5, ease: 'easeInOut' }}
+          >
+            <img
+              src={images[fallbackIndex]}
+              alt=""
+              role="presentation"
+              onLoad={handleImageLoad}
+              className="h-full w-full object-cover"
+              style={{
+                animation: `ken-burns-${fallbackIndex % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
+                animationPlayState: playState,
+              }}
+            />
+          </motion.div>
+        </AnimatePresence>
+      )}
 
       {/* Live illustration overlay */}
       <AnimatePresence>
@@ -301,41 +280,26 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
             exit={{ opacity: 0 }}
             transition={{
               opacity: { duration: 1.2, ease: 'easeInOut' },
-              scale: {
-                type: 'spring',
-                stiffness: 20,
-                damping: 15,
-                mass: 1,
-                duration: 20,
-              },
+              scale: { type: 'spring', stiffness: 20, damping: 15, mass: 1, duration: 20 },
             }}
             className="absolute inset-0 w-full h-full object-cover"
-            style={{
-              zIndex: 4,
-              willChange: 'transform, opacity',
-            }}
+            style={{ zIndex: 4, willChange: 'transform, opacity' }}
           />
         )}
       </AnimatePresence>
 
       {/* Illustration shimmer glow */}
       {liveIllustration && (
-        <div
-          className="illustration-shimmer absolute inset-0 pointer-events-none"
-          style={{ zIndex: 1 }}
-        />
+        <div className="illustration-shimmer absolute inset-0 pointer-events-none" style={{ zIndex: 1 }} />
       )}
 
-      {/* Visual source badge — dynamically shows current image source */}
-      {currentEntry && (
+      {/* Visual source badge */}
+      {(hasBeatVisual || images.length > 0) && (
         <div
           className="absolute top-4 right-4 z-10 pointer-events-none"
           style={{ opacity: 'var(--chrome-opacity, 1)', transition: 'opacity 0.4s ease' }}
         >
-          <VisualSourceBadge
-            source={currentEntry.source}
-            compact
-          />
+          <VisualSourceBadge source={currentSource} compact />
         </div>
       )}
 
@@ -343,8 +307,7 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background:
-            'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
+          background: 'radial-gradient(ellipse var(--vig-spread) 100% at 50% 100%, transparent 40%, var(--player-vignette) 100%)',
         }}
       />
     </div>
