@@ -339,7 +339,7 @@ export function HistorianPanel({ onSpeak }: HistorianPanelProps = {}) {
         className="w-full flex items-center justify-between px-4 py-2.5 bg-transparent border-none cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <span style={{ color: 'var(--gold)', fontSize: 8, opacity: 0.7 }}>{'\u2666'}</span>
+          <span style={{ color: 'var(--gold)', fontSize: 10, opacity: 0.6 }}>❧</span>
           <h2 className="font-serif text-[12px] font-bold uppercase tracking-[0.35em]" style={{ color: 'var(--gold)' }}>
             The Historian
           </h2>
