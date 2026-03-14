@@ -1,41 +1,33 @@
 """Phase III of the AI Historian documentary pipeline: Script Generation.
 
-Wraps the Script Agent (gemini-2.0-pro) in a custom ``BaseAgent`` orchestrator
-that handles SSE emission, output parsing, and Firestore persistence.
+Wraps per-scene Gemini calls in a custom ``BaseAgent`` orchestrator that
+handles SSE emission, output parsing, and Firestore persistence.
 
-Architecture
-------------
+Architecture (Workstream B — per-segment streaming)
+----------------------------------------------------
 ``ScriptAgentOrchestrator`` is a custom ``BaseAgent`` subclass. It:
 
 1. Emits the ``pipeline_phase`` SSE event (phase 3, label "SYNTHESIS") so the
    frontend Expedition Log advances to Phase III.
-2. Announces the inner script agent as ``queued`` then ``searching`` so the
-   Research Panel shows a status card.
-3. Runs the inner ADK ``Agent`` (``_INNER_SCRIPT_AGENT``) via
-   ``run_async(ctx)``, yielding every ADK event upstream.
-4. Parses the JSON output from ``session.state["script"]`` into a list of
-   ``SegmentScript`` objects.
-5. Writes each segment as a Firestore document under
-   ``/sessions/{sessionId}/segments/{segmentId}`` with a ``status: "pending"``
-   field (imageUrls/videoUrl are filled by Phase V).
-6. Emits ``segment_update`` SSE events — one per segment with
-   ``status: "generating"`` — so the frontend SegmentCard skeletons become
-   titled cards.
-7. Emits a ``stats_update`` event with ``segmentsReady`` equal to the number
-   of successfully parsed segments.
+2. For each scene brief, makes a *separate* ``client.aio.models.generate_content``
+   call to produce ONE ``SegmentScript`` at a time.
+3. Immediately after each segment is parsed, writes it to Firestore and emits
+   ``segment_update`` SSE events so the frontend SegmentCard skeletons become
+   titled cards without waiting for all segments.
+4. Exposes ``generate_single_segment`` for the per-segment pipeline in
+   ``pipeline.py`` to call on individual scenes.
 
 Session state contract
 ----------------------
 **Inputs** (must be set before Phase III runs):
-    - ``session.state["scene_briefs"]``        — ``list[dict]`` from Phase I
-    - ``session.state["aggregated_research"]`` — merged string from aggregator
-    - ``session.state["visual_bible"]``        — Imagen 3 style guide string
-    - ``session.state["document_map"]``        — document outline string
+    - ``session.state["scene_briefs"]``        -- ``list[dict]`` from Phase I
+    - ``session.state["aggregated_research"]`` -- merged string from aggregator
+    - ``session.state["visual_bible"]``        -- Imagen 3 style guide string
+    - ``session.state["document_map"]``        -- document outline string
 
 **Outputs** (written by this agent):
-    - ``session.state["script"]`` — list[dict] of serialised ``SegmentScript``
-      objects (raw JSON string as returned by the inner ADK Agent, then
-      re-written as a list of dicts after parsing).
+    - ``session.state["script"]`` -- list[dict] of serialised ``SegmentScript``
+      objects, appended incrementally as each segment completes.
 """
 
 from __future__ import annotations
@@ -47,10 +39,11 @@ import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from google.adk.agents import Agent
+from google import genai as google_genai
 from google.adk.agents.base_agent import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.cloud import firestore
+from google.genai import types as genai_types
 from pydantic import ConfigDict, Field
 
 from .script_types import SegmentScript
@@ -63,55 +56,52 @@ from .sse_helpers import (
 
 logger = logging.getLogger(__name__)
 
+_MODEL: str = "gemini-2.0-flash"  # Switch to gemini-2.0-pro before submission
+_MAX_RETRIES: int = 3
 
 # ---------------------------------------------------------------------------
-# Inner ADK Script Agent
-# ---------------------------------------------------------------------------
-# Defined at module level so it is reused across pipeline invocations.
-# The agent reads {scene_briefs} and {aggregated_research} from session.state
-# via ADK's template substitution mechanism.
+# Per-scene system instruction (used for individual Gemini calls)
 # ---------------------------------------------------------------------------
 
-_INNER_SCRIPT_AGENT_INSTRUCTION = """\
+_PER_SCENE_SYSTEM_INSTRUCTION: str = """\
 You are the scriptwriter for an AI-generated historical documentary.
 
 ## Your Voice
 
-Write as Ken Burns and Geoffrey C. Ward — scholarly, warm, specific, never \
+Write as Ken Burns and Geoffrey C. Ward -- scholarly, warm, specific, never \
 academic. Your sentences have weight without pretension. You trust the viewer's \
 intelligence. You let silence and image do half the work. When you speak, every \
 word earns its place.
 
 ## FIVE MANDATORY RULES
 
-Follow every rule in every segment. No exceptions.
+Follow every rule. No exceptions.
 
-### Rule 1 — Open with a specific moment, never a topic sentence.
+### Rule 1 -- Open with a specific moment, never a topic sentence.
 BAD:  "The Roman Colosseum was one of the greatest engineering achievements."
 GOOD: "On a sweltering August morning in 80 AD, the emperor Titus stood at \
 the rim of the largest amphitheater the world had ever seen."
 
-### Rule 2 — At least one primary-source quote per segment with attribution.
+### Rule 2 -- At least one primary-source quote with attribution.
 Format: "'[quote],' wrote [Name], [context of who they were]."
 If no direct quote exists in the research, use a named paraphrase: \
 "According to Pliny the Elder, who catalogued the natural wonders of the empire..."
 
-### Rule 3 — Present-tense pivot for immediacy, at least once per segment.
+### Rule 3 -- Present-tense pivot for immediacy, at least once.
 Example: "It is the spring of 1348. The first ships have just arrived in \
 Messina harbor. No one on the docks understands what the rats carry."
 
-### Rule 4 — End with resonance, never summary.
+### Rule 4 -- End with resonance, never summary.
 BAD:  "The battle was a turning point in the war."
 GOOD: "The field is quiet now. Wildflowers grow where the artillery stood."
 
-### Rule 5 — Bridge sentence to the next scene (all segments except the last).
-The bridge must be spatial, temporal, or narrative — never meta-commentary. \
+### Rule 5 -- Bridge sentence to the next scene (unless this is the LAST scene).
+The bridge must be spatial, temporal, or narrative -- never meta-commentary. \
 GOOD: "Three hundred miles to the east, another city is about to learn the \
 same lesson." \
-BAD:  "Meanwhile, in another part of the story..." \
-BAD:  "Moving on to our next topic..."
+BAD:  "Meanwhile, in another part of the story..."
 
-## ANTI-PATTERNS — NEVER USE THESE
+## ANTI-PATTERNS -- NEVER USE THESE
 
 Banned phrases: "Throughout history...", "It is worth noting", \
 "Interestingly enough", "Moving on to our next topic", "It is important to \
@@ -119,207 +109,62 @@ remember", "In conclusion".
 Banned modern idioms: "game-changer", "iconic", "legendary", "cutting-edge", \
 "ahead of its time", "changed the world forever".
 Banned didactic address: Never use "You might wonder...", "Imagine yourself \
-there...", "Picture this..." — the narration places the viewer in the scene \
-without instructing them to imagine it.
+there...", "Picture this..."
 
 ## Pacing by narrative_role
 
-The `narrative_role` field in each scene brief shapes pacing and register:
+- "opening": Slow, atmospheric. Long compound sentences. Breathe.
+- "rising_action": Building momentum. Facts accumulate. Sentences shorten.
+- "climax": Urgency. Short declarative sentences. Present-tense pivot strongest here.
+- "resolution": Exhale. The consequence arrives. Longer sentences return.
+- "coda": The longest view. Historical echo. Quietest register.
 
-- "opening": Slow, atmospheric. Long compound sentences. The viewer arrives \
-before the action does. Establish geography, season, light, the texture of \
-daily life. Breathe.
-- "rising_action": Building momentum. Facts accumulate. Sentences shorten \
-as tension mounts. Introduce the specific people who will matter.
-- "climax": Urgency. Short declarative sentences. Present-tense pivot is \
-strongest here. Sensory detail — sound, heat, smell, the weight of objects. \
-Let the moment land without explaining its importance.
-- "resolution": Exhale. The consequence arrives. Longer sentences return. \
-What changed is stated plainly, without editorialising.
-- "coda": The longest view. Historical echo — how this moment ripples into \
-the present. Quietest register. The last image should linger.
+## Visual Descriptions -- 4 Frames (Imagen 3 Prompts)
 
-## FEW-SHOT EXAMPLE — All 5 Rules in Action
-
-Scene: The Inaugural Games of the Colosseum, Rome, 80 AD. \
-narrative_role: "opening".
-
-"On a sweltering August morning in 80 AD, fifty thousand Romans press through \
-the marble archways of the largest amphitheater the world has ever seen. \
-[Rule 1: specific moment, not topic sentence] The emperor Titus has spent \
-eight years finishing what his father began, and today the Flavian \
-Amphitheater — the building we will come to call the Colosseum — opens its \
-gates for the first time.
-
-'He gave a most lavish gladiatorial show,' wrote Cassius Dio, the senator \
-who would chronicle the excesses of a dozen emperors. [Rule 2: primary-source \
-quote with attribution] The sand is raked smooth. The velarium — an enormous \
-linen awning operated by a thousand sailors — billows overhead, casting the \
-crowd in rippling shadow.
-
-It is mid-morning. The first beast hunt is about to begin. [Rule 3: \
-present-tense pivot] Beneath the arena floor, in a maze of tunnels and \
-mechanical lifts that no audience member can see, handlers steady crates of \
-North African lions. A trapdoor rises. Sunlight floods the passage. The crowd \
-draws a single breath.
-
-For one hundred days the games will continue — five thousand animals killed, \
-uncounted men alongside them. The stone remembers what the empire preferred \
-to celebrate. [Rule 4: resonance, not summary]
-
-Six hundred miles to the south, in the quarries that supplied the travertine, \
-the next shipment is already being cut. [Rule 5: bridge sentence — spatial]"
-
-## Inputs
-
-Scene Briefs (the planned scenes, grounded in the source document):
-{scene_briefs}
-
-Aggregated Research (corroborated historical facts and enriched Visual Bible):
-{aggregated_research}
-
-Visual Bible (period-accurate style guide for all imagery):
-{visual_bible}
-
-Document Map (structural outline of the source document):
-{document_map}
-
-## Task
-
-Generate one documentary segment per scene brief. Each segment must directly \
-correspond to its scene brief — same scene_id, title from the brief, same era \
-and location. Do not invent new scenes or reorder the narrative arc.
-
-## Visual Descriptions — 4 Frames (Imagen 3 Prompts)
-
-Each `visual_descriptions` array MUST have exactly 4 entries. CRITICAL: Each \
-frame must depict a DIFFERENT SUBJECT/ASPECT of the scene — not the same view \
-from a different camera angle.
-
-- Frame 1 (index 0): ENVIRONMENT ONLY — The architectural or landscape \
-setting in its full glory. NO human figures whatsoever. The space, its scale, \
-its textures, its atmosphere. Wide and immersive.
-
-- Frame 2 (index 1): HUMAN ACTIVITY — People actively present in this space. \
-Workers, citizens, merchants, soldiers, priests — whoever belongs here. \
-Period dress. Human activity is PRIMARY; architecture is background only.
-
-- Frame 3 (index 2): MATERIAL DETAIL — An extreme close-up of ONE specific \
-physical object from this era. A carved stone inscription, a worn bronze \
-tool, a piece of fabric, a document, a vessel, an architectural ornament. \
-The object IS the entire frame. No context needed.
-
-- Frame 4 (index 3): ATMOSPHERE — Light, shadow, and environmental mood. A \
-dramatic visual relationship: a shaft of light through a colonnade, shadow \
-patterns on stone, dust in sunbeams, fire reflection on water. Atmosphere \
-and light are the subject, not objects.
+Each `visual_descriptions` array MUST have exactly 4 entries:
+- Frame 1 (index 0): ENVIRONMENT ONLY -- wide, immersive, NO human figures.
+- Frame 2 (index 1): HUMAN ACTIVITY -- people as primary subject.
+- Frame 3 (index 2): MATERIAL DETAIL -- extreme close-up of ONE specific object.
+- Frame 4 (index 3): ATMOSPHERE -- light, shadow, mood as subject.
 
 RULES for each visual description:
 - Start with "Cinematic still photograph."
-- Include the EXPLICIT ERA and PERIOD (e.g., "circa 1st century CE", \
-"ancient Rome 80 AD", "Renaissance Florence 1500s"). Never omit the time \
-period.
-- Be 50–70 words — precise and specific.
-- Include period-accurate materials (what surfaces are made of), lighting \
-source (candles, oil lamps, torches, natural daylight), and atmospheric \
-condition.
-- Each frame must show something DIFFERENT from the other three. If Frame 1 \
-shows the Colosseum's arches, Frame 2 must show PEOPLE, Frame 3 must show \
-a SPECIFIC SMALL OBJECT, and Frame 4 must show LIGHT/SHADOW — NOT more \
-Colosseum arches.
-- Do not repeat the main landmark across all 4 frames. One establishing shot \
-(Frame 1) is enough — the other frames show different aspects of the world.
+- Include the EXPLICIT ERA and PERIOD.
+- Be 50-70 words -- precise and specific.
+- Include period-accurate materials, lighting source, atmospheric condition.
+- Each frame must show something DIFFERENT from the other three.
 
 ## Veo 2 Scenes (Optional)
 
-The `veo2_scene` field is optional. Include it ONLY if the segment has a \
-visually dramatic moment: sweeping environment (harbor, plaza, forest), \
-atmospheric dynamics (fog, fire, water), or architectural scale.
-
-When present, the Veo 2 prompt MUST follow this EXACT structure:
-"[Camera movement]. [Subject/environment in period context with temporal \
-state]. [Atmospheric motion element]. Shot on 35mm film, anamorphic lens."
-
-MANDATORY RULES:
-- SINGLE camera movement only — NEVER combine movements (pan + zoom), \
-(dolly + crane), etc. Choose ONE: "Slow dolly in", "Crane shot rising", \
-"Pan right across", "Static shot of", "Slow arc around", "Tracking shot \
-along". One movement per clip, no exceptions.
-- Include ONE atmospheric motion element — fog drifting, dust floating in \
-light shafts, candlelight flickering, water rippling, shadows lengthening, \
-smoke curling, leaves stirring, fabric billowing. This gives Veo 2 \
-something to animate.
-- Stay within 30-50 words maximum. Shorter is sharper — over 50 words \
-dilutes Veo 2's focus and produces muddled output.
-- The depicted environment must reflect its STATE at the historical period — \
-specify if it is freshly built, intact, in active use, polychrome-painted, \
-etc. NEVER default to the modern ruined appearance of famous sites.
-- NO negative descriptions — Veo 2 cannot process negations. Describe WHAT \
-IS THERE, not what should be absent.
-- Contain NO human faces, NO identifiable individuals — describe environment, \
-objects, atmospheric movement, and traces of human activity only.
-- Include time-of-day as atmosphere shorthand: "at golden hour", "pre-dawn \
-blue light", "dusk last light".
-- Example: "Slow crane shot rising over the intact Colosseum at golden hour, \
-its travertine arches painted in ochre and cinnabar, dust motes drifting \
-through the archways. Shot on 35mm film, anamorphic lens."
-
-If the segment has no dramatic visual moment, omit the `veo2_scene` key \
-entirely — do not force it.
+Include `veo2_scene` ONLY for visually dramatic moments. When present:
+"[Camera movement]. [Subject/environment]. [Atmospheric motion]. Shot on 35mm film, anamorphic lens."
+- SINGLE camera movement only.
+- ONE atmospheric motion element.
+- 30-50 words maximum.
 
 ## Mood
 
-The `mood` field must be exactly one of: "cinematic", "reflective", \
-"dramatic", "scholarly". Never combine moods, never use custom strings.
+Exactly one of: "cinematic", "reflective", "dramatic", "scholarly".
 
 ## Sources / Citations
 
-The `sources` array should use consistent formatting:
-- Academic: "Author Last, First. 'Title.' Journal/Publisher, Year. [URL if online]"
-- Archival: "Archive Name. Document Title. Call number/date."
-- Web: "Site Name: Article Title. [URL]. Accessed from research."
-
-## Narrative Role (copy from scene brief)
-
-The `narrative_role` field must be copied EXACTLY from the scene brief — do not change it. Valid values: "opening", "rising_action", "climax", "resolution", "coda".
+Consistent formatting from the research.
 
 ## Output Format
 
-Produce a JSON array containing one object per scene brief, in the same order \
-as the briefs. Do not wrap it in markdown fences or add a preamble.
-
-Each object:
+Produce a single JSON object (NOT an array). No markdown fences, no preamble.
 {
   "id": "segment_N",
   "scene_id": "scene_N",
   "title": "Scene title (from the brief)",
   "narration_script": "Full narration text, 60-120 seconds when spoken aloud",
-  "visual_descriptions": [
-    "Cinematic still photograph. Environment only, no people — [full scene, circa ERA]...",
-    "Cinematic still photograph. Human figures as primary subject — [people in period dress, ERA]...",
-    "Cinematic still photograph. Extreme close-up — [single specific object, ERA]...",
-    "Cinematic still photograph. Atmospheric light and shadow — [light quality, ERA]..."
-  ],
-  "veo2_scene": "Slow dolly in over ... (optional, omit key if not applicable)",
+  "visual_descriptions": ["frame 1...", "frame 2...", "frame 3...", "frame 4..."],
+  "veo2_scene": "optional, omit key if not applicable",
   "mood": "cinematic",
   "narrative_role": "climax",
-  "sources": ["formatted citation 1", "formatted citation 2"]
+  "sources": ["citation 1", "citation 2"]
 }
 """
-
-
-def _make_inner_script_agent() -> Agent:
-    """Create a fresh script Agent per pipeline run — ADK agents cannot be reused."""
-    return Agent(
-        name="script_agent",
-        model="gemini-2.0-flash",  # Was gemini-2.0-pro — switch back to pro before submission
-        description=(
-            "Generates documentary segments grounded in scene briefs and "
-            "aggregated research. One segment per SceneBrief."
-        ),
-        instruction=_INNER_SCRIPT_AGENT_INSTRUCTION,
-        output_key="script",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +194,7 @@ def _parse_script_output(raw: str) -> list[SegmentScript]:
 
     Returns:
         List of validated ``SegmentScript`` objects. May be empty if parsing
-        fails — the caller logs the error and emits an SSE error event.
+        fails -- the caller logs the error and emits an SSE error event.
     """
     cleaned = _strip_fences(raw)
     try:
@@ -360,7 +205,11 @@ def _parse_script_output(raw: str) -> list[SegmentScript]:
 
     # Unwrap {"segments": [...]} envelope if present
     if isinstance(parsed, dict):
-        parsed = parsed.get("segments", [])
+        if "segments" in parsed:
+            parsed = parsed["segments"]
+        else:
+            # Single segment object -- wrap in list
+            parsed = [parsed]
 
     if not isinstance(parsed, list):
         logger.error(
@@ -379,6 +228,40 @@ def _parse_script_output(raw: str) -> list[SegmentScript]:
             logger.warning("Skipping malformed segment at index %d: %s", idx, exc)
 
     return segments
+
+
+def _parse_single_segment(raw: str) -> SegmentScript | None:
+    """Parse a single segment JSON from a per-scene Gemini call.
+
+    Args:
+        raw: Raw JSON string from the model response.
+
+    Returns:
+        A validated ``SegmentScript`` or ``None`` on failure.
+    """
+    cleaned = _strip_fences(raw)
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.error("Per-scene script output is not valid JSON: %s", exc)
+        return None
+
+    # Handle array wrapping (model may return [{}] instead of {})
+    if isinstance(parsed, list) and len(parsed) >= 1:
+        parsed = parsed[0]
+
+    if not isinstance(parsed, dict):
+        logger.error(
+            "Per-scene script output is not a JSON object (got %s)",
+            type(parsed).__name__,
+        )
+        return None
+
+    try:
+        return SegmentScript(**parsed)
+    except Exception as exc:
+        logger.warning("Failed to validate per-scene segment: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +298,30 @@ def _segment_to_firestore_doc(segment: SegmentScript) -> dict[str, Any]:
     }
 
 
+async def _write_segment_to_firestore(
+    db: firestore.AsyncClient,
+    session_id: str,
+    segment: SegmentScript,
+) -> None:
+    """Write a single SegmentScript to Firestore.
+
+    Creates or overwrites the document at
+    ``/sessions/{sessionId}/segments/{segmentId}``.
+
+    Args:
+        db: Async Firestore client.
+        session_id: Parent session.
+        segment: Parsed and validated segment to persist.
+    """
+    ref = (
+        db.collection("sessions")
+        .document(session_id)
+        .collection("segments")
+        .document(segment.id)
+    )
+    await ref.set(_segment_to_firestore_doc(segment))
+
+
 async def _write_segments_to_firestore(
     db: firestore.AsyncClient,
     session_id: str,
@@ -444,17 +351,257 @@ async def _write_segments_to_firestore(
 
 
 # ---------------------------------------------------------------------------
-# ScriptAgentOrchestrator — Phase III BaseAgent
+# Per-scene Gemini call (for per-segment streaming pipeline)
+# ---------------------------------------------------------------------------
+
+
+async def generate_single_segment(
+    *,
+    scene_index: int,
+    scene_brief: dict[str, Any],
+    aggregated_research: str,
+    visual_bible: str,
+    document_map: str,
+    is_last_scene: bool,
+    total_scenes: int,
+    session_id: str,
+    firestore_project: str,
+    emitter: SSEEmitter | None = None,
+) -> SegmentScript | None:
+    """Generate a single segment script for one scene via a direct Gemini call.
+
+    This function is the per-segment entry point used by the streaming pipeline
+    (``pipeline.py`` Workstream B). It replaces the monolithic ADK agent call
+    with a targeted Gemini call that produces ONE ``SegmentScript`` and immediately
+    writes it to Firestore + emits SSE events.
+
+    Args:
+        scene_index: Zero-based index of this scene.
+        scene_brief: The scene brief dict for this scene.
+        aggregated_research: Merged research string from Phase II aggregator.
+        visual_bible: Imagen 3 style guide string from Phase I.
+        document_map: Document outline string from Phase I.
+        is_last_scene: Whether this is the final scene (controls bridge sentence rule).
+        total_scenes: Total number of scenes in the documentary.
+        session_id: Parent session ID.
+        firestore_project: GCP project ID for Firestore.
+        emitter: Optional SSE emitter for frontend events.
+
+    Returns:
+        The generated ``SegmentScript``, or ``None`` if generation failed.
+    """
+    import asyncio
+
+    segment_id = f"segment_{scene_index}"
+    scene_id = scene_brief.get("scene_id", f"scene_{scene_index}")
+    title = scene_brief.get("title", f"Scene {scene_index}")
+    agent_id = f"script_agent_{scene_id}"
+
+    t_start = time.monotonic()
+
+    # -- Emit queued/searching status ------------------------------------------
+    if emitter is not None:
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="queued",
+                query=f"Scripting scene {scene_index + 1}/{total_scenes}: {title}",
+            ),
+        )
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="searching",
+                query=f"Composing narration for: {title}",
+            ),
+        )
+
+    # -- Build per-scene prompt ------------------------------------------------
+    bridge_note = (
+        ""
+        if is_last_scene
+        else "\n\nIMPORTANT: This is NOT the last scene. Include a bridge sentence (Rule 5) at the end."
+    )
+    if is_last_scene:
+        bridge_note = "\n\nIMPORTANT: This IS the last scene. Do NOT include a bridge sentence. End with resonance (Rule 4)."
+
+    prompt = (
+        f"Generate a single documentary segment for the following scene.\n\n"
+        f"Scene Brief (scene {scene_index + 1} of {total_scenes}):\n"
+        f"{json.dumps(scene_brief, indent=2, ensure_ascii=False)}\n\n"
+        f"Aggregated Research:\n{aggregated_research}\n\n"
+        f"Visual Bible (style guide):\n{visual_bible}\n\n"
+        f"Document Map:\n{document_map}\n\n"
+        f"The segment id MUST be \"{segment_id}\".\n"
+        f"The scene_id MUST be \"{scene_id}\".\n"
+        f"The narrative_role MUST be \"{scene_brief.get('narrative_role', '')}\"."
+        f"{bridge_note}"
+    )
+
+    # -- Initialize Gemini client ----------------------------------------------
+    project_id = firestore_project or os.environ.get("GCP_PROJECT_ID", "")
+    client = google_genai.Client(
+        vertexai=True if project_id else False,
+        project=project_id or None,
+        location="us-central1" if project_id else None,
+    )
+
+    # -- Call Gemini with retry ------------------------------------------------
+    raw_text: str | None = None
+    last_error: Exception | None = None
+
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(
+                model=_MODEL,
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=_PER_SCENE_SYSTEM_INSTRUCTION,
+                    max_output_tokens=4096,
+                    temperature=0.7,
+                    response_mime_type="application/json",
+                ),
+            )
+            raw_text = response.text
+            break
+        except Exception as exc:
+            last_error = exc
+            wait = 2 ** attempt
+            logger.warning(
+                "Per-scene script call attempt %d/%d failed for %s: %s. "
+                "Retrying in %ds.",
+                attempt + 1,
+                _MAX_RETRIES,
+                segment_id,
+                exc,
+                wait,
+            )
+            await asyncio.sleep(wait)
+
+    if raw_text is None:
+        logger.error(
+            "Per-scene script generation failed for %s after %d retries: %s",
+            segment_id,
+            _MAX_RETRIES,
+            last_error,
+        )
+        if emitter is not None:
+            await emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id=agent_id,
+                    status="error",
+                    elapsed=round(time.monotonic() - t_start, 1),
+                    error_message=f"Script generation failed for {title}",
+                ),
+            )
+        return None
+
+    # -- Parse single segment --------------------------------------------------
+    segment = _parse_single_segment(raw_text)
+
+    if segment is None:
+        logger.error(
+            "Per-scene script parsing failed for %s. Raw (first 500 chars): %s",
+            segment_id,
+            raw_text[:500],
+        )
+        if emitter is not None:
+            await emitter.emit(
+                "agent_status",
+                build_agent_status_event(
+                    agent_id=agent_id,
+                    status="error",
+                    elapsed=round(time.monotonic() - t_start, 1),
+                    error_message=f"Script parsing failed for {title}",
+                ),
+            )
+        return None
+
+    # Ensure IDs are correct (model may hallucinate different IDs)
+    segment.id = segment_id
+    segment.scene_id = scene_id
+
+    # Enrich narrative_role from scene brief if missing
+    if not segment.narrative_role:
+        segment.narrative_role = scene_brief.get("narrative_role", "")
+
+    # -- Write to Firestore immediately ----------------------------------------
+    db = firestore.AsyncClient(project=project_id)
+    try:
+        await _write_segment_to_firestore(db, session_id, segment)
+        logger.debug(
+            "Wrote segment %s to Firestore for session %s",
+            segment_id,
+            session_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to write segment %s to Firestore: %s",
+            segment_id,
+            exc,
+        )
+
+    # -- Entity extraction (non-critical) --------------------------------------
+    try:
+        from .entity_extractor import extract_entities
+
+        # Note: ocr_pages not available here since we don't have session.state
+        # Entity extraction will be done in the pipeline if needed
+    except Exception:
+        pass
+
+    # -- Emit SSE events immediately -------------------------------------------
+    t_elapsed = round(time.monotonic() - t_start, 1)
+
+    if emitter is not None:
+        await emitter.emit(
+            "segment_update",
+            build_segment_update_event(
+                segment_id=segment_id,
+                scene_id=scene_id,
+                status="generating",
+                title=segment.title,
+                mood=segment.mood,
+                narration_script=segment.narration_script,
+            ),
+        )
+        await emitter.emit(
+            "agent_status",
+            build_agent_status_event(
+                agent_id=agent_id,
+                status="done",
+                elapsed=t_elapsed,
+                facts=[
+                    f"Segment \"{segment.title}\" scripted in {t_elapsed}s",
+                ],
+            ),
+        )
+
+    logger.info(
+        "Per-scene script complete: %s (%s) in %.1fs for session %s",
+        segment_id,
+        segment.title,
+        t_elapsed,
+        session_id,
+    )
+
+    return segment
+
+
+# ---------------------------------------------------------------------------
+# ScriptAgentOrchestrator -- Phase III BaseAgent (per-scene streaming)
 # ---------------------------------------------------------------------------
 
 
 class ScriptAgentOrchestrator(BaseAgent):
-    """Phase III orchestrator: run Script Agent → parse → store → emit events.
+    """Phase III orchestrator: per-scene Gemini calls -> parse -> store -> emit.
 
-    Wraps the inner ``_INNER_SCRIPT_AGENT`` (gemini-2.0-pro ADK Agent) in the
-    same BaseAgent orchestrator pattern used by Phases I and II. This gives
-    Phase III full SSE visibility without requiring the inner ADK Agent to know
-    anything about the SSE transport.
+    Makes N sequential ``client.aio.models.generate_content`` calls, one per
+    scene brief, producing and emitting each ``SegmentScript`` immediately
+    without waiting for the entire script to be generated.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -471,7 +618,7 @@ class ScriptAgentOrchestrator(BaseAgent):
         default_factory=list,
         description=(
             "Declared for ADK BaseAgent compatibility. "
-            "The inner script agent is run directly via run_async(ctx)."
+            "No sub-agents -- all work is done via direct Gemini calls."
         ),
     )
 
@@ -479,10 +626,13 @@ class ScriptAgentOrchestrator(BaseAgent):
         self,
         ctx: InvocationContext,
     ) -> AsyncGenerator[Any, None]:
-        """Execute Phase III: announce → run script agent → parse → persist.
+        """Execute Phase III: per-scene script generation.
 
-        Yields every ADK event produced by the inner script agent so the ADK
-        runtime can track execution correctly.
+        For each scene brief, makes a Gemini call, parses the result, writes
+        to Firestore, and emits SSE events immediately.
+
+        Yields nothing (no ADK sub-agent events). The method signature
+        satisfies the AsyncGenerator protocol required by ADK.
         """
         session_id: str = ctx.session.id
         t_start = time.monotonic()
@@ -501,9 +651,28 @@ class ScriptAgentOrchestrator(BaseAgent):
             )
 
         # ------------------------------------------------------------------
+        # Read inputs from session state
+        # ------------------------------------------------------------------
+        scene_briefs: list[dict[str, Any]] = ctx.session.state.get("scene_briefs", [])
+        aggregated_research: str = str(
+            ctx.session.state.get("aggregated_research", "")
+        )
+        visual_bible: str = str(ctx.session.state.get("visual_bible", ""))
+        document_map: str = str(ctx.session.state.get("document_map", ""))
+
+        num_scenes = len(scene_briefs)
+
+        if not scene_briefs:
+            logger.error(
+                "Phase III: no scene_briefs in session state for session %s",
+                session_id,
+            )
+            return
+            yield  # noqa: unreachable -- satisfies AsyncGenerator protocol
+
+        # ------------------------------------------------------------------
         # Announce script agent as queued
         # ------------------------------------------------------------------
-        num_scenes = len(ctx.session.state.get("scene_briefs", []))
         if self.emitter is not None:
             await self.emitter.emit(
                 "agent_status",
@@ -516,146 +685,70 @@ class ScriptAgentOrchestrator(BaseAgent):
                     ),
                 ),
             )
-
-        # ------------------------------------------------------------------
-        # Run the inner script agent
-        # ------------------------------------------------------------------
-        if self.emitter is not None:
             await self.emitter.emit(
                 "agent_status",
                 build_agent_status_event(
                     agent_id="script_agent",
-                    status="searching",  # "working" maps to teal dot in frontend
-                    query="Composing narration and visual prompts from research",
+                    status="searching",
+                    query="Composing narration and visual prompts per scene",
                 ),
             )
 
-        t_script_start = time.monotonic()
-        async for event in _make_inner_script_agent().run_async(ctx):
-            yield event
-        t_script_elapsed = time.monotonic() - t_script_start
-
-        logger.info(
-            "Script Agent completed in %.1fs for session %s",
-            t_script_elapsed,
-            session_id,
-        )
-
         # ------------------------------------------------------------------
-        # Parse output
+        # Per-scene sequential generation
         # ------------------------------------------------------------------
-        raw_script: str = ctx.session.state.get("script", "")
-        if not raw_script:
-            logger.error(
-                "Phase III: script_agent produced no output for session %s",
-                session_id,
+        segments: list[SegmentScript] = []
+
+        for i, brief in enumerate(scene_briefs):
+            is_last = i == num_scenes - 1
+
+            segment = await generate_single_segment(
+                scene_index=i,
+                scene_brief=brief,
+                aggregated_research=aggregated_research,
+                visual_bible=visual_bible,
+                document_map=document_map,
+                is_last_scene=is_last,
+                total_scenes=num_scenes,
+                session_id=session_id,
+                firestore_project=self.firestore_project,
+                emitter=self.emitter,
             )
-            if self.emitter is not None:
-                await self.emitter.emit(
-                    "agent_status",
-                    build_agent_status_event(
-                        agent_id="script_agent",
-                        status="error",
-                        elapsed=round(t_script_elapsed, 1),
-                    ),
-                )
-            return
 
-        segments = _parse_script_output(raw_script)
+            if segment is not None:
+                segments.append(segment)
 
-        # Enrich segments with narrative_role from scene_briefs if missing
-        scene_briefs_raw: list[dict[str, Any]] = ctx.session.state.get("scene_briefs", [])
-        narrative_role_by_scene: dict[str, str] = {
-            b.get("scene_id", ""): b.get("narrative_role", "")
-            for b in scene_briefs_raw
-        }
-        for seg in segments:
-            if not seg.narrative_role:
-                seg.narrative_role = narrative_role_by_scene.get(seg.scene_id, "")
-
-        if not segments:
-            logger.error(
-                "Phase III: could not parse any SegmentScript from output for "
-                "session %s. Raw output (first 500 chars): %s",
-                session_id,
-                raw_script[:500],
-            )
-            if self.emitter is not None:
-                await self.emitter.emit(
-                    "agent_status",
-                    build_agent_status_event(
-                        agent_id="script_agent",
-                        status="error",
-                        elapsed=round(t_script_elapsed, 1),
-                    ),
-                )
-            return
-
-        logger.info(
-            "Phase III: parsed %d segments for session %s",
-            len(segments),
-            session_id,
-        )
-
-        # Re-write session.state["script"] as a clean list of dicts so
-        # downstream agents (aggregator, visual_director) get consistent data.
-        ctx.session.state["script"] = [seg.model_dump() for seg in segments]
+                # Append incrementally to session state so downstream agents
+                # can start processing this segment immediately
+                existing: list[dict[str, Any]] = ctx.session.state.get("script", [])
+                existing.append(segment.model_dump())
+                ctx.session.state["script"] = existing
 
         # ------------------------------------------------------------------
-        # Persist to Firestore + emit per-segment SSE events
+        # Entity extraction for all segments (non-critical)
         # ------------------------------------------------------------------
         db = firestore.AsyncClient(project=self.firestore_project)
-
-        try:
-            await _write_segments_to_firestore(db, session_id, segments)
-            logger.debug(
-                "Batch-wrote %d segments to Firestore for session %s",
-                len(segments),
-                session_id,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Failed to batch-write %d segments to Firestore: %s",
-                len(segments),
-                exc,
-            )
-
-        # Extract entity highlights for PDF narration sync (non-critical)
         ocr_pages: list[str] = ctx.session.state.get("ocr_pages", [])
         for segment in segments:
             if ocr_pages and segment.narration_script:
                 try:
                     from .entity_extractor import extract_entities
 
-                    segment_firestore_id = segment.id
                     highlights = await extract_entities(
                         narration_script=segment.narration_script,
                         page_texts=ocr_pages,
-                        segment_id=segment_firestore_id,
+                        segment_id=segment.id,
                     )
                     if highlights:
                         await (
                             db.collection("sessions")
                             .document(session_id)
                             .collection("segments")
-                            .document(segment_firestore_id)
+                            .document(segment.id)
                             .update({"entityHighlights": highlights})
                         )
                 except Exception:
                     pass  # Non-critical -- don't break the pipeline
-
-        for segment in segments:
-            if self.emitter is not None:
-                await self.emitter.emit(
-                    "segment_update",
-                    build_segment_update_event(
-                        segment_id=segment.id,
-                        scene_id=segment.scene_id,
-                        status="generating",
-                        title=segment.title,
-                        mood=segment.mood,
-                    ),
-                )
 
         # ------------------------------------------------------------------
         # Stats update and completion event
@@ -690,6 +783,9 @@ class ScriptAgentOrchestrator(BaseAgent):
             t_total_elapsed,
         )
 
+        return
+        yield  # noqa: unreachable -- satisfies AsyncGenerator protocol
+
 
 # ---------------------------------------------------------------------------
 # Factory function
@@ -713,10 +809,11 @@ def build_script_agent_orchestrator(
     return ScriptAgentOrchestrator(
         name="script_agent_orchestrator",
         description=(
-            "Phase III: Runs the Script Agent (gemini-2.0-pro) to generate "
-            "narration and visual descriptions for each SceneBrief, then "
-            "validates the output, writes segments to Firestore, and emits "
-            "segment_update SSE events so the frontend Expedition Log updates."
+            "Phase III: Makes per-scene Gemini calls to generate narration "
+            "and visual descriptions for each SceneBrief individually, "
+            "validates the output, writes segments to Firestore immediately, "
+            "and emits segment_update SSE events so the frontend updates "
+            "incrementally without waiting for all segments."
         ),
         firestore_project=os.environ["GCP_PROJECT_ID"],
         emitter=emitter,
