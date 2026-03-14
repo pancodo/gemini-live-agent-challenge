@@ -420,18 +420,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
             },
           }],
         }],
-        toolConfig: {
-          functionCallingConfig: {
-            behavior: 'NON_BLOCKING',
-          },
-        },
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
-            startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
-            endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-            prefixPaddingMs: 40,
-            silenceDurationMs: 500,
           },
         },
         inputAudioTranscription: {},
