@@ -731,7 +731,8 @@ body {
 
 /* ── Ambient Color Glow (YouTube ambient mode) ─────────── */
 .player-stage {
-  position: relative;
+  position: absolute;
+  inset: 0;
 }
 .player-stage::before {
   content: '';

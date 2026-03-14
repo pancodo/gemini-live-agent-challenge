@@ -268,8 +268,11 @@ export function DocumentaryPlayer() {
     }
 
     const fallbackTimer = setTimeout(() => {
-      // Still no beats after 20s — fall back to full script
-      if (usePlayerStore.getState().beats.length === 0) {
+      // Still no beats after 20s — fall back to full script.
+      // Only send if voice is already active (user pressed Space).
+      // Do NOT auto-connect — that requires mic permission via user gesture.
+      const voiceState = useVoiceStore.getState().state;
+      if (usePlayerStore.getState().beats.length === 0 && voiceState !== 'idle') {
         autoNarratedRef.current.add(currentSegment.id);
         sendTextToHistorian(
           `You are now narrating the segment titled "${currentSegment.title}". ` +
@@ -525,7 +528,7 @@ export function DocumentaryPlayer() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.6, ease: 'easeInOut' }}
-              className="relative h-full"
+              className="absolute inset-0"
               style={{ width: mapViewMode === 'split' ? '50%' : '100%' }}
             >
               <KenBurnsStage
