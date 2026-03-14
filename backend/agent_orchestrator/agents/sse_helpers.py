@@ -232,6 +232,21 @@ def build_geo_update_event(
     }
 
 
+def build_segment_playable_event(*, segment_id: str) -> dict[str, Any]:
+    """Build a segment_playable SSE event payload.
+
+    Emitted when a segment has enough content (images generated) to start
+    playback in the frontend DocumentaryPlayer.
+
+    Args:
+        segment_id: e.g. "segment_0"
+    """
+    return {
+        "type": "segment_playable",
+        "segmentId": segment_id,
+    }
+
+
 def build_branch_triggered_event(
     *,
     session_id: str,

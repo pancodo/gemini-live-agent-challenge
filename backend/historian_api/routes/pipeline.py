@@ -23,7 +23,7 @@ _backend_root = str(Path(__file__).parent.parent.parent)
 if _backend_root not in sys.path:
     sys.path.insert(0, _backend_root)
 
-from agent_orchestrator.agents.pipeline import build_new_pipeline
+from agent_orchestrator.agents.pipeline import build_new_pipeline, build_streaming_pipeline
 from agent_orchestrator.agents.sse_helpers import LogSSEEmitter
 from ..models import ProcessRequest
 
@@ -148,7 +148,11 @@ async def _run_pipeline(session_id: str, gcs_path: str, mode: str, log: SessionE
     db = get_db()
     try:
         session_service = InMemorySessionService()
-        pipeline = build_new_pipeline(emitter=emitter)
+        pipeline_mode = os.environ.get("PIPELINE_MODE", "streaming")
+        if pipeline_mode == "streaming":
+            pipeline = build_streaming_pipeline(emitter=emitter)
+        else:
+            pipeline = build_new_pipeline(emitter=emitter)
         runner = Runner(agent=pipeline, app_name="historian", session_service=session_service)
         await session_service.create_session(
             app_name="historian",

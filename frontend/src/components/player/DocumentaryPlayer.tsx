@@ -139,6 +139,63 @@ export function DocumentaryPlayer() {
     ? segmentsRecord[currentSegmentId] ?? null
     : null;
 
+  // ── Fix 1.2: Caption bridge (voiceStore → playerStore) ─────
+  const voiceCaption = useVoiceStore((s) => s.caption);
+  const setCaption = usePlayerStore((s) => s.setCaption);
+  const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
+  const captionWps = usePlayerStore((s) => s.captionWps);
+  const turnStartRef = useRef<number>(0);
+  const turnWordCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (voiceCaption) {
+      // Track word rate: count words accumulated since turn start
+      const now = Date.now();
+      const wordCount = voiceCaption.trim().split(/\s+/).length;
+
+      if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
+        // New turn detected (word count reset or first caption)
+        turnStartRef.current = now;
+        turnWordCountRef.current = wordCount;
+      } else {
+        turnWordCountRef.current = wordCount;
+        const elapsed = (now - turnStartRef.current) / 1000;
+        if (elapsed > 0.5 && wordCount > 3) {
+          setCaptionWps(wordCount / elapsed);
+        }
+      }
+
+      setCaption(voiceCaption);
+    }
+  }, [voiceCaption, setCaption, setCaptionWps]);
+
+  // ── Fix 1.1: Auto-narration on player mount ────────────────
+  const sendTextToHistorian = useVoiceStore((s) => s.sendTextToHistorian);
+  const autoNarratedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!currentSegment) return;
+    if (!currentSegment.script) return;
+    if (currentSegment.script.length < 50) return;
+    if (autoNarratedRef.current.has(currentSegment.id)) return;
+    if (!sendTextToHistorian) return;
+
+    autoNarratedRef.current.add(currentSegment.id);
+
+    const timer = setTimeout(() => {
+      sendTextToHistorian(
+        `You are now narrating the segment titled "${currentSegment.title}". ` +
+        `Here is the narration script — deliver it naturally in your historian voice, ` +
+        `weaving in dramatic pauses and emphasis. Do not say "I will now narrate" or ` +
+        `announce what you are doing. Simply begin speaking the narrative. ` +
+        `If a visual would enhance the story, you may use the generate_illustration tool. ` +
+        `\n\nScript:\n${currentSegment.script}`
+      );
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [currentSegment, sendTextToHistorian]);
+
   const currentIndexInReady = useMemo(() => {
     if (!currentSegmentId) return -1;
     return readySegments.findIndex((s) => s.id === currentSegmentId);
@@ -763,7 +820,7 @@ export function DocumentaryPlayer() {
 
       {/* Layer 3: Captions — always visible */}
       <div className="absolute bottom-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
-        <CaptionTrack />
+        <CaptionTrack wordsPerSecond={captionWps > 0 ? captionWps : undefined} />
       </div>
 
       {/* Layer 3b: Illustration caption */}

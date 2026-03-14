@@ -240,6 +240,25 @@ class NarrativeDirectorAgent(BaseAgent):
                 research_context=str(research_context)[:800],
             )
 
+            # Augment with shared style terms for visual coherence
+            try:
+                from .prompt_style_helpers import build_style_block
+
+                style_terms = build_style_block(
+                    visual_bible=visual_bible,
+                    era=brief.get("era", ""),
+                    mood=mood,
+                    title=title,
+                    narrative_role=role,
+                    scene_brief=brief,
+                )
+                prompt += (
+                    f"\n\n{style_terms}"
+                    "\n\nMatch these style terms exactly in the illustration."
+                )
+            except ImportError:
+                pass  # Style helpers not available — proceed with base prompt
+
             # Emit agent status: searching (= generating)
             if self.emitter:
                 await self.emitter.emit(
