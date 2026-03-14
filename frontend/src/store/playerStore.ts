@@ -62,6 +62,12 @@ interface PlayerStore {
   setIsNarrating: (v: boolean) => void;
   /** Update an existing beat's visual type and/or URLs */
   updateBeatVisual: (segmentId: string, beatIndex: number, updates: Partial<NarrationBeat>) => void;
+  /** Counter incremented by VoiceLayer on turn_complete during narration — drives audio-synced beat advancement */
+  beatAdvanceSignal: number;
+  incrementBeatAdvanceSignal: () => void;
+  /** True for 300ms after beat advance — drives caption fade + visual pulse */
+  beatTransitioning: boolean;
+  setBeatTransitioning: (v: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -155,6 +161,10 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
       }
       return { beatsMap: newMap };
     }),
+  beatAdvanceSignal: 0,
+  incrementBeatAdvanceSignal: () => set((state) => ({ beatAdvanceSignal: state.beatAdvanceSignal + 1 })),
+  beatTransitioning: false,
+  setBeatTransitioning: (beatTransitioning) => set({ beatTransitioning }),
   liveIllustration: null,
   setLiveIllustration: (ill) => {
     if (_illustrationTimerHandle !== null) {
