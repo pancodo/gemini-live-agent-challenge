@@ -44,15 +44,19 @@ interface PlayerStore {
   setCaptionWps: (wps: number) => void;
   /** Narration beats from interleaved TEXT+IMAGE generation */
   beats: NarrationBeat[];
+  /** All beats keyed by segmentId (populated during pipeline SSE) */
+  beatsMap: Record<string, NarrationBeat[]>;
   /** Index of the beat currently being narrated */
   currentBeatIndex: number;
   /** Whether beat narration is in progress */
   isNarrating: boolean;
-  /** Add a new beat (from SSE event) */
+  /** Add a new beat (from SSE event) — stores in beatsMap by segmentId */
   addBeat: (beat: NarrationBeat) => void;
+  /** Load beats for a specific segment from beatsMap into active beats */
+  loadBeatsForSegment: (segmentId: string) => void;
   /** Advance to next beat */
   advanceBeat: () => void;
-  /** Reset all beat state (on segment change) */
+  /** Reset active beat state (on segment change) */
   resetBeats: () => void;
   /** Set narration active state */
   setIsNarrating: (v: boolean) => void;
@@ -65,7 +69,11 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   captionText: '',
   isKenBurnsPaused: false,
   isIdle: false,
-  open: (segmentId) => set({ isOpen: true, currentSegmentId: segmentId, isIdle: false, beats: [], currentBeatIndex: 0, isNarrating: false }),
+  open: (segmentId) => set((state) => {
+    // Load pre-generated beats from beatsMap if available
+    const segBeats = state.beatsMap[segmentId] ?? [];
+    return { isOpen: true, currentSegmentId: segmentId, isIdle: false, beats: segBeats, currentBeatIndex: 0, isNarrating: false };
+  }),
   close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {}, pipelineComplete: false, beats: [], currentBeatIndex: 0, isNarrating: false }),
   setCaption: (captionText) => set({ captionText }),
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
@@ -100,10 +108,32 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   captionWps: 0,
   setCaptionWps: (captionWps) => set({ captionWps }),
   beats: [],
+  beatsMap: {},
   currentBeatIndex: 0,
   isNarrating: false,
   addBeat: (beat) =>
-    set((state) => ({ beats: [...state.beats, beat] })),
+    set((state) => {
+      // Store in beatsMap keyed by segmentId
+      const segId = beat.segmentId;
+      const existing = state.beatsMap[segId] ?? [];
+      // Avoid duplicates (same beatIndex)
+      if (existing.some((b) => b.beatIndex === beat.beatIndex)) {
+        return {};
+      }
+      const updated = [...existing, beat].sort((a, b) => a.beatIndex - b.beatIndex);
+      const newMap = { ...state.beatsMap, [segId]: updated };
+
+      // If this beat belongs to the currently active segment, also update active beats
+      if (segId === state.currentSegmentId) {
+        return { beatsMap: newMap, beats: updated };
+      }
+      return { beatsMap: newMap };
+    }),
+  loadBeatsForSegment: (segmentId) =>
+    set((state) => {
+      const segBeats = state.beatsMap[segmentId] ?? [];
+      return { beats: segBeats, currentBeatIndex: 0, isNarrating: false };
+    }),
   advanceBeat: () =>
     set((state) => ({
       currentBeatIndex: Math.min(state.currentBeatIndex + 1, state.beats.length - 1),
