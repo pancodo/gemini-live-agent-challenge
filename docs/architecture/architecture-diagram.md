@@ -90,13 +90,16 @@ Dotted lines (`-.->`) represent async, streaming, or WebSocket connections.
 
 ---
 
-## The Diagram (v3 — Competition-Aligned)
+## The Diagram (v4 — 11-Phase Pipeline with Interleaved Output)
 
 Restructured around the 4 sections judges explicitly look for:
 1. **User/Frontend** — how the user interacts
 2. **The Brain** — where Gemini models sit and how they're accessed (GenAI SDK / ADK)
 3. **The Logic** — backend hosted on Google Cloud
 4. **The Connections** — how pieces talk to each other
+
+Phases 3.1–3.3 use Gemini's native interleaved `TEXT+IMAGE` output — a single model
+call produces both narration text and illustration images simultaneously.
 
 ```mermaid
 flowchart TD
@@ -107,10 +110,10 @@ flowchart TD
 
     subgraph BRAIN["🧠 The Brain — Gemini Models"]
         direction LR
-        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation"]
+        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation\nTEXT+IMAGE Interleaved"]
         PRO["Gemini 2.0 Pro\nScripts · Visual Planning"]
         LIVE_API["Gemini 2.5 Flash\nNative Audio\nReal-time Voice"]
-        IMAGEN["Imagen 3\nScene Images"]
+        IMAGEN["Imagen 3\nCinematic Frames"]
         VEO["Veo 2\nDramatic Video"]
     end
 
@@ -120,16 +123,20 @@ flowchart TD
         RELAY["live-relay\nNode.js 20\nWebSocket Proxy"]
     end
 
-    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 7 Phases"]
+    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 11 Phases"]
         direction LR
         P1["I\nDocument\nAnalyzer"]
         P2["II\nScene\nResearch"]
         P3["III\nScript\nGenerator"]
+        P31["3.1\nNarrative\nDirector"]
+        P32["3.2\nBeat\nIllustrator"]
+        P33["3.3\nVisual\nInterleave"]
         P35["III.5\nFact\nValidator"]
+        P38["3.8\nGeo\nMapping"]
         P40["4.0\nVisual\nPlanner"]
         P4["IV\nVisual\nResearch"]
         P5["V\nVisual\nDirector"]
-        P1 --> P2 --> P3 --> P35 --> P40 --> P4 --> P5
+        P1 --> P2 --> P3 --> P31 --> P32 --> P33 --> P35 --> P38 --> P40 --> P4 --> P5
     end
 
     subgraph DATA["☁️ Google Cloud Services"]
@@ -149,6 +156,7 @@ flowchart TD
     ORCH -->|"Google ADK\nSequentialAgent + ParallelAgent"| PIPELINE
     P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
     P3 & P40 -->|"GenAI SDK"| PRO
+    P31 & P32 & P33 -->|"GenAI SDK\nTEXT+IMAGE"| FLASH
     P5 -->|"Vertex AI\nGenAI SDK"| IMAGEN
     P5 -.->|"Vertex AI\nAsync generation"| VEO
     RELAY <-.->|"WebSocket\nBidiGenerateContent"| LIVE_API
@@ -156,7 +164,7 @@ flowchart TD
     %% Backend to Data Layer
     ORCH <-->|"Checkpoint resume"| FS
     P1 --> DAI
-    P1 & P3 & P5 --> GCS
+    P1 & P3 & P31 & P32 & P5 --> GCS
     P3 & P4 & P5 --> FS
     ORCH --> PS
     API --> SM
@@ -179,9 +187,9 @@ flowchart TD
 
     subgraph gc["Google Cloud"]
         API["historian-api<br/>Cloud Run - FastAPI"]
-        ORCH["agent-orchestrator<br/>Cloud Run - ADK"]
+        ORCH["agent-orchestrator<br/>Cloud Run - ADK<br/>11-Phase Pipeline"]
         RELAY["live-relay<br/>Cloud Run - Node.js"]
-        VERTEX["Vertex AI<br/>Gemini 2.0 Flash + Pro<br/>Imagen 3 + Veo 2"]
+        VERTEX["Vertex AI<br/>Gemini 2.0 Flash + Pro<br/>TEXT+IMAGE Interleaved<br/>Imagen 3 + Veo 2"]
         DOCAI["Document AI - OCR"]
         FS[("Firestore")]
         GCS[("Cloud Storage")]
@@ -236,7 +244,7 @@ The diagram is structured around the 4 sections judges explicitly require:
 | FAQ Requirement | Section | How it's shown |
 |---|---|---|
 | **User/Frontend**: How the user interacts | `👤 User / Frontend` subgraph | React 19 app with PDF Viewer, Research Panel, Documentary Player, Voice |
-| **The Brain**: Where Gemini sits and how it's accessed | `🧠 The Brain — Gemini Models` subgraph | 5 Gemini models; edges labeled "GenAI SDK", "Google ADK", "Vertex AI" |
-| **The Logic**: Backend on Google Cloud | `⚙️ Backend Logic — Google Cloud Run` subgraph | 3 Cloud Run services + ADK Pipeline subgraph |
-| **The Connections**: How pieces talk | Labeled edges throughout | REST+SSE, WebSocket, GenAI SDK, ADK, Vertex AI, checkpoint resume |
+| **The Brain**: Where Gemini sits and how it's accessed | `🧠 The Brain — Gemini Models` subgraph | 5 Gemini models; edges labeled "GenAI SDK", "Google ADK", "Vertex AI", "TEXT+IMAGE" |
+| **The Logic**: Backend on Google Cloud | `⚙️ Backend Logic — Google Cloud Run` subgraph | 3 Cloud Run services + 11-Phase ADK Pipeline subgraph |
+| **The Connections**: How pieces talk | Labeled edges throughout | REST+SSE, WebSocket, GenAI SDK, ADK, Vertex AI, TEXT+IMAGE, checkpoint resume |
 | Google Cloud services visible | `☁️ Google Cloud Services` subgraph | Firestore, Cloud Storage, Document AI, Pub/Sub, Secret Manager |
