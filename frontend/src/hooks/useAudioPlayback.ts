@@ -78,7 +78,8 @@ export function useAudioPlayback() {
       // Pre-buffer: collect first N chunks before sending any to prevent
       // initial underrun clicks
       if (!preBufferSentRef.current) {
-        preBufferQueueRef.current.push(float32);
+        // Must copy — scratch buffer is reused on next chunk
+        preBufferQueueRef.current.push(new Float32Array(float32.subarray(0, int16.length)));
         if (preBufferQueueRef.current.length >= PRE_BUFFER_COUNT) {
           // Flush all pre-buffered chunks to the worklet
           for (const buffered of preBufferQueueRef.current) {
@@ -94,8 +95,9 @@ export function useAudioPlayback() {
         return;
       }
 
-      // Normal path: zero-copy transfer to worklet
-      const transferBuffer = float32.buffer.slice(0);
+      // Normal path: copy exact chunk size and transfer to worklet
+      const copy = float32.slice(0, int16.length);
+      const transferBuffer = copy.buffer;
       workletNode.port.postMessage(
         { type: 'chunk', samples: transferBuffer },
         [transferBuffer],
