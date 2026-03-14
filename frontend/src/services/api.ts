@@ -168,3 +168,17 @@ Rules:
 
   return result;
 }
+
+export async function startNarration(sessionId: string, segmentId: string, signal?: AbortSignal): Promise<{ beatsGenerated: number; segmentId: string }> {
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/segment/${segmentId}/narrate`, {
+    method: 'POST',
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
+      : AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    if (res.status === 429) return { beatsGenerated: 0, segmentId };
+    throw new Error(`Narration failed: ${res.status}`);
+  }
+  return res.json() as Promise<{ beatsGenerated: number; segmentId: string }>;
+}

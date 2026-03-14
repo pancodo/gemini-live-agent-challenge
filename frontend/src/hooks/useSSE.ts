@@ -48,7 +48,12 @@ export function useSSE(sessionId: string | null): void {
     }))
   );
 
-  const setSegmentGeo = usePlayerStore((s) => s.setSegmentGeo);
+  const { setSegmentGeo, addBeat } = usePlayerStore(
+    useShallow((s) => ({
+      setSegmentGeo: s.setSegmentGeo,
+      addBeat: s.addBeat,
+    })),
+  );
 
   const processEvent = useCallback(
     (event: SSEEvent) => {
@@ -138,6 +143,16 @@ export function useSSE(sessionId: string | null): void {
           setSegment(event.segmentId, { status: 'ready' });
           break;
 
+        case 'narration_beat':
+          addBeat({
+            beatIndex: event.beatIndex,
+            totalBeats: event.totalBeats,
+            narrationText: event.narrationText,
+            imageUrl: event.imageUrl,
+            directionText: event.directionText,
+          });
+          break;
+
         case 'error':
           // If error targets a specific agent, mark it as errored with message
           if (event.agentId) {
@@ -149,7 +164,7 @@ export function useSSE(sessionId: string | null): void {
           break;
       }
     },
-    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage],
+    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage, addBeat],
   );
 
   const processEventRef = useRef(processEvent);
