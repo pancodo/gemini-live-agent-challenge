@@ -52,7 +52,12 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
   const prevImageCountRef = useRef(0);
   const isKenBurnsPaused = usePlayerStore((s) => s.isKenBurnsPaused);
   const liveIllustration = usePlayerStore((s) => s.liveIllustration);
+  const beats = usePlayerStore((s) => s.beats);
+  const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
   const voiceState = useVoiceStore((s) => s.state);
+
+  // Beat image takes priority when available
+  const currentBeatImage = beats[currentBeatIndex]?.imageUrl ?? null;
 
   const shouldPause =
     isKenBurnsPaused ||
@@ -213,48 +218,77 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     //    continuing from wherever they were in the previous segment's cycle.
     // 2. currentIndex is implicitly reset to 0 because the component remounts.
     <div key={segment.id} className="absolute inset-0 overflow-hidden player-stage">
-      {images.map((url, i) => {
-        const isActive = i === currentIndex;
-        // Determine if this image should play the initial blur-in reveal
-        const isFirstReveal = isActive && !hasRevealedFirstRef.current;
-        return (
-          <motion.img
-            key={`${segment.id}-${i}`}
-            src={url}
-            alt=""
-            role="presentation"
-            data-index={i}
-            onLoad={(e) => {
-              handleImageLoad(e, i);
-              // Mark first image as revealed after it loads
-              if (isFirstReveal) {
-                hasRevealedFirstRef.current = true;
+      {/* Regular Ken Burns images — dimmed when a beat image is active */}
+      <div
+        className="absolute inset-0"
+        style={{
+          opacity: currentBeatImage ? 0.3 : 1,
+          transition: 'opacity 1s ease-in-out',
+        }}
+      >
+        {images.map((url, i) => {
+          const isActive = i === currentIndex;
+          // Determine if this image should play the initial blur-in reveal
+          const isFirstReveal = isActive && !hasRevealedFirstRef.current;
+          return (
+            <motion.img
+              key={`${segment.id}-${i}`}
+              src={url}
+              alt=""
+              role="presentation"
+              data-index={i}
+              onLoad={(e) => {
+                handleImageLoad(e, i);
+                // Mark first image as revealed after it loads
+                if (isFirstReveal) {
+                  hasRevealedFirstRef.current = true;
+                }
+              }}
+              initial={isFirstReveal ? { filter: 'blur(20px)', opacity: 0 } : false}
+              animate={isFirstReveal
+                ? { filter: 'blur(0px)', opacity: isActive ? 1 : 0 }
+                : { opacity: isActive ? 1 : 0 }
               }
-            }}
-            initial={isFirstReveal ? { filter: 'blur(20px)', opacity: 0 } : false}
-            animate={isFirstReveal
-              ? { filter: 'blur(0px)', opacity: isActive ? 1 : 0 }
-              : { opacity: isActive ? 1 : 0 }
-            }
-            transition={isFirstReveal
-              ? { duration: 1.5, ease: 'easeOut' }
-              : { duration: CROSSFADE_DURATION_MS / 1000, ease: 'easeInOut' }
-            }
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{
-              // Only the active image runs its drift animation; inactive images
-              // are paused so they don't burn through GPU resources and so that
-              // when they become active they start the animation fresh from the
-              // beginning (animationPlayState: 'paused' holds them at the
-              // initial keyframe position).
-              animation: `ken-burns-${i % 4} var(--ken-speed) ease-in-out infinite alternate`,
-              animationPlayState: isActive ? playState : 'paused',
-              pointerEvents: isActive ? 'auto' : 'none',
-              willChange: isActive ? 'transform, opacity' : 'auto',
-            }}
-          />
-        );
-      })}
+              transition={isFirstReveal
+                ? { duration: 1.5, ease: 'easeOut' }
+                : { duration: CROSSFADE_DURATION_MS / 1000, ease: 'easeInOut' }
+              }
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{
+                animation: `ken-burns-${i % 4} var(--ken-speed) ease-in-out infinite alternate`,
+                animationPlayState: isActive ? playState : 'paused',
+                pointerEvents: isActive ? 'auto' : 'none',
+                willChange: isActive ? 'transform, opacity' : 'auto',
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* Beat image overlay — interleaved TEXT+IMAGE narration */}
+      <AnimatePresence mode="wait">
+        {currentBeatImage && (
+          <motion.div
+            key={`beat-${currentBeatIndex}`}
+            className="absolute inset-0"
+            style={{ zIndex: 2 }}
+            initial={{ opacity: 0, scale: 1.02 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2, ease: 'easeOut' }}
+          >
+            <img
+              src={currentBeatImage}
+              alt={`Beat ${currentBeatIndex + 1}`}
+              className="h-full w-full object-cover"
+              style={{
+                animation: `ken-burns-${currentBeatIndex % 4} var(--ken-speed, 28s) ease-in-out infinite alternate`,
+                animationPlayState: playState,
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Live illustration overlay */}
       <AnimatePresence>

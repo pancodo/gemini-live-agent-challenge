@@ -105,6 +105,7 @@ export type SSEEventType =
   | 'storyboard_text_chunk'
   | 'storyboard_image_ready'
   | 'segment_playable'
+  | 'narration_beat'
   | 'error';
 
 export interface AgentStatusEvent {
@@ -202,6 +203,24 @@ export interface SegmentPlayableEvent {
   segmentId: string;
 }
 
+export interface NarrationBeatEvent {
+  type: 'narration_beat';
+  segmentId: string;
+  beatIndex: number;
+  totalBeats: number;
+  narrationText: string;
+  imageUrl: string | null;
+  directionText: string;
+}
+
+export interface NarrationBeat {
+  beatIndex: number;
+  totalBeats: number;
+  narrationText: string;
+  imageUrl: string | null;
+  directionText: string;
+}
+
 export type SSEEvent =
   | AgentStatusEvent
   | AgentSourceEvaluationEvent
@@ -214,6 +233,7 @@ export type SSEEvent =
   | StoryboardTextChunkEvent
   | StoryboardImageReadyEvent
   | SegmentPlayableEvent
+  | NarrationBeatEvent
   | ErrorEvent;
 
 // ── Documentary Branching ─────────────────────────────────────
