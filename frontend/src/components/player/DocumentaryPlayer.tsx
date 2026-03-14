@@ -188,13 +188,9 @@ export function DocumentaryPlayer() {
     }
   }, [voiceState, setCaption]);
 
-  // ── Pre-connect WebSocket when player opens ─────
-  useEffect(() => {
-    const preconnect = useVoiceStore.getState().preconnect;
-    if (preconnect && currentSegment) {
-      preconnect();
-    }
-  }, [currentSegment]);
+  // Note: Pre-connecting WebSocket was attempted but caused dual-connection
+  // issues with sendTextToHistorian. The reduced pre-buffer (3→1) already
+  // cuts ~500ms from voice start latency.
 
   // ── Beat-driven narration (interleaved TEXT+IMAGE) ──────────
   const sendTextToHistorian = useVoiceStore((s) => s.sendTextToHistorian);
