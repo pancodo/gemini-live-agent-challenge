@@ -103,6 +103,7 @@ class IllustrateRequest(BaseModel):
     query: str
     current_segment_id: str = ""
     mood: str = "cinematic"
+    composition: str | None = None
 
 
 class IllustrateResponse(BaseModel):
