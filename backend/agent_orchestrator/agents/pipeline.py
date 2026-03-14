@@ -38,6 +38,10 @@ and 3.8 geographic mapping):
                                       -> GCS upload, Firestore imageUrls/videoUrl,
                                       segment_update(complete) SSE (Phase V)
 
+    Between Phase 3.2 (beat illustration) and Phase 4.0 (narrative visual planner),
+    Phase 3.3 (visual interleave) assigns visual_type per beat, determining which
+    beats receive images vs text-only treatment in the documentary player.
+
 The ``ResumablePipelineAgent`` wraps the sequential execution with checkpoint
 persistence: after each phase completes, the session state is checkpointed to
 Firestore. On restart, completed phases are skipped and state is restored from
@@ -82,6 +86,7 @@ from .rate_limiter import GlobalRateLimiter
 from .scene_research_agent import build_scene_research_orchestrator
 from .beat_illustration_agent import build_beat_illustration_agent
 from .narrative_director_agent import build_narrative_director_agent
+from .visual_interleave_agent import build_visual_interleave_agent
 from .script_agent_orchestrator import (
     build_script_agent_orchestrator,
     generate_single_segment,
@@ -430,11 +435,12 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 #   3: script_orch              (Phase III)
 #   4: narrative_director       (Phase 3.1)
 #   5: beat_illustration        (Phase 3.2) -- Gemini TEXT+IMAGE beats for player
-#   6: fact_validator           (Phase III.5)
-#   7: geo_location             (Phase 3.8)
-#   8: narrative_visual_planner (Phase 4.0)
-#   9: visual_research_orch     (Phase IV)
-#  10: visual_director_orch     (Phase V)
+#   6: visual_interleave        (Phase 3.3) -- assigns visual_type per beat
+#   7: fact_validator           (Phase III.5)
+#   8: geo_location             (Phase 3.8)
+#   9: narrative_visual_planner (Phase 4.0)
+#  10: visual_research_orch     (Phase IV)
+#  11: visual_director_orch     (Phase V)
 
 _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (1,   [0]),     # Phase I:     document_analyzer
@@ -442,11 +448,12 @@ _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (3,   [3]),     # Phase III:   script_orch
     (3.1, [4]),     # Phase 3.1:   narrative_director (Gemini TEXT+IMAGE storyboard)
     (3.2, [5]),     # Phase 3.2:   beat_illustration (Gemini TEXT+IMAGE player beats)
-    (3.5, [6]),     # Phase III.5: fact_validator
-    (3.8, [7]),     # Phase 3.8:   geo_location -- Geographic Mapping
-    (4,   [8]),     # Phase 4.0:   narrative_visual_planner
-    (5,   [9]),     # Phase IV:    visual_research_orch
-    (6,   [10]),    # Phase V:     visual_director_orch
+    (3.3, [6]),     # Phase 3.3:   visual_interleave (assigns visual_type per beat)
+    (3.5, [7]),     # Phase III.5: fact_validator
+    (3.8, [8]),     # Phase 3.8:   geo_location -- Geographic Mapping
+    (4,   [9]),     # Phase 4.0:   narrative_visual_planner
+    (5,   [10]),    # Phase IV:    visual_research_orch
+    (6,   [11]),    # Phase V:     visual_director_orch
 ]
 
 
@@ -1120,6 +1127,7 @@ def build_new_pipeline(
     script_orch = build_script_agent_orchestrator(emitter=emitter)
     narrative_director = build_narrative_director_agent(emitter=emitter)
     beat_illustration = build_beat_illustration_agent(emitter=emitter)
+    visual_interleave = build_visual_interleave_agent(emitter=emitter)
     fact_validator = build_fact_validator_agent(emitter=emitter)
     geo_location = build_geo_location_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
@@ -1138,6 +1146,7 @@ def build_new_pipeline(
             "AI Historian documentary pipeline: document analysis (Phase I), "
             "scene research (Phase II), script generation (Phase III), "
             "creative direction (Phase 3.1), beat illustration (Phase 3.2), "
+            "visual interleave (Phase 3.3), "
             "fact validation (Phase III.5), geographic mapping (Phase 3.8), "
             "visual storyboard planning (Phase 4.0), visual research (Phase IV), "
             "and visual generation (Phase V). "
@@ -1152,11 +1161,12 @@ def build_new_pipeline(
             script_orch,                     # [3] Phase III
             narrative_director,              # [4] Phase 3.1 -- Gemini TEXT+IMAGE storyboard
             beat_illustration,               # [5] Phase 3.2 -- Gemini TEXT+IMAGE player beats
-            fact_validator,                  # [6] Phase III.5
-            geo_location,                    # [7] Phase 3.8 -- Geographic Mapping
-            narrative_visual_planner_orch,   # [8] Phase 4.0
-            visual_research_orch,            # [9] Phase IV
-            visual_director_orch,            # [10] Phase V
+            visual_interleave,               # [6] Phase 3.3 -- assigns visual_type per beat
+            fact_validator,                  # [7] Phase III.5
+            geo_location,                    # [8] Phase 3.8 -- Geographic Mapping
+            narrative_visual_planner_orch,   # [9] Phase 4.0
+            visual_research_orch,            # [10] Phase IV
+            visual_director_orch,            # [11] Phase V
         ],
     )
 

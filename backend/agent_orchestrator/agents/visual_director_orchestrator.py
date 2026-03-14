@@ -56,6 +56,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from datetime import timedelta
 from functools import partial
@@ -79,6 +80,8 @@ from .historical_period_profiles import (
 from .sse_helpers import (
     SSEEmitter,
     build_agent_status_event,
+    build_beat_visual_assigned_event,
+    build_narration_beat_event,
     build_pipeline_phase_event,
     build_segment_update_event,
     build_stats_update_event,
