@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { BranchNode, LiveIllustration, MapViewMode, SegmentGeo } from '../types';
+import type { BranchNode, LiveIllustration, MapViewMode, NarrationBeat, SegmentGeo } from '../types';
 
 let _illustrationTimerHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -41,6 +41,20 @@ interface PlayerStore {
   /** Words-per-second rate for caption stagger timing */
   captionWps: number;
   setCaptionWps: (wps: number) => void;
+  /** Narration beats from interleaved TEXT+IMAGE generation */
+  beats: NarrationBeat[];
+  /** Index of the beat currently being narrated */
+  currentBeatIndex: number;
+  /** Whether beat narration is in progress */
+  isNarrating: boolean;
+  /** Add a new beat (from SSE event) */
+  addBeat: (beat: NarrationBeat) => void;
+  /** Advance to next beat */
+  advanceBeat: () => void;
+  /** Reset all beat state (on segment change) */
+  resetBeats: () => void;
+  /** Set narration active state */
+  setIsNarrating: (v: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>()((set) => ({
@@ -50,8 +64,8 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   captionText: '',
   isKenBurnsPaused: false,
   isIdle: false,
-  open: (segmentId) => set({ isOpen: true, currentSegmentId: segmentId, isIdle: false }),
-  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {}, pipelineComplete: false }),
+  open: (segmentId) => set({ isOpen: true, currentSegmentId: segmentId, isIdle: false, beats: [], currentBeatIndex: 0, isNarrating: false }),
+  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {}, pipelineComplete: false, beats: [], currentBeatIndex: 0, isNarrating: false }),
   setCaption: (captionText) => set({ captionText }),
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
   setIdle: (isIdle) => set({ isIdle }),
@@ -75,6 +89,17 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
   setPipelineComplete: (pipelineComplete) => set({ pipelineComplete }),
   captionWps: 0,
   setCaptionWps: (captionWps) => set({ captionWps }),
+  beats: [],
+  currentBeatIndex: 0,
+  isNarrating: false,
+  addBeat: (beat) =>
+    set((state) => ({ beats: [...state.beats, beat] })),
+  advanceBeat: () =>
+    set((state) => ({
+      currentBeatIndex: Math.min(state.currentBeatIndex + 1, state.beats.length - 1),
+    })),
+  resetBeats: () => set({ beats: [], currentBeatIndex: 0, isNarrating: false }),
+  setIsNarrating: (isNarrating) => set({ isNarrating }),
   liveIllustration: null,
   setLiveIllustration: (ill) => {
     if (_illustrationTimerHandle !== null) {
