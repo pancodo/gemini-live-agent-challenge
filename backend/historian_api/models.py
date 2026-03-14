@@ -112,6 +112,11 @@ class IllustrateResponse(BaseModel):
     generatedAt: str
 
 
+class NarrateResponse(BaseModel):
+    beatsGenerated: int
+    segmentId: str
+
+
 class RetrieveRequest(BaseModel):
     query: str
     top_k: int = Field(default=4, ge=1, le=10)
