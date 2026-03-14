@@ -80,6 +80,7 @@ from .geo_location_agent import build_geo_location_agent, extract_geo_for_segmen
 from .narrative_visual_planner import build_narrative_visual_planner
 from .rate_limiter import GlobalRateLimiter
 from .scene_research_agent import build_scene_research_orchestrator
+from .beat_illustration_agent import build_beat_illustration_agent
 from .narrative_director_agent import build_narrative_director_agent
 from .script_agent_orchestrator import (
     build_script_agent_orchestrator,
@@ -428,22 +429,24 @@ def build_pipeline(num_research_queries: int = 5) -> SequentialAgent:
 #   2: aggregator               (Phase II -- grouped with scene_research)
 #   3: script_orch              (Phase III)
 #   4: narrative_director       (Phase 3.1)
-#   5: fact_validator           (Phase III.5)
-#   6: geo_location             (Phase 3.8)
-#   7: narrative_visual_planner (Phase 4.0)
-#   8: visual_research_orch     (Phase IV)
-#   9: visual_director_orch     (Phase V)
+#   5: beat_illustration        (Phase 3.2) -- Gemini TEXT+IMAGE beats for player
+#   6: fact_validator           (Phase III.5)
+#   7: geo_location             (Phase 3.8)
+#   8: narrative_visual_planner (Phase 4.0)
+#   9: visual_research_orch     (Phase IV)
+#  10: visual_director_orch     (Phase V)
 
 _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (1,   [0]),     # Phase I:     document_analyzer
     (2,   [1, 2]),  # Phase II:    scene_research + aggregator
     (3,   [3]),     # Phase III:   script_orch
-    (3.1, [4]),     # Phase 3.1:   narrative_director (Gemini TEXT+IMAGE interleaved)
-    (3.5, [5]),     # Phase III.5: fact_validator
-    (3.8, [6]),     # Phase 3.8:   geo_location -- Geographic Mapping
-    (4,   [7]),     # Phase 4.0:   narrative_visual_planner
-    (5,   [8]),     # Phase IV:    visual_research_orch
-    (6,   [9]),     # Phase V:     visual_director_orch
+    (3.1, [4]),     # Phase 3.1:   narrative_director (Gemini TEXT+IMAGE storyboard)
+    (3.2, [5]),     # Phase 3.2:   beat_illustration (Gemini TEXT+IMAGE player beats)
+    (3.5, [6]),     # Phase III.5: fact_validator
+    (3.8, [7]),     # Phase 3.8:   geo_location -- Geographic Mapping
+    (4,   [8]),     # Phase 4.0:   narrative_visual_planner
+    (5,   [9]),     # Phase IV:    visual_research_orch
+    (6,   [10]),    # Phase V:     visual_director_orch
 ]
 
 
@@ -946,15 +949,16 @@ class StreamingPipelineAgent(BaseAgent):
             )
 
         # ------------------------------------------------------------------
-        # Visual phases: run remaining batch agents (3.1, 4.0, IV, V)
+        # Visual phases: run remaining batch agents (3.1, 3.2, 4.0, IV, V)
         # These run on the accumulated script state from per-segment pipeline.
         # Phase 3.5 and 3.8 are skipped (already done per-segment).
         # ------------------------------------------------------------------
         visual_phase_map: list[tuple[int | float, list[int]]] = [
             (3.1, [3]),   # narrative_director
-            (4,   [4]),   # narrative_visual_planner
-            (5,   [5]),   # visual_research_orch
-            (6,   [6]),   # visual_director_orch
+            (3.2, [4]),   # beat_illustration (interleaved TEXT+IMAGE for player)
+            (4,   [5]),   # narrative_visual_planner
+            (5,   [6]),   # visual_research_orch
+            (6,   [7]),   # visual_director_orch
         ]
 
         for phase_num, agent_indices in visual_phase_map:
@@ -1115,6 +1119,7 @@ def build_new_pipeline(
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     script_orch = build_script_agent_orchestrator(emitter=emitter)
     narrative_director = build_narrative_director_agent(emitter=emitter)
+    beat_illustration = build_beat_illustration_agent(emitter=emitter)
     fact_validator = build_fact_validator_agent(emitter=emitter)
     geo_location = build_geo_location_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
@@ -1132,6 +1137,7 @@ def build_new_pipeline(
         description=(
             "AI Historian documentary pipeline: document analysis (Phase I), "
             "scene research (Phase II), script generation (Phase III), "
+            "creative direction (Phase 3.1), beat illustration (Phase 3.2), "
             "fact validation (Phase III.5), geographic mapping (Phase 3.8), "
             "visual storyboard planning (Phase 4.0), visual research (Phase IV), "
             "and visual generation (Phase V). "
@@ -1144,12 +1150,13 @@ def build_new_pipeline(
             scene_research,                  # [1] Phase II
             _make_aggregator_agent(),        # [2] Phase II (aggregator)
             script_orch,                     # [3] Phase III
-            narrative_director,              # [4] Phase 3.1 -- Gemini TEXT+IMAGE interleaved
-            fact_validator,                  # [5] Phase III.5
-            geo_location,                    # [6] Phase 3.8 -- Geographic Mapping
-            narrative_visual_planner_orch,   # [7] Phase 4.0
-            visual_research_orch,            # [8] Phase IV
-            visual_director_orch,            # [9] Phase V
+            narrative_director,              # [4] Phase 3.1 -- Gemini TEXT+IMAGE storyboard
+            beat_illustration,               # [5] Phase 3.2 -- Gemini TEXT+IMAGE player beats
+            fact_validator,                  # [6] Phase III.5
+            geo_location,                    # [7] Phase 3.8 -- Geographic Mapping
+            narrative_visual_planner_orch,   # [8] Phase 4.0
+            visual_research_orch,            # [9] Phase IV
+            visual_director_orch,            # [10] Phase V
         ],
     )
 
@@ -1188,8 +1195,9 @@ def build_streaming_pipeline(
     scene_research = build_scene_research_orchestrator(emitter=emitter)
     aggregator = _make_aggregator_agent()
 
-    # Visual phase agents (indices 3, 4, 5, 6) -- run after per-segment pipeline
+    # Visual phase agents (indices 3, 4, 5, 6, 7) -- run after per-segment pipeline
     narrative_director = build_narrative_director_agent(emitter=emitter)
+    beat_illustration = build_beat_illustration_agent(emitter=emitter)
     narrative_visual_planner_orch = build_narrative_visual_planner(emitter=emitter)
     visual_research_orch = build_visual_research_orchestrator(
         emitter=emitter, rate_limiter=gemini_limiter,
@@ -1218,8 +1226,9 @@ def build_streaming_pipeline(
             scene_research,                  # [1] Phase II
             aggregator,                      # [2] Phase II (aggregator)
             narrative_director,              # [3] Phase 3.1
-            narrative_visual_planner_orch,   # [4] Phase 4.0
-            visual_research_orch,            # [5] Phase IV
-            visual_director_orch,            # [6] Phase V
+            beat_illustration,               # [4] Phase 3.2 -- interleaved TEXT+IMAGE beats
+            narrative_visual_planner_orch,   # [5] Phase 4.0
+            visual_research_orch,            # [6] Phase IV
+            visual_director_orch,            # [7] Phase V
         ],
     )
