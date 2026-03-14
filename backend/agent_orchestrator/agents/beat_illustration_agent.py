@@ -483,10 +483,12 @@ class BeatIllustrationAgent(BaseAgent):
                     ),
                 )
                 # Generate signed URL
+                from .signing_helpers import get_signing_credentials
                 blob = bucket.blob(gcs_path)
                 url = await loop.run_in_executor(
                     None,
                     lambda: blob.generate_signed_url(
+                        credentials=get_signing_credentials(),
                         expiration=timedelta(hours=4),
                         method="GET",
                         version="v4",
