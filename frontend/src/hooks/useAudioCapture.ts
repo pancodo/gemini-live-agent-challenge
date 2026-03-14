@@ -29,8 +29,9 @@ export function useAudioCapture(onChunk: (pcm: Int16Array) => void) {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
-        echoCancellation: false,
-        noiseSuppression: false,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       },
     });
 
