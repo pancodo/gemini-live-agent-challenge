@@ -73,6 +73,10 @@ export function VoiceLayer() {
       if (currentState === 'historian_speaking') {
         transition('idle');
       }
+      // Audio-synced beat advancement: signal the player to advance
+      if (usePlayerStore.getState().isNarrating) {
+        usePlayerStore.getState().incrementBeatAdvanceSignal();
+      }
     },
     onCaption: (text: string) => {
       useVoiceStore.getState().setCaption(text);

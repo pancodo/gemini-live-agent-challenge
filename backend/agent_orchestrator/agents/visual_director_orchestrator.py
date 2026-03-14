@@ -107,13 +107,13 @@ _fallback_imagen_limiter = GlobalRateLimiter(8, "imagen")
 # Frame count and type are chosen per narrative role so the visual budget
 # matches the scene's dramatic weight in the documentary arc.
 _NARRATIVE_FRAME_PLAN: dict[str, list[int]] = {
-    "opening":       [0],          # 1 frame -- one wide establishing shot, no more
-    "rising_action": [0, 1],       # 2 frames -- place + people entering the story
-    "climax":        [0, 1, 3],    # 3 frames -- full visual depth for the peak moment
-    "resolution":    [1, 3],       # 2 frames -- human presence + reflective atmosphere
-    "coda":          [3],          # 1 frame -- one resonant atmospheric close
+    "opening":       [0, 1, 3],       # 3 frames -- wide + human + atmosphere
+    "rising_action": [0, 1, 2, 3],    # 4 frames -- full visual depth
+    "climax":        [0, 1, 2, 3],    # 4 frames -- full visual depth for the peak moment
+    "resolution":    [0, 1, 3],       # 3 frames -- place + human + reflective atmosphere
+    "coda":          [0, 3],          # 2 frames -- establishing + atmospheric close
 }
-_DEFAULT_FRAME_PLAN: list[int] = [0, 1]  # fallback for unknown narrative roles
+_DEFAULT_FRAME_PLAN: list[int] = [0, 1, 3]  # fallback for unknown narrative roles
 
 # ---------------------------------------------------------------------------
 # Lens specifications per frame type (Change 1)
