@@ -196,6 +196,8 @@ export function DocumentaryPlayer() {
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   // Track previous beatAdvanceSignal to detect increments
   const prevBeatSignalRef = useRef(0);
+  // True once user clicks Play — allows auto-advance to send beat 0 even if voice is idle
+  const continuousPlayRef = useRef(false);
   // Interstitial title card state
   const [showInterstitial, setShowInterstitial] = useState(false);
   const [interstitialTitle, setInterstitialTitle] = useState('');
@@ -242,9 +244,9 @@ export function DocumentaryPlayer() {
 
     lastSentBeatRef.current = currentBeatIndex;
 
-    // Beat 0: only send if voice active (user clicked Play/Space)
+    // Beat 0: only send if voice active (user clicked Play/Space) or continuous play
     // Beats 1+: always send — sendTextToHistorian reconnects from idle
-    if (currentBeatIndex === 0) {
+    if (currentBeatIndex === 0 && !continuousPlayRef.current) {
       const vs = useVoiceStore.getState().state;
       if (vs === 'idle') return;
     }
@@ -357,7 +359,7 @@ export function DocumentaryPlayer() {
     beatWasSpokenRef.current = false;
     if (beats.length === 0) return;
 
-    // Narration just finished — auto-advance after cinematic pause
+    // Narration just finished — auto-advance after brief cinematic pause
     clearTimeout(autoAdvanceTimerRef.current);
     autoAdvanceTimerRef.current = setTimeout(() => {
       const idx = readySegments.findIndex((s) => s.id === currentSegmentId);
@@ -380,12 +382,12 @@ export function DocumentaryPlayer() {
           } catch {
             open(nextSeg.id);
           }
-        }, 2500);
+        }, 1500);
       } else {
         // Last segment — show end card
         setShowEndCard(true);
       }
-    }, 3000);
+    }, 1500);
 
     return () => clearTimeout(autoAdvanceTimerRef.current);
   }, [isNarrating, beats.length, readySegments, currentSegmentId, open]);
@@ -437,6 +439,7 @@ export function DocumentaryPlayer() {
   // ── Play overlay handler — starts documentary narration via beats ─────
   const handlePlay = useCallback(() => {
     setShowPlayOverlay(false);
+    continuousPlayRef.current = true;
     // Connect voice — beat system (Effect 2) will send first beat text
     // once voice is active. sendTextToHistorian auto-connects if idle.
     const send = useVoiceStore.getState().sendTextToHistorian;

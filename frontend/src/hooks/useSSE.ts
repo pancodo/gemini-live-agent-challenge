@@ -185,7 +185,11 @@ export function useSSE(sessionId: string | null): void {
     if (!sessionId || sessionId.startsWith('dev-')) return;
 
     function connect(): EventSource {
-      const url = `${BASE_URL}/api/session/${sessionId}/stream`;
+      let url = `${BASE_URL}/api/session/${sessionId}/stream`;
+      const accessCode = localStorage.getItem('ai-historian-access');
+      if (accessCode) {
+        url += `?access_code=${encodeURIComponent(accessCode)}`;
+      }
       const es = new EventSource(url);
       esRef.current = es;
 

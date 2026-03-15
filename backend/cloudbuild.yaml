@@ -1,0 +1,38 @@
+steps:
+  # Build historian-api
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.historian-api'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/historian/historian-api:latest'
+      - '.'
+
+  # Build agent-orchestrator (same codebase, separate service)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.agent-orchestrator'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/historian/agent-orchestrator:latest'
+      - '.'
+
+  # Build live-relay
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'live_relay/Dockerfile'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/historian/live-relay:latest'
+      - 'live_relay'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/historian/historian-api:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/historian/agent-orchestrator:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/historian/live-relay:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
