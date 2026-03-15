@@ -199,12 +199,15 @@ export function VoiceLayer() {
   sendTextRef.current = (text: string) => {
     const currentState = useVoiceStore.getState().state;
     if (currentState === 'idle') {
-      // Fresh connection: disconnect any stale WS, then connect.
-      // onReady will send the pending text reliably.
-      pendingGreetingRef.current = text;
-      disconnect();
-      connect();
       transition('historian_speaking');
+      // Try direct send first — WS may still be alive from previous beat/segment.
+      // sendText silently no-ops if WS is closed or not ready.
+      sendTextStableRef.current(text);
+      // Safety net: if WS was closed, connect() opens a new one and
+      // onReady sends the pending text. If WS was open, connect() no-ops
+      // and pendingGreeting is harmlessly orphaned.
+      pendingGreetingRef.current = text;
+      connect();
     } else {
       sendTextStableRef.current(text);
     }
