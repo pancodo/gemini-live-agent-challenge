@@ -250,7 +250,29 @@ export function DocumentaryPlayer() {
     return () => controller.abort();
   }, [currentSegment, sessionId, loadBeatsForSegment]);
 
-  // ── startImageTimers: pre-calculate image changes based on word count ──
+  // ── Sanitize narration text for Gemini Live API ─────
+  const sanitize = useCallback((text: string) =>
+    text.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim()
+  , []);
+
+  // ── Send one beat at a time ─────
+  const sendBeatNarration = useCallback((beatIndex: number) => {
+    const send = useVoiceStore.getState().sendTextToHistorian;
+    const seg = currentSegmentId ? useResearchStore.getState().segments[currentSegmentId] : null;
+    const currentBeats = usePlayerStore.getState().beats;
+    if (!send || !seg) return;
+
+    const beat = currentBeats[beatIndex];
+    if (!beat) return;
+
+    const prefix = beatIndex === 0
+      ? `You are narrating "${seg.title}". Deliver this naturally — no announcements. `
+      : 'Continue narrating the next moment: ';
+
+    send(prefix + sanitize(beat.narrationText));
+  }, [currentSegmentId, sanitize]);
+
+  // ── startImageTimers: pre-calculate image + narration changes based on word count ──
   const startImageTimers = useCallback(() => {
     imageTimersRef.current.forEach(clearTimeout);
     imageTimersRef.current = [];
@@ -261,16 +283,19 @@ export function DocumentaryPlayer() {
     let cumulativeMs = 0;
 
     for (let i = 1; i < currentBeats.length; i++) {
+      const beatIdx = i;
       const prevWords = currentBeats[i - 1].narrationText.trim().split(/\s+/).length;
       cumulativeMs += prevWords * MS_PER_WORD;
       const timer = setTimeout(() => {
         setBeatTransitioning(true);
         setTimeout(() => setBeatTransitioning(false), 300);
         advanceBeat();
+        // Send next beat's narration text to historian
+        sendBeatNarration(beatIdx);
       }, cumulativeMs);
       imageTimersRef.current.push(timer);
     }
-  }, [advanceBeat, setBeatTransitioning]);
+  }, [advanceBeat, setBeatTransitioning, sendBeatNarration]);
 
   // ── Effect 2: Start image timers when narrating and beats are ready ──
   useEffect(() => {
@@ -280,16 +305,23 @@ export function DocumentaryPlayer() {
     startImageTimers();
   }, [isNarrating, beats, currentSegmentId, startImageTimers]);
 
-  // ── Effect 2b: End narration on turn_complete (Gemini finished full script) ──
+  // ── Effect 2b: turn_complete handling ──
+  // Each beat gets its own turn_complete. On the last beat, end narration.
   useEffect(() => {
     if (beatAdvanceSignal === 0) return;
     if (beatAdvanceSignal === prevSignalRef.current) return;
     prevSignalRef.current = beatAdvanceSignal;
 
-    // Gemini finished speaking the full script — clean up
-    imageTimersRef.current.forEach(clearTimeout);
-    imageTimersRef.current = [];
-    setIsNarrating(false);
+    const currentBeats = usePlayerStore.getState().beats;
+    const idx = usePlayerStore.getState().currentBeatIndex;
+    const beat = currentBeats[idx];
+
+    // Last beat finished — end narration and clean up timers
+    if (!beat || idx >= currentBeats.length - 1) {
+      imageTimersRef.current.forEach(clearTimeout);
+      imageTimersRef.current = [];
+      setIsNarrating(false);
+    }
   }, [beatAdvanceSignal, setIsNarrating]);
 
   // ── Effect 3: Fallback — if no beats arrive in 30s, create synthetic beats ──
@@ -367,13 +399,22 @@ export function DocumentaryPlayer() {
           } catch {
             open(nextSeg.id);
           }
-          // Auto-start narration for next segment (single-stream)
-          const send = useVoiceStore.getState().sendTextToHistorian;
-          if (send && nextSeg.script) {
-            send(buildNarrationPrompt(nextSeg.title, nextSeg.script));
-            setIsNarrating(true);
-            beatWasSpokenRef.current = true;
-          }
+          // Auto-start narration for next segment (beat 0)
+          // Beats load via Effect 1 when currentSegment changes.
+          // Use a short delay to let beats load first, then send beat 0.
+          setTimeout(() => {
+            const nextBeats = usePlayerStore.getState().beats;
+            const send = useVoiceStore.getState().sendTextToHistorian;
+            if (send && nextBeats.length > 0) {
+              const beat = nextBeats[0];
+              send(
+                `You are narrating "${nextSeg.title}". Deliver this naturally — no announcements. ` +
+                sanitize(beat.narrationText)
+              );
+              setIsNarrating(true);
+              beatWasSpokenRef.current = true;
+            }
+          }, 500);
         }, 2500);
       } else {
         // Last segment — show end card
@@ -430,32 +471,13 @@ export function DocumentaryPlayer() {
     };
   }, [setIdle]);
 
-  // ── Build narration prompt from segment script ─────
-  const buildNarrationPrompt = useCallback((title: string, script: string) => {
-    // Sanitize: strip control chars, collapse whitespace, limit length
-    const clean = script
-      .replace(/[\x00-\x1F\x7F]/g, ' ')  // strip control characters
-      .replace(/\s+/g, ' ')               // collapse whitespace
-      .trim()
-      .slice(0, 3000);                    // cap at ~3000 chars for Live API
-    return (
-      `You are narrating "${title}". ` +
-      `Deliver this naturally in your historian voice. Do not introduce yourself. ` +
-      `Read the following script aloud exactly as written: ${clean}`
-    );
-  }, []);
-
-  // ── Play overlay handler — sends FULL script as one message (single-stream) ─────
+  // ── Play overlay handler — starts beat-by-beat narration ─────
   const handlePlay = useCallback(() => {
     setShowPlayOverlay(false);
-    const send = useVoiceStore.getState().sendTextToHistorian;
-    const seg = currentSegmentId ? useResearchStore.getState().segments[currentSegmentId] : null;
-    if (!send || !seg?.script) return;
-
-    send(buildNarrationPrompt(seg.title, seg.script));
+    sendBeatNarration(0);
     setIsNarrating(true);
     beatWasSpokenRef.current = true;
-  }, [currentSegmentId, setIsNarrating, buildNarrationPrompt]);
+  }, [sendBeatNarration, setIsNarrating]);
 
   // ── Auto-show keyboard shortcuts on first visit ────────────────
   useEffect(() => {
@@ -608,11 +630,10 @@ export function DocumentaryPlayer() {
       } else if (e.key === ' ') {
         e.preventDefault();
         if (voiceState === 'idle') {
-          // Single-stream: send full script as one message
-          const send = useVoiceStore.getState().sendTextToHistorian;
-          const seg = useResearchStore.getState().segments[currentSegmentId ?? ''];
-          if (send && seg?.script) {
-            send(buildNarrationPrompt(seg.title, seg.script));
+          // Beat-by-beat narration — send first beat
+          const currentBeats = usePlayerStore.getState().beats;
+          if (currentBeats.length > 0) {
+            sendBeatNarration(0);
             setIsNarrating(true);
             beatWasSpokenRef.current = true;
             setShowPlayOverlay(false);
