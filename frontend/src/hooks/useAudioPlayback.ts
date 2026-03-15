@@ -14,7 +14,7 @@ import { useCallback, useRef } from 'react';
  */
 
 const PLAYBACK_SAMPLE_RATE = 24000;
-const PRE_BUFFER_COUNT = 1;
+const PRE_BUFFER_COUNT = 3;
 
 export function useAudioPlayback() {
   const audioContextRef = useRef<AudioContext | null>(null);
