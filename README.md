@@ -1,51 +1,67 @@
 <div align="center">
 
-<img src="frontend/public/logo.png" alt="AI Historian" width="120" />
-
-*Logo generated with Gemini [Chat Link](https://gemini.google.com/share/a34bad9c7dd0)*
+<img src="frontend/public/logo.png" alt="AI Historian" width="140" />
 
 # AI Historian
 
-**Upload any historical document. Watch it become a cinematic documentary in under 45 seconds.**
+**Upload any historical document. Watch a self-generating documentary unfold while a living AI historian narrates, researches, and converses with you in real time.**
 
-*Real-time multimodal research · Generative cinematic visuals · Always-on live voice historian*
-
-[![Gemini Live Agent Challenge](https://img.shields.io/badge/Gemini_Live_Agent_Challenge-2026-4285F4?style=flat-square&logo=google&logoColor=white)](https://geminiliveagentchallenge.devpost.com/)
-[![Google ADK](https://img.shields.io/badge/Google_ADK-latest-34A853?style=flat-square&logo=google&logoColor=white)](https://google.github.io/adk-docs/)
-[![Cloud Run](https://img.shields.io/badge/Cloud_Run-deployed-4285F4?style=flat-square&logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Gemini Live Agent Challenge 2026](https://img.shields.io/badge/Gemini_Live_Agent_Challenge-2026-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://geminiliveagentchallenge.devpost.com/)
+[![Google ADK](https://img.shields.io/badge/Google_ADK-SequentialAgent_%2B_ParallelAgent-34A853?style=for-the-badge&logo=google-cloud&logoColor=white)](https://google.github.io/adk-docs/)
+[![Cloud Run](https://img.shields.io/badge/Cloud_Run-3_Services-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/run)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 </div>
 
 ---
 
-## What is AI Historian?
+## What Is AI Historian?
 
-AI Historian is a real-time multimodal research and documentary engine. Drop any historical document — PDF, scanned manuscript, ancient script — and an 11-phase ADK pipeline immediately begins researching it in parallel. Within 45 seconds the first segment is playable: cinematic imagery, AI narration, and a live historian persona you can interrupt mid-sentence.
+AI Historian is not a chatbot. It is not a video editor. It is a **live AI persona** that takes any historical document you upload -- a medieval manuscript, a declassified government file, a letter in Ottoman script -- and immediately begins researching it, narrating it, and generating a cinematic documentary around it. While you read the document, parallel research agents fan out across the web. Within seconds, the first segment of your documentary is playing: AI-generated cinematic visuals, narrated by a historian who speaks with authority, cites real sources, and is always listening for your voice.
 
-| Dimension | What it does |
-|---|---|
-| **Input** | Any document — PDF, image, multilingual, including dead scripts |
-| **Research** | 11-phase ADK pipeline with Google Search grounding, Wikipedia, and Gemini multimodal evaluation |
-| **Interleaved Output** | Gemini generates TEXT+IMAGE in a single call — narration direction and storyboard illustrations produced together, not sequentially. Three pipeline phases (3.1, 3.2, 3.3) use `response_modalities=["TEXT","IMAGE"]` |
-| **Output** | Self-generating documentary: Gemini interleaved illustrations · Imagen 3 cinematic frames · Veo 2 video · AI narration |
-| **Voice** | Gemini 2.5 Flash Native Audio — always listening, responds in < 300ms, resumes after interruption |
-| **Grounding** | Every spoken question retrieves the 4 most relevant source passages via Firestore vector search — the historian cites actual document pages, not just scripted narration |
-| **Live Illustration** | User questions during the documentary trigger on-the-fly Imagen 3 illustrations with cinematic crossfade |
-| **Timeline Map** | Interactive antique-style map with animated pins, routes, and fly-to transitions for each documentary segment |
-| **Historian Avatar** | AI-generated oil painting portrait (Gemini image generation) with canvas-based lip sync, blinking, and era-adaptive costumes |
-| **Adaptation** | Documentary branches based on your questions — no two sessions are identical |
-| **Light / Dark** | Full theme support across all screens including the cinematic player with antique map styles |
+Speak mid-documentary. The historian stops mid-sentence within 300 milliseconds, answers your question with grounded evidence, generates a new illustration on the fly, and resumes exactly where it left off. Your questions reshape the documentary itself -- branching the narrative graph so that no two viewing sessions ever produce the same film.
+
+This is the first system to combine **live multilingual OCR, parallel AI research with Google Search grounding, generative cinematic visuals (Imagen 3 + Veo 2), interleaved TEXT+IMAGE output from Gemini, and an always-on real-time voice persona (Gemini 2.5 Flash Native Audio)** into a single, seamless experience.
+
+---
+
+## What Makes It Different
+
+| Capability | Description |
+|:---|:---|
+| **Any Document, Any Language** | Upload PDFs, scanned manuscripts, or photographs. Document AI OCR extracts text from 200+ languages, including dead scripts. The historian works with whatever you give it. |
+| **11-Phase ADK Pipeline** | A `SequentialAgent` orchestrates 11 specialized phases -- from OCR to parallel research (with `google_search` grounding) to script generation to visual composition. Each phase emits real-time progress via SSE. |
+| **Interleaved TEXT+IMAGE Generation** | Phases 3.1, 3.2, and 3.3 use Gemini's native interleaved output (`response_modalities=["TEXT","IMAGE"]`) to produce narration and storyboard illustrations in single model calls -- not sequential text-then-image. |
+| **Cinematic Visual Generation** | Imagen 3 produces 4 cinematic frames per segment with era-accurate negative prompts. Veo 2 generates dramatic video clips asynchronously. Beat-aware routing decides which visual path each moment gets. |
+| **Always-On Voice Persona** | Gemini 2.5 Flash Native Audio powers the historian. Sub-300ms interruption handling. Session resumption tokens survive disconnects. The historian never leaves the conversation. |
+| **Grounded in Evidence** | Research agents use Google Search grounding. The fact validator (Phase III.5) cross-references every narration claim against retrieved evidence. Firestore vector search (768-dim embeddings) enables RAG over the original document. |
+| **Live Illustration** | When you ask a question, the historian can trigger on-the-fly Imagen 3 generation. The new image crossfades into the documentary player without breaking the viewing experience. |
+| **Timeline Map** | Phase 3.8 extracts geographic locations and geocodes them via Gemini + Google Maps grounding. An interactive antique-style MapLibre map shows animated pins, historical routes, and fly-to transitions. |
+| **Historian Avatar** | An AI-generated oil painting portrait with canvas-based lip sync animation driven by `AnalyserNode` audio data. The historian has a face. |
+| **Adaptive Documentary** | User questions branch the narrative graph. The documentary restructures itself around your curiosity. Every session is unique. |
 
 ---
 
 ## Demo
 
-> *Upload an Ottoman firman → watch the Expedition Log fill in real time → speak to the historian mid-documentary*
+<div align="center">
 
-**[▶ Watch the 4-minute demo](#)** · **[Live deployment](#)**
+### Demo Video (4 min)
+
+<!-- Replace with actual YouTube link -->
+[![Watch the Demo](https://img.shields.io/badge/YouTube-Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](#)
+
+> A 4-minute walkthrough showing: document upload, live expedition log with real-time agent progress, documentary playback with Ken Burns cinematic visuals, voice interruption mid-narration, question-driven narrative branching, and the interactive timeline map.
+
+### Live Deployment
+
+<!-- Replace with actual deployment URL -->
+[![Try It Live](https://img.shields.io/badge/Cloud_Run-Try_It_Live-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](#)
+
+</div>
 
 ---
 
@@ -53,65 +69,62 @@ AI Historian is a real-time multimodal research and documentary engine. Drop any
 
 ```mermaid
 flowchart TD
-    subgraph USER["👤 User / Frontend"]
+    subgraph USER["User / Frontend"]
         direction LR
-        BROWSER["React 19 + TypeScript + Vite\nPDF Viewer · Research Panel\nDocumentary Player · Voice"]
+        BROWSER["React 19 + TypeScript + Vite<br/>PDF Viewer - Research Panel<br/>Documentary Player - Voice"]
     end
 
-    subgraph BRAIN["🧠 The Brain — Gemini Models"]
+    subgraph BRAIN["Gemini Models"]
         direction LR
-        FLASH["Gemini 2.0 Flash\nResearch · OCR · Validation\nTEXT+IMAGE Interleaved"]
-        PRO["Gemini 2.0 Pro\nScripts · Visual Planning"]
-        LIVE_API["Gemini 2.5 Flash\nNative Audio\nReal-time Voice"]
-        IMAGEN["Imagen 3\nCinematic Frames"]
-        VEO["Veo 2\nDramatic Video"]
+        FLASH["Gemini 2.0 Flash<br/>Research - OCR - Validation<br/>TEXT+IMAGE Interleaved"]
+        PRO["Gemini 2.0 Pro<br/>Scripts - Visual Planning"]
+        LIVE_API["Gemini 2.5 Flash<br/>Native Audio<br/>Real-time Voice"]
+        IMAGEN["Imagen 3<br/>Cinematic Frames"]
+        VEO["Veo 2<br/>Dramatic Video"]
     end
 
-    subgraph LOGIC["⚙️ Backend Logic — Google Cloud Run"]
-        API["historian-api\nFastAPI · Python 3.12"]
-        ORCH["agent-orchestrator\nGoogle ADK\nPython 3.12"]
-        RELAY["live-relay\nNode.js 20\nWebSocket Proxy"]
+    subgraph LOGIC["Backend Logic -- Google Cloud Run"]
+        API["historian-api<br/>FastAPI - Python 3.12"]
+        ORCH["agent-orchestrator<br/>Google ADK<br/>Python 3.12"]
+        RELAY["live-relay<br/>Node.js 20<br/>WebSocket Proxy"]
     end
 
-    subgraph PIPELINE["ADK Pipeline — SequentialAgent with 11 Phases"]
+    subgraph PIPELINE["ADK Pipeline -- SequentialAgent with 11 Phases"]
         direction LR
-        P1["I\nDocument\nAnalyzer"]
-        P2["II\nScene\nResearch"]
-        P3["III\nScript\nGenerator"]
-        P31["3.1\nNarrative\nDirector"]
-        P32["3.2\nBeat\nIllustrator"]
-        P33["3.3\nVisual\nInterleave"]
-        P35["III.5\nFact\nValidator"]
-        P38["3.8\nGeo\nMapping"]
-        P40["4.0\nVisual\nPlanner"]
-        P4["IV\nVisual\nResearch"]
-        P5["V\nVisual\nDirector"]
+        P1["I<br/>Document<br/>Analyzer"]
+        P2["II<br/>Scene<br/>Research"]
+        P3["III<br/>Script<br/>Generator"]
+        P31["3.1<br/>Narrative<br/>Director"]
+        P32["3.2<br/>Beat<br/>Illustrator"]
+        P33["3.3<br/>Visual<br/>Interleave"]
+        P35["III.5<br/>Fact<br/>Validator"]
+        P38["3.8<br/>Geo<br/>Mapping"]
+        P40["4.0<br/>Visual<br/>Planner"]
+        P4["IV<br/>Visual<br/>Research"]
+        P5["V<br/>Visual<br/>Director"]
         P1 --> P2 --> P3 --> P31 --> P32 --> P33 --> P35 --> P38 --> P40 --> P4 --> P5
     end
 
-    subgraph DATA["☁️ Google Cloud Services"]
-        FS[("Firestore\nSessions · Segments\nCheckpoints · Vectors")]
-        GCS[("Cloud Storage\nDocuments · Images\nVideos")]
-        DAI["Document AI\nMultilingual OCR"]
+    subgraph DATA["Google Cloud Services"]
+        FS[("Firestore<br/>Sessions - Segments<br/>Checkpoints - Vectors")]
+        GCS[("Cloud Storage<br/>Documents - Images<br/>Videos")]
+        DAI["Document AI<br/>Multilingual OCR"]
         PS["Pub/Sub"]
         SM["Secret Manager"]
     end
 
-    %% User to Backend (The Connections)
     BROWSER -->|"REST + SSE"| API
-    BROWSER <-.->|"WebSocket\nPCM Audio"| RELAY
+    BROWSER <-.->|"WebSocket<br/>PCM Audio"| RELAY
 
-    %% Backend to Brain (GenAI SDK + ADK)
     API -->|"Triggers pipeline"| ORCH
-    ORCH -->|"Google ADK\nSequentialAgent + ParallelAgent"| PIPELINE
+    ORCH -->|"Google ADK<br/>SequentialAgent + ParallelAgent"| PIPELINE
     P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
     P3 & P40 -->|"GenAI SDK"| PRO
-    P31 & P32 & P33 -->|"GenAI SDK\nTEXT+IMAGE"| FLASH
-    P5 -->|"Vertex AI\nGenAI SDK"| IMAGEN
-    P5 -.->|"Vertex AI\nAsync generation"| VEO
-    RELAY <-.->|"WebSocket\nBidiGenerateContent"| LIVE_API
+    P31 & P32 & P33 -->|"GenAI SDK<br/>TEXT+IMAGE"| FLASH
+    P5 -->|"Vertex AI<br/>GenAI SDK"| IMAGEN
+    P5 -.->|"Vertex AI<br/>Async generation"| VEO
+    RELAY <-.->|"WebSocket<br/>BidiGenerateContent"| LIVE_API
 
-    %% Backend to Data Layer
     ORCH <-->|"Checkpoint resume"| FS
     P1 --> DAI
     P1 & P3 & P31 & P32 & P5 --> GCS
@@ -120,207 +133,535 @@ flowchart TD
     API --> SM
 ```
 
-> **How to read this diagram:** The user uploads a document through the React frontend. The `historian-api` triggers the `agent-orchestrator`, which runs an 11-phase ADK pipeline. Phases 3.1–3.3 use Gemini's native interleaved `TEXT+IMAGE` output to generate narration direction and illustrations in a single call. Each phase calls Gemini models via the **Google GenAI SDK** (accessed through the **ADK** framework). The `live-relay` service connects the user's voice to the **Gemini Live API** via WebSocket for real-time conversation. All services run on **Google Cloud Run**, with Firestore for state and Cloud Storage for media.
+**Reading the diagram:** The user's browser communicates with three Cloud Run services. The `historian-api` serves REST endpoints and SSE streams for real-time progress. The `agent-orchestrator` runs the 11-phase ADK pipeline -- a `SequentialAgent` that chains document analysis, parallel research (via `ParallelAgent` with N `google_search` subagents), script generation, interleaved TEXT+IMAGE storyboarding, fact validation, geographic mapping, visual research, and Imagen 3 / Veo 2 generation. The `live-relay` proxies WebSocket audio between the browser and the Gemini Live API for real-time voice interaction. All state flows through Firestore (with vector search for RAG), all media through Cloud Storage, and all secrets through Secret Manager.
 
 ---
 
-## Agent Pipeline — 11 Phases
+## Google Cloud and Gemini Implementation
+
+> This section documents every Google technology used, how it is accessed, and where in the codebase it appears.
+
+### Gemini Models
+
+| Model | Pipeline Phase | Purpose | Access Method |
+|:---|:---|:---|:---|
+| `gemini-2.0-flash` | I, II, III.5, 3.1, 3.2, 3.3, 3.8, IV | Scan Agent, Research (xN parallel), Fact Validator, Interleaved TEXT+IMAGE (Narrative Director, Beat Illustrator, Visual Interleave), Geo Mapping, Visual Research | Google GenAI SDK via ADK |
+| `gemini-2.0-pro` | III, 4.0, Narrative Curator | Script Generation, Visual Story Planner, Document Curation | Google GenAI SDK via ADK |
+| `gemini-2.5-flash-native-audio-preview-12-2025` | Real-time voice | Historian persona -- always-on narration, interruption, conversation | Gemini Live API (WebSocket `BidiGenerateContent`) |
+| `gemini-embedding-2-preview` | RAG pipeline | 768-dim chunk embeddings + query embeddings for Firestore vector search | Google GenAI SDK |
+| `imagen-3.0-fast-generate-001` | V | 4 cinematic frames per segment with era-accurate negative prompts | Vertex AI via GenAI SDK |
+| `veo-2.0-generate-001` | V | Dramatic video clips (async long-running operations) | Vertex AI via GenAI SDK |
+
+### Google Cloud Services
+
+| Service | Purpose | Implementation |
+|:---|:---|:---|
+| **Cloud Run** | Backend hosting | 3 services: `historian-api` (FastAPI, Python 3.12, 2 vCPU / 2 GiB), `agent-orchestrator` (ADK, Python 3.12, 4 vCPU / 4 GiB), `live-relay` (Node.js 20 WebSocket proxy, 1 vCPU / 1 GiB) |
+| **Vertex AI** | Model hosting | Imagen 3 image generation + Veo 2 video generation via `google-genai` client with `vertexai=True` |
+| **Firestore** | State + vector DB | Sessions, segments, agent logs, phase checkpoints, chunk embeddings (768-dim) for RAG vector search |
+| **Cloud Storage** | Media storage | Uploaded documents, OCR text, Imagen 3 frames, Veo 2 MP4 videos, storyboard illustrations |
+| **Document AI** | Multilingual OCR | `OCR_PROCESSOR` extracts text from uploaded PDFs in 200+ languages including historical scripts |
+| **Pub/Sub** | Event messaging | Async agent-to-API event propagation for real-time SSE delivery |
+| **Secret Manager** | Credentials | Gemini API key, Document AI processor resource name |
+| **Artifact Registry** | Container images | Docker images for all 3 Cloud Run services |
+
+### SDK and Framework Usage
 
 <details>
-<summary><strong>Phase I — Document Analyzer</strong></summary>
+<summary><strong>Google ADK (google-adk)</strong> -- Agent Orchestration</summary>
 
-1. **OCR** — Google Document AI extracts multilingual text from the uploaded PDF in GCS
-2. **Semantic Chunker** — rule-based splitter: page breaks → headings → topic shifts → 3,200-char fallback
-3. **Parallel Summarizer** — `asyncio.gather` + `Semaphore(10)` sends every chunk to Gemini 2.0 Flash concurrently
-4. **Narrative Curator** — ADK Agent (Gemini 2.0 Pro) selects 4–8 cinematically compelling scenes and produces structured `SceneBrief` objects and the Visual Bible style guide
+The entire 11-phase pipeline is built on ADK primitives:
 
-**Outputs:** `scene_briefs`, `visual_bible`, `document_map`, `gcs_ocr_path`
+- **`SequentialAgent`** -- orchestrates the full pipeline from document analysis through visual generation
+- **`ParallelAgent`** -- runs N research subagents concurrently (one per scene), each with `google_search` tool
+- **`Agent`** -- individual agents for research, aggregation, script generation, fact validation
+- **`BaseAgent`** -- custom agents (document analyzer, visual research orchestrator, visual director) that combine ADK lifecycle with direct GenAI SDK calls
 
-5. **Background Embedding** — after chunks are written to Firestore, their summaries are batch-embedded with `gemini-embedding-2-preview` (768 dims, `RETRIEVAL_DOCUMENT` task type) as a background `asyncio.Task`. Phase II starts immediately — vectors are written concurrently without blocking the pipeline. Failures on individual chunks are skipped so a bad chunk never aborts the batch.
+State flows between phases via `output_key` -> `session.state[key]` -> downstream agent instruction templates.
 
 </details>
 
 <details>
-<summary><strong>Phase II — Scene Research + Aggregator</strong></summary>
+<summary><strong>Google GenAI SDK (google-genai)</strong> -- Model Calls</summary>
 
-- **`ParallelAgent`** spins up one `google_search`-only ADK Agent per scene brief (ADK constraint: `google_search` cannot be combined with other tools)
-- Each agent writes `research_{i}` to session state with sources, accepted/rejected evaluation, facts, and a visual prompt
-- **Aggregator Agent** merges all `research_0…N` into deduplicated unified facts, source citations, contradiction flags, and an enriched Visual Bible
+All Gemini, Imagen 3, and Veo 2 calls use the official `google-genai` Python SDK:
 
-**Outputs:** `research_0…N`, `aggregated_research`
-
-</details>
-
-<details>
-<summary><strong>Phase III — Script Orchestrator</strong></summary>
-
-- Gemini 2.0 Pro generates one `SegmentScript` per scene brief — narration (60–120s), 4 visual frame descriptions, Veo 2 scene, mood, and sources
-- All segments are written to Firestore in a single **`WriteBatch`** commit (4–8 sequential round-trips → 1 atomic operation)
-- Emits `segment_update(status="generating")` SSE per segment so frontend skeleton cards appear immediately
-
-**Outputs:** `SegmentScript` list in Firestore + `session.state["script"]`
+- `client.aio.models.generate_content()` -- async text and multimodal generation
+- `client.aio.models.generate_images()` -- Imagen 3 with negative prompts and safety settings
+- `client.aio.models.generate_videos()` -- Veo 2 with async long-running operation polling
+- `client.aio.models.embed_content()` -- 768-dim embeddings for RAG
+- Interleaved `response_modalities=["TEXT","IMAGE"]` -- Phases 3.1, 3.2, 3.3
 
 </details>
 
 <details>
-<summary><strong>Phase 3.1 — Narrative Director (Gemini Interleaved TEXT+IMAGE)</strong></summary>
+<summary><strong>Gemini Live API</strong> -- Real-time Voice</summary>
 
-- Uses Gemini 2.0 Flash with `response_modalities=["TEXT","IMAGE"]` — a single call per scene produces **both** a creative direction note (text) and a storyboard illustration (image) in one unified reasoning pass
-- This is the project's primary implementation of Gemini's native interleaved output: the model acts as creative director, generating visuals and narration direction simultaneously
-- Storyboard images are uploaded to GCS and serve as cinematic reference for Phase V's Imagen 3 frames
-- Emits `storyboard_scene_start`, `storyboard_text_chunk`, and `storyboard_image_ready` SSE events for live frontend updates
+The `live-relay` service maintains a persistent WebSocket connection to the Gemini Live API:
 
-**Outputs:** `storyboard_images` (dict of scene_id → GCS URIs)
-
-</details>
-
-<details>
-<summary><strong>Phase 3.2 — Beat Illustration Agent (Interleaved TEXT+IMAGE for Player)</strong></summary>
-
-- Pre-generates narration beats with Gemini's interleaved output (`response_modalities=["TEXT","IMAGE"]`) during the pipeline, so the documentary player has beat images ready **before** playback begins
-- Each segment script is decomposed into 3–4 dramatic beats; each beat gets a narration direction + cinematic illustration from a single Gemini call
-- Beat 0 is emitted immediately (fast path); beats 1–N are generated concurrently via `asyncio.gather`
-- Beat images are the **primary visual path** for the documentary player — Imagen 3 frames from Phase V serve as cinematic fallback
-- Emits `narration_beat` SSE events per beat for progressive frontend loading
-
-**Outputs:** `beats` (dict of segment_id → list of beat dicts with GCS image URIs)
+- Protocol: `BidiGenerateContent` over WebSocket
+- Audio in: 16-bit PCM, 16 kHz, mono (from browser `AudioWorkletNode`)
+- Audio out: 16-bit PCM, 24 kHz, mono (to browser `AudioBufferSourceNode`)
+- Interruption: server-detected VAD, sub-300ms response
+- Session resumption: `sessionResumptionUpdate.handle` tokens survive disconnects
 
 </details>
 
 <details>
-<summary><strong>Phase 3.3 — Visual Interleave Agent (Beat Visual Type Assignment)</strong></summary>
+<summary><strong>Terraform</strong> -- Infrastructure as Code</summary>
 
-- Reads beat data from Phase 3.2 and assigns each beat a `visual_type` using Gemini 2.0 Flash:
-  - `illustration` — keep the Phase 3.2 Gemini TEXT+IMAGE (no extra generation needed)
-  - `cinematic` — generate an Imagen 3 photorealistic frame in Phase V
-  - `video` — generate a Veo 2 short clip in Phase V
-- This creates a **mixed-modality playback sequence** where illustrations, photographs, and video clips alternate based on narrative pacing
-- Phase V reads the `beat_visual_plan` to determine which generation path to use per beat
+`terraform/main.tf` provisions the complete Google Cloud infrastructure with **19 resource definitions**:
 
-**Output:** `beat_visual_plan` (dict of segment_id → list of BeatVisualAssignment dicts)
-
-</details>
-
-<details>
-<summary><strong>Phase III.5 — Fact Validator (Hallucination Firewall)</strong></summary>
-
-- Gemini 2.0 Flash acts as an LLM-judge, cross-referencing every narration claim against the aggregated research
-- Claims are classified: `SUPPORTED` (keep) · `UNSUPPORTED_SPECIFIC` (remove + bridge sentence) · `UNSUPPORTED_PLAUSIBLE` (soften with "according to tradition") · `NON_FACTUAL` (keep, skip)
-- Overwrites `session.state["script"]` in place — zero changes to downstream agents
-- Latency: ~3–5s; eliminates hallucinated dates, names, and events from narration
-
-</details>
-
-<details>
-<summary><strong>Phase 3.8 — Geographic Mapping</strong></summary>
-
-- Extracts geographic locations from scripts and scene briefs, geocodes via Gemini 2.0 Flash with Google Maps grounding
-- Writes `SegmentGeo` data to Firestore and emits `geo_update` SSE events for the frontend timeline map
-- Enables the interactive antique-style map with animated pins, routes, and fly-to transitions per segment
-
-**Output:** `SegmentGeo` per segment in Firestore
-
-</details>
-
-<details>
-<summary><strong>Phase 4.0 — Narrative Visual Planner</strong></summary>
-
-- Single Gemini 2.0 Pro call produces a `VisualStoryboard` — per-scene primary subjects, objects to avoid (anachronism guards), 3–5 targeted image search queries, and 4 frame concepts with composition notes
-- Feeds Phase IV with specific search targets instead of generic scene descriptions
-
-**Output:** `visual_storyboard` (VisualStoryboard model)
-
-</details>
-
-<details>
-<summary><strong>Phase IV — Visual Research Orchestrator</strong></summary>
-
-6-stage micro-pipeline per scene, all direct `client.aio.models.generate_content` calls (no ADK sub-agents):
-
-| Stage | What it does |
-|---|---|
-| 0 | Query generation — produces 5–7 targeted image search queries from storyboard |
-| 1 | Web search with Google Search grounding — extracts `grounding_chunks[].web.uri` URLs |
-| 2 | Source typing — classifies each URL as webpage / Wikipedia / PDF / image |
-| 3 | Content fetch — httpx + BeautifulSoup (web) · Wikipedia REST API · Document AI inline (PDF) · Gemini multimodal FileData (image) |
-| 4 | Source evaluation — accepts/rejects each source against the scene brief; emits `agent_source_evaluation` SSE |
-| 5 | Detail synthesis — merges accepted sources into `VisualDetailManifest` with period-accurate Imagen prompts |
-
-Fast path (Scene 0): 3 sources, early exit at 2 accepted — prioritizes first segment playability.
-
-**Output:** `VisualDetailManifest` per scene in Firestore
-
-</details>
-
-<details>
-<summary><strong>Phase V — Visual Director</strong></summary>
-
-- **Beat-aware generation** — reads Phase 3.3's `beat_visual_plan` to determine which path to use per beat:
-  - `illustration` beats already have Gemini-generated images from Phase 3.2 — no extra work
-  - `cinematic` beats get Imagen 3 photorealistic frames
-  - `video` beats get Veo 2 short clips
-- **Imagen 3** (`imagen-3.0-fast-generate-001`): generates frames only for `cinematic` beats, all scenes concurrent via `asyncio.gather`. Priority: enriched manifest → storyboard reference → script visual_descriptions → generic fallback. Prompts include era markers as negative prompts.
-- **Veo 2** (`veo-2.0-generate-001`): generates clips only for `video` beats, fired async after all Imagen generation completes. Polled with `loop.run_in_executor(None, client.operations.get, op)` (sync-only API).
-- **GCS uploads** use a module-level `storage.Client()` singleton and cached `Bucket` reference — eliminates per-upload HTTP connection pool creation.
-- Updates Firestore with `imageUrls[]` and `videoUrl` per segment and emits `segment_update(status="complete")` SSE.
-
-**Progressive delivery:** Scene 0 generates images first (before remaining scenes start) to hit the < 45s first-segment target.
-
-</details>
-
-<details>
-<summary><strong>Pipeline Executors — Batch and Streaming</strong></summary>
-
-Two pipeline execution modes:
-
-- **`ResumablePipelineAgent`** (batch mode) — every completed phase is checkpointed to Firestore (`/sessions/{id}/checkpoints/pipeline`). On restart after crash or timeout, completed phases are skipped and `session.state` is restored from the snapshot. The pipeline resumes from the first incomplete phase — no reprocessing of OCR, research, or scripts.
-
-- **`StreamingPipelineAgent`** (streaming mode) — runs global phases (I + II) once, then processes per-segment in parallel. Each segment flows through Phases III → 3.1 → 3.2 → 3.3 → V independently, enabling faster first-segment delivery and progressive playback.
-
-</details>
-
----
-
-## Live Historian Grounding (RAG)
-
-The live historian persona has semantic access to the actual source document — not just the scripted narration — via a lightweight RAG layer that runs entirely on the voice hot path.
-
-**How it works:**
-
-```
-User speaks → Gemini Live → inputTranscript event
-                                    ↓
-                         live-relay intercepts (>15 chars)
-                                    ↓
-                    POST /api/session/{id}/retrieve  (1.5s timeout)
-                                    ↓
-               historian-api embeds query (gemini-embedding-2-preview)
-               Firestore find_nearest() → top-4 chunks by cosine distance
-                                    ↓
-              live-relay injects passages as clientContent turn
-              before the historian's audio response arrives
-```
-
-**Best-effort at every step — nothing can break the voice session:**
-
-| Layer | Failure mode | Behavior |
-|---|---|---|
-| Background embed task | Exception in `_embed_and_write_background` | Caught and logged — Phase II unaffected |
-| Individual chunk | `embed_content` API error | Chunk `embedding` stays `None`, skipped |
-| Retrieve endpoint | Any exception | Returns `{"chunks": []}` — never HTTP 500 |
-| live-relay injection | Timeout (>1.5s) or network error | `retrieveContext` returns `""` — injection skipped |
-| Historian response | No context injected | Answers from existing session context as before |
-
-**Firestore vector index** (one-time setup, 5–15 min to provision):
+- 3 Cloud Run services with full environment variable configuration
+- Firestore database with composite indexes
+- 2 Cloud Storage buckets (documents + assets)
+- Pub/Sub topics and subscriptions
+- Artifact Registry repository
+- Secret Manager secrets
+- Service account with least-privilege IAM bindings
+- All required API enablements
 
 ```bash
-gcloud firestore indexes composite create \
-  --collection-group=chunks \
-  --query-scope=COLLECTION \
-  --field-config field-path=embedding,vector-config='{"dimension":"768","flat":"{}"}' \
-  --database="(default)" \
-  --project=$GCP_PROJECT_ID
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply
 ```
+
+</details>
+
+### Bonus Points Pursued
+
+| Bonus | Points | Evidence |
+|:---|:---|:---|
+| Published blog post with `#GeminiLiveAgentChallenge` | **+0.6** | Both team members (links in submission) |
+| Automated Cloud deployment (IaC) | **+0.2** | `terraform/main.tf` -- 19 resources, single `terraform apply` |
+| GDG membership | **+0.2** | Both team members (profile links in submission) |
+| | **+1.0 total** | |
+
+---
+
+## The 11-Phase Agent Pipeline
+
+AI Historian processes every uploaded document through an 11-phase agent pipeline built on the Google Agent Development Kit (ADK). Each phase is a custom `BaseAgent` subclass that coordinates direct API calls, ADK sub-agents, and Firestore persistence while streaming SSE progress events to the frontend in real time.
+
+```
+Document Upload
+    |
+    v
+Phase I ---- Document Analyzer (OCR + Chunking + Curation)
+    |
+    v
+Phase II --- Scene Research (Parallel google_search agents + Aggregator)
+    |
+    v
+Phase III -- Script Generator (Per-scene narration + visual descriptions)
+    |
+    v
+Phase 3.1 -- Narrative Director (Interleaved TEXT+IMAGE storyboards)
+    |
+    v
+Phase 3.2 -- Beat Illustrator (Per-beat TEXT+IMAGE fast path)
+    |
+    v
+Phase 3.3 -- Visual Interleave (Assign illustration / cinematic / video)
+    |
+    v
+Phase III.5  Fact Validator (Hallucination firewall)
+    |
+    v
+Phase 3.8 -- Geographic Mapping (Geocode + timeline map data)
+    |
+    v
+Phase 4.0 -- Narrative Visual Planner (VisualStoryboard + anachronism guards)
+    |
+    v
+Phase IV --- Visual Research (6-stage micro-pipeline per scene)
+    |
+    v
+Phase V ---- Visual Director (Imagen 3 + Veo 2 generation)
+    |
+    v
+Documentary Ready
+```
+
+All phases run inside a `SequentialAgent`. Two pipeline executors are available:
+
+| Executor | Mode | Behavior |
+|---|---|---|
+| `ResumablePipelineAgent` | Batch | Checkpoint-aware, phase-level resume from Firestore. Runs all 11 phases sequentially. |
+| `StreamingPipelineAgent` | Streaming | Runs global phases (I + II) once, then processes per-segment in parallel for faster first-segment delivery. Scene 0 runs first; scenes 1-N stagger with `asyncio.Semaphore(2)`. |
+
+---
+
+<details>
+<summary><strong>Phase I -- Document Analyzer</strong></summary>
+
+**What it does:** Extracts multilingual text from an uploaded PDF via Document AI OCR, splits it into semantic chunks, summarizes every chunk in parallel, then selects 2-4 cinematically compelling scenes with a Visual Bible style guide.
+
+**Models:** Gemini 2.0 Flash (summarization, embedding), Gemini 2.0 Flash (narrative curation)
+
+**Key technical details:**
+- **OCR:** Google Document AI async client with automatic page splitting for documents exceeding the 15-page processor limit. Retries up to 3x with exponential backoff.
+- **Semantic Chunker:** Rule-based Python splitter. Priority: page breaks (`\f`) > heading detection (numbered/roman/ALL-CAPS patterns) > topic shift heuristics (blank line + proper noun) > 3200-character hard fallback split at sentence boundaries.
+- **Parallel Summarizer:** `asyncio.gather` with `Semaphore(10)` sends every chunk to Gemini 2.0 Flash concurrently. Failed chunks degrade to a 200-character raw-text fallback.
+- **Narrative Curator:** ADK `Agent` (Gemini 2.0 Flash) reads the full Document Map and selects scenes, producing structured `SceneBrief` objects and a Visual Bible.
+- **Background Embedding:** `gemini-embedding-2-preview` (768 dimensions) embeds all chunk summaries in batches of 250 via `asyncio.create_task` -- runs in the background without blocking Phase II. Vectors are written to Firestore for RAG retrieval during live voice sessions.
+
+**Outputs:** `scene_briefs`, `visual_bible`, `document_map`, `gcs_ocr_path` in `session.state`
+
+</details>
+
+<details>
+<summary><strong>Phase II -- Scene Research + Aggregator</strong></summary>
+
+**What it does:** Spins up one `google_search`-only ADK Agent per scene brief, running all agents simultaneously via `ParallelAgent`. An aggregator then merges all research into a unified context with facts, citations, and contradiction flags.
+
+**Model:** Gemini 2.0 Flash
+
+**Key technical details:**
+- ADK constraint: `google_search` **cannot be combined** with other tools in the same agent. Each scene researcher is search-only by design.
+- Each agent reads its scene brief and source chunk texts from `session.state` via ADK template substitution (`{scene_0_brief}`, `{scene_0_chunks}`). The f-string escaping trick (`{{scene_{i}_brief}}`) produces the correct ADK template variable.
+- Source chunks are fetched from Firestore in parallel via `asyncio.gather` before research begins.
+- Each research agent evaluates sources against a 3-tier domain trust rubric (Tier 1: `.edu`, `.gov`, JSTOR; Tier 2: Wikipedia, Britannica; Tier 3: generic blogs), rejects AI-generated content, and assigns cross-reference confidence labels: `ESTABLISHED FACT`, `VERIFIED`, `UNVERIFIED`, `DISPUTED`.
+- Normal mode: 3 searches per scene. Test mode: 1 search per scene.
+
+**Outputs:** `research_0`...`research_N` (per-scene JSON), `aggregated_research` in `session.state`
+
+</details>
+
+<details>
+<summary><strong>Phase III -- Script Orchestrator</strong></summary>
+
+**What it does:** Generates a `SegmentScript` for each scene containing 60-120 seconds of narration, 4 visual descriptions, a Veo 2 scene prompt, mood, and source citations. Commits all segments to Firestore atomically.
+
+**Model:** Gemini 2.0 Pro
+
+**Key technical details:**
+- Pydantic v2 `SegmentScript` model: `id`, `scene_id`, `title`, `narration_script`, `visual_descriptions`, `veo2_scene`, `mood`, `sources`.
+- Firestore `WriteBatch` reduces 4-8 individual round-trips to 1 atomic commit.
+- Emits `segment_update(status="generating")` SSE events per segment so the frontend displays skeleton cards with titles immediately.
+- Output parser handles bare JSON arrays, `{"segments":[...]}` envelopes, and markdown code fences.
+
+**Outputs:** `SegmentScript` documents in Firestore at `/sessions/{id}/segments/{segmentId}`
+
+</details>
+
+<details>
+<summary><strong>Phase 3.1 -- Narrative Director (Interleaved TEXT+IMAGE)</strong></summary>
+
+**What it does:** Makes a single Gemini call per scene with `response_modalities=["TEXT","IMAGE"]` to produce both a creative direction note and a storyboard illustration in one pass. This is the primary implementation of Gemini's native interleaved output capability.
+
+**Model:** Gemini 2.0 Flash (TEXT+IMAGE)
+
+**Key technical details:**
+- One API call produces two modalities simultaneously -- text and image interleaved in the response.
+- Generated storyboard images are uploaded to GCS and stored as `storyboard_images` for use as visual references in Phase V.
+
+**Outputs:** `storyboard_images` (GCS URIs per scene)
+
+</details>
+
+<details>
+<summary><strong>Phase 3.2 -- Beat Illustrator (Interleaved TEXT+IMAGE)</strong></summary>
+
+**What it does:** Pre-generates narration beats with TEXT+IMAGE during the pipeline. Each segment is split into 3-4 beats, and each beat receives both narration text and an illustration from a single Gemini call.
+
+**Model:** Gemini 2.0 Flash (TEXT+IMAGE)
+
+**Key technical details:**
+- Beat 0 is emitted immediately via a fast path so the player can start loading visuals as early as possible.
+- Beats 1-N are generated concurrently via `asyncio.gather`.
+- Beat images are the **primary visual path** for the documentary player -- most viewers see these images first.
+
+**Outputs:** Beat narration + beat images per segment
+
+</details>
+
+<details>
+<summary><strong>Phase 3.3 -- Visual Interleave Agent</strong></summary>
+
+**What it does:** Assigns each beat a `visual_type` that determines which generation path Phase V uses, creating a mixed-modality playback sequence.
+
+**Model:** Gemini 2.0 Flash
+
+**Key technical details:**
+
+| visual_type | Source | Generation |
+|---|---|---|
+| `illustration` | Phase 3.2 image | Already generated, no additional work |
+| `cinematic` | Imagen 3 | Phase V generates a new cinematic frame |
+| `video` | Veo 2 | Phase V generates a video clip |
+
+**Output:** `beat_visual_plan` (per-beat visual type assignments)
+
+</details>
+
+<details>
+<summary><strong>Phase III.5 -- Fact Validator (Hallucination Firewall)</strong></summary>
+
+**What it does:** An LLM-judge cross-references every narration claim in the script against the research evidence gathered in Phase II. Overwrites the script in place with no changes to downstream agents.
+
+**Model:** Gemini 2.0 Flash
+
+**Key technical details:**
+- Four verdict categories per claim:
+  - `SUPPORTED` -- Keep as-is
+  - `UNSUPPORTED_SPECIFIC` -- Remove the claim and bridge surrounding text
+  - `UNSUPPORTED_PLAUSIBLE` -- Soften language ("may have" / "believed to")
+  - `NON_FACTUAL` -- Skip entirely
+- Latency: approximately 3-5 seconds per segment.
+- Zero interface changes: downstream agents consume the same `SegmentScript` shape.
+
+**Output:** Modified `SegmentScript` in Firestore (in-place overwrite)
+
+</details>
+
+<details>
+<summary><strong>Phase 3.8 -- Geographic Mapping</strong></summary>
+
+**What it does:** Extracts geographic locations from narration scripts, geocodes them via Gemini with Google Maps grounding, and writes structured geo data to Firestore for the interactive timeline map.
+
+**Model:** Gemini 2.0 Flash
+
+**Key technical details:**
+- Writes `SegmentGeo` objects to Firestore and emits `geo_update` SSE events.
+- Powers the frontend MapLibre GL timeline map with animated pins and route lines.
+
+**Output:** `SegmentGeo` per segment in Firestore, `geo_update` SSE events
+
+</details>
+
+<details>
+<summary><strong>Phase 4.0 -- Narrative Visual Planner</strong></summary>
+
+**What it does:** A single Gemini 2.0 Pro call produces a `VisualStoryboard` that guides all downstream visual generation with per-scene subjects, anachronism guards, targeted image search queries, and frame composition concepts.
+
+**Model:** Gemini 2.0 Pro
+
+**Key technical details:**
+- Per-scene output includes: subjects to depict, objects to explicitly avoid (anachronism guards), targeted image search queries, and frame concepts for Imagen 3.
+- This phase bridges the narrative script and the visual research pipeline.
+
+**Output:** `VisualStoryboard` in `session.state`
+
+</details>
+
+<details>
+<summary><strong>Phase IV -- Visual Research Orchestrator</strong></summary>
+
+**What it does:** Runs a 6-stage micro-pipeline per scene to transform each SceneBrief into a `VisualDetailManifest` -- a richly sourced, period-accurate Imagen 3 prompt grounded in real archival research. Uses **no ADK sub-agents**; all calls are direct `client.aio.models.generate_content` for full concurrency control.
+
+**Model:** Gemini 2.0 Flash
+
+**Key technical details:**
+
+| Stage | Operation | Method |
+|---|---|---|
+| 0 | Generate 5-7 image search queries | Gemini |
+| 1 | Web search with Google Search grounding | `types.Tool(google_search=GoogleSearch())` |
+| 2 | Source typing (webpage / Wikipedia / PDF / image) | Gemini |
+| 3 | Content fetch | httpx + BeautifulSoup, Wikipedia REST API, Document AI (PDF), Gemini multimodal `FileData` (image) |
+| 4 | Source evaluation (accept/reject per scene brief) | Gemini |
+| 5 | Detail synthesis | Gemini |
+| 6 | Merge into `VisualDetailManifest` | Gemini |
+
+Two concurrent tracks run via `asyncio.gather`:
+- **Fast path (Scene 0):** 3 sources max, early exit at 2 accepted, skips PDFs and images. Target: manifest ready within 35 seconds.
+- **Deep path (Scenes 1-N):** 8-10 sources, all source types enabled, no early exit.
+
+**Outputs:** `VisualDetailManifest` per scene in Firestore at `/sessions/{id}/visualManifests/{sceneId}`, `visual_research_manifest` in `session.state`
+
+</details>
+
+<details>
+<summary><strong>Phase V -- Visual Director</strong></summary>
+
+**What it does:** Beat-aware visual generation that reads Phase 3.3's visual plan and dispatches each beat to the appropriate generator: keep existing illustration, generate an Imagen 3 cinematic frame, or generate a Veo 2 video clip.
+
+**Models:** Imagen 3 (`imagen-3.0-fast-generate-001`), Veo 2 (`veo-2.0-generate-001`)
+
+**Key technical details:**
+- **Imagen 3 prompts:** Built from enriched manifest (priority 1), script `visual_descriptions` (priority 2), or generic fallback (priority 3). Each segment gets 4 concurrent frame calls with distinct composition modifiers (wide, medium, close-up, dramatic). Era-specific negative prompts prevent anachronisms.
+- **Progressive delivery:** Scene 0 generates first. Its images are emitted via `segment_update` SSE before any subsequent scene starts, targeting the < 45s first-segment goal.
+- **Remaining scenes:** Run concurrently via `asyncio.gather`.
+- **Veo 2 polling:** Each segment's video operation is polled in a fire-and-forget `asyncio.create_task` using `run_in_executor` (the `client.operations.get` API is sync-only). 30 polls max at 20-second intervals (10-minute timeout). Firestore is updated with `videoUrl` on completion.
+
+**Outputs:** `imageUrls[]` and `videoUrl` per segment in Firestore, `segment_update(status="complete")` SSE events
+
+</details>
+
+---
+
+## Live Historian Voice
+
+The Historian is an always-on AI persona that narrates, converses, and listens simultaneously. It runs on the Gemini Live API (`BidiGenerateContent`) via a WebSocket relay service on Cloud Run.
+
+### Voice Architecture
+
+```
+Browser (microphone)
+    | PCM 16-bit, 16 kHz, mono, 1024-byte chunks
+    v
+WebSocket connection
+    |
+    v
+live-relay (Node.js, Cloud Run)     <-- Session context from Firestore
+    |                                    Persona prompt injection
+    | WebSocket                          RAG retrieval interception
+    v                                    Live illustration dispatch
+Gemini Live API
+    (gemini-2.5-flash-native-audio-preview-12-2025)
+    |
+    | PCM 16-bit, 24 kHz, mono
+    v
+live-relay
+    |
+    v
+Browser (Web Audio API playback via AudioBufferSourceNode)
+```
+
+### Capabilities
+
+| Capability | Implementation |
+|---|---|
+| Always-on listening | Historian listens while the documentary plays. `automaticActivityDetection` handles voice activity detection server-side. |
+| Sub-300ms interruption | Gemini detects user speech and sends `serverContent.interrupted = true`. The client immediately stops audio playback and clears the queue. |
+| Session resumption | Stores `sessionResumptionUpdate.handle` tokens in Firestore. On `goAway` or disconnect, reconnects with the token (valid 2 hours). Falls back to a fresh session if the token is expired. |
+| Context compression | `contextWindowCompression.slidingWindow` keeps the conversation going beyond the 15-minute session limit. |
+| Persona system | Multiple historian personas (Professor, Explorer, Storyteller). System instruction combines persona prompt + documentary context from Firestore (segment titles, scripts, sources, visual bible). |
+| Output transcription | Real-time speech-to-text captions from `outputTranscription.text` events forwarded to the browser for the caption track. |
+
+### RAG Grounding
+
+When the user asks a question, the relay intercepts the transcript and retrieves relevant document passages to inject into the conversation:
+
+```
+User speaks
+    |
+    v
+Gemini Live API sends inputTranscript event
+    |
+    v
+live-relay accumulates transcript fragments
+    |  (debounced, triggers when > 15 chars)
+    v
+POST /api/session/{id}/retrieve  (1.5s timeout via AbortSignal)
+    |
+    v
+historian-api embeds query with gemini-embedding-2-preview
+    |
+    v
+Firestore find_nearest() -- top-4 chunks by cosine distance
+    |
+    v
+live-relay injects retrieved passages as clientContent turn
+    |
+    v
+Historian responds with document-grounded knowledge
+```
+
+Every step is best-effort. If the RAG call fails, times out, or returns no results, the historian answers from its existing context. The voice session is never interrupted by a retrieval failure.
+
+Query results are cached for 60 seconds per session (max 20 entries) to avoid redundant embedding calls for repeated or similar questions.
+
+### Live Illustration
+
+When the historian describes a vivid scene, location, or key figure during conversation, Gemini autonomously triggers an illustration via a `NON_BLOCKING` function call:
+
+1. Gemini sends a `generate_illustration` function call with `subject`, `mood`, and `composition` parameters while continuing to speak.
+2. The live-relay dispatches the call to `POST /api/session/{id}/illustrate` (15-second timeout).
+3. The historian-api generates an Imagen 3 image using the session's Visual Bible for style consistency.
+4. The generated image URL is sent to the browser as a `live_illustration` WebSocket message.
+5. The frontend displays the image with a cinematic crossfade transition.
+6. A `FunctionResponse` is sent back to Gemini confirming the image is visible, with `turnComplete: false` so the historian's speech is not interrupted.
+
+The historian never pauses to wait for the illustration. Generation and narration happen concurrently.
+
+---
+
+## Frontend Experience
+
+The frontend is a cinematic application layer built to maximize the Innovation and Multimodal UX judging criterion (40% weight). Three screens guide the user from upload to documentary playback.
+
+### Three Screens
+
+**1. Upload** -- Drag-and-drop zone with format badges (PDF, scanned manuscripts), language detection tags, and an animated upload progress bar. Magnetic pull draws the primary CTA toward the cursor.
+
+**2. Workspace** -- Split layout with resizable panels:
+- Left: PDF viewer with scrollable pages and entity highlighting
+- Right: Historian Live panel + Research Activity panel (living agent cards with 5-state visual machine) + Segment cards (skeleton-to-content morphing with synchronized shimmer)
+- The Expedition Log loading pattern narrates pipeline progress as a journal rather than showing spinners
+
+**3. Player** -- Full-screen cinematic experience:
+- Ken Burns pan-and-zoom on Imagen 3 stills (audio-reactive speed via AnalyserNode)
+- Veo 2 video playback for dramatic segments
+- Word-by-word caption track synced to narration
+- Interactive antique-style timeline map (MapLibre GL) with animated pins
+- Living Portrait avatar with canvas-based lip sync
+- Always-on voice button with organic waveform visualization
+- All chrome auto-hides after 3 seconds of inactivity
+
+### Frontend Tech Stack
+
+| Package | Version | Role |
+|---|---|---|
+| React | 19 | Concurrent rendering, `startTransition` for SSE updates |
+| Vite | 7 | Build tool, instant HMR, ESBuild transforms |
+| TypeScript | 5.x strict | Full type safety, no `any` |
+| Tailwind CSS | v4 | CSS-first config, Lightning CSS engine |
+| Zustand | 5 | Client state with sessionStorage persistence |
+| Motion | 12 | All animations -- springs, `AnimatePresence`, `layoutId` transitions |
+| TanStack Query | v5 | Server state, SSE stream management |
+| MapLibre GL | 5.x | Interactive antique-style timeline map |
+| Canvas API | native | Living Portrait avatar with lip sync |
+| Radix UI | latest | Accessible headless components (Dialog, Tooltip, Collapsible) |
+| Sonner | 2.x | Toast notifications |
+| pdfjs-dist | latest | PDF rendering with text layer extraction |
+| Web Audio API | native | Mic capture (AudioWorkletNode, 16 kHz PCM), playback (24 kHz), AnalyserNode for waveform and audio-reactive visuals |
+
+### Cinematic Design Elements
+
+- **Film grain overlay** -- SVG `feTurbulence` filter at 2.5% opacity with `mix-blend-mode: multiply`. Animated `grain-shift` keyframe adds tactile material quality.
+- **Iris reveal transition** -- `@property --iris-r` animates a `radial-gradient` mask between Workspace and Player. 0.65s iris close, 0.75s iris open. The single highest-impact animation in the app.
+- **Audio-reactive Ken Burns** -- `useAudioVisualSync` hook reads `AnalyserNode` energy each `requestAnimationFrame` and drives CSS custom properties: `--ken-speed` (28s silence to 20s peak), `--glow-opacity`, `--vig-spread`.
+- **Cipher/decode text reveal** -- Segment titles decode from ancient Greek/Cyrillic glyphs to actual text over 600ms via `useTextScramble` hook.
+- **Word-by-word caption reveal** -- Captions reveal one word at a time with `blur(4px) -> blur(0)` entrance synced to narration timing.
+- **Expedition Log** -- Pipeline waiting is presented as the first act of the documentary. Phase markers, self-drawing dividers, typewriter log entries at 20ms/char with random jitter, and accumulation counters (SOURCES FOUND / FACTS VERIFIED / SEGMENTS READY).
+- **Living agent cards** -- Five-state visual machine per agent (queued, searching, evaluating, done, error) with animated conic-gradient borders, spotlight glow halos, and spring-physics morph transitions.
+
+---
+
+## Performance
+
+### Targets
+
+| Metric | Target |
+|---|---|
+| First segment playable | < 45 seconds from upload |
+| Voice interruption latency | < 300ms |
+| Historian response start | < 1.5 seconds after user speech ends |
+| Research per agent | < 30 seconds |
+| Imagen 3 generation | ~5 seconds per image |
+| Frontend initial bundle | < 200KB gzipped |
+| Animation frame budget | 60fps maintained |
+
+### Optimizations
+
+| Layer | Optimization | Impact |
+|---|---|---|
+| Pipeline | Scene 0 fast path (3 sources, early exit at 2 accepted) | First segment playable under 45s |
+| Pipeline | `StreamingPipelineAgent` with per-segment parallelism | Global phases run once; segments process concurrently |
+| Pipeline | Veo 2 fire-and-forget background tasks | Video polling never blocks Imagen 3 generation |
+| Backend | Firestore `WriteBatch` for script commits | 4-8 round-trips reduced to 1 atomic commit |
+| Backend | `GlobalRateLimiter` with Retry-After backoff | No 429 cascades across concurrent agents |
+| Backend | GCS client singleton + bucket cache | No per-upload connection pool overhead |
+| Backend | Background embedding via `asyncio.create_task` | Phase II starts immediately; vectors write in parallel |
+| Frontend | `React.memo` on AgentCard / SegmentCard, `useShallow` selectors | No cascading re-renders from SSE updates |
+| Frontend | SSE adaptive drip buffer (1/3/8 events per 150ms tick) | 50-event burst absorbed gracefully instead of frame drops |
+| Frontend | Lazy-loaded pages via `React.lazy` + `Suspense` | Smaller initial bundle, faster first paint |
+| Frontend | React Compiler (babel-plugin-react-compiler) | Automatic memoization of components and hooks |
+| Voice | RAG query result cache (60s TTL, 20-entry LRU) | Repeated questions skip embedding + Firestore lookup |
+| Voice | System instruction cache (15-min TTL) | Firestore context fetched once per session, not per reconnect |
 
 ---
 
@@ -329,97 +670,94 @@ gcloud firestore indexes composite create \
 ### AI Models
 
 | Model | Role |
-|---|---|
-| `gemini-2.5-flash-native-audio-preview-12-2025` | Historian persona — Gemini Live API |
+|:---|:---|
+| `gemini-2.5-flash-native-audio-preview-12-2025` | Historian persona -- Gemini Live API, real-time bidirectional voice |
 | `gemini-2.0-pro` | Script generation, Visual Planner, Narrative Curator |
 | `gemini-2.0-flash` | Scan Agent, Research Subagents, Fact Validator, Visual Research, Interleaved TEXT+IMAGE (Phases 3.1, 3.2, 3.3), Geo Mapping |
-| `gemini-embedding-2-preview` | Chunk summary embeddings (768 dims) + query embedding for RAG retrieval |
-| `imagen-3.0-fast-generate-001` | Scene images (4 frames per segment, ~5s each) |
-| `veo-2.0-generate-001` | Dramatic video clips (async, 1–2 min each) |
+| `gemini-embedding-2-preview` | Chunk summary embeddings (768 dims) + RAG query embedding |
+| `imagen-3.0-fast-generate-001` | Scene images -- 4 frames per segment, ~5s each |
+| `veo-2.0-generate-001` | Dramatic video clips -- async generation, 1--2 min each |
 
 ### Google Cloud Services
 
 | Service | Role |
-|---|---|
-| **Cloud Run** | All three backend services — historian-api, agent-orchestrator, live-relay |
+|:---|:---|
+| **Cloud Run** | All 3 backend services (`historian-api`, `agent-orchestrator`, `live-relay`) |
 | **Vertex AI** | Imagen 3, Veo 2, Gemini model hosting |
-| **Gemini Live API** | Real-time bidirectional voice with interruption and resumption |
-| **Firestore** | Session state, agent logs, segments, manifests, phase checkpoints; chunk `Vector(768)` fields for RAG vector search |
+| **Gemini Live API** | Real-time bidirectional voice streaming |
+| **Firestore** | Sessions, segments, checkpoints, vector search (768-dim cosine) |
 | **Cloud Storage** | Uploaded documents, generated images, MP4 videos |
-| **Document AI** | Multilingual OCR (`OCR_PROCESSOR`) |
-| **Pub/Sub** | Async agent event messaging |
-| **Secret Manager** | API keys and service credentials |
-| **Artifact Registry** | Docker images for Cloud Run |
+| **Document AI** | Multilingual OCR -- 200+ languages including dead scripts |
+| **Pub/Sub** | Async event messaging between services |
+| **Secret Manager** | API keys, service credentials |
+| **Artifact Registry** | Docker images for all Cloud Run services |
+
+### Backend
+
+| Package | Version | Role |
+|:---|:---|:---|
+| `google-adk` | latest | Agent orchestration -- `SequentialAgent`, `ParallelAgent`, `Agent` |
+| `google-genai` | latest | Gemini, Imagen 3, Veo 2 API calls |
+| `google-cloud-documentai` | latest | OCR processing |
+| `FastAPI` | 0.115+ | HTTP API gateway + SSE streaming |
+| `uvicorn` | latest | ASGI server |
+| `Pydantic` | v2 | Request/response models with strict typing |
 
 ### Frontend
 
 | Package | Version | Role |
-|---|---|---|
-| React | 19 | UI framework — concurrent rendering, `startTransition` for SSE |
-| Vite | 6 | Build tool — ESBuild transforms, instant HMR |
+|:---|:---|:---|
+| React | 19 | UI framework -- concurrent rendering |
+| Vite | 7 | Build tool -- instant HMR, sub-second cold starts |
 | TypeScript | 5.x strict | Full type safety, no `any` |
 | Tailwind CSS | v4 | CSS-first config, Lightning CSS engine |
-| Zustand | 5 | Client state — `useShallow` selectors, sessionStorage persistence |
-| Motion | 12 | All animations — springs, `AnimatePresence`, `layoutId` |
-| TanStack Query | v5 | Server state — REST polling, SSE stream management |
-| MapLibre GL | 5.x | Interactive antique-style timeline map with animated pins and routes |
-| Canvas API | native | Living Portrait avatar — layered canvas compositing with lip sync |
-| Radix UI | latest | Accessible headless components — Dialog, Tooltip, Collapsible |
-| react-resizable-panels | 4.x | Draggable split layout for PDF viewer + research panel |
-| Sonner | 2.x | Toast notifications — `toast.promise()` for async agent operations |
+| Zustand | 5 | Client state -- session, research, voice, player stores |
+| Motion | 12 | All animations -- springs, gestures, layout transitions |
+| TanStack Query | v5 | Server state -- REST polling, SSE stream management |
+| MapLibre GL | 5.x | Interactive timeline map with animated markers |
+| Radix UI | latest | Accessible headless primitives (Dialog, Tooltip) |
+| Sonner | 2.x | Toast notifications |
 | pdfjs-dist | latest | PDF rendering with text layer extraction |
 
----
+### Infrastructure
 
-## Performance
-
-| Layer | Optimization | Impact |
-|---|---|---|
-| Frontend | `React.memo` on AgentCard + SegmentCard; `useShallow` Zustand selectors; `useMemo` for agent grouping | No cascading re-renders on agent status updates |
-| Frontend | SSE adaptive drip — 1 / 3 / 8 events per 150ms tick, single `startTransition` per batch | 50-event burst: 7.5s → ~1s catch-up |
-| Frontend | Canvas resize guard in Waveform — conditional `width`/`height` assignment | Eliminates 60 GPU context flushes/second during audio |
-| Frontend | All pages lazy-loaded via `React.lazy` + `Suspense` | Smaller initial bundle — only UploadPage parsed on first load |
-| Frontend | CSS containment (`contain: layout style paint`) + GPU hints (`will-change`) on player and map | Isolates repaint scope; prevents layout thrashing |
-| Frontend | ResearchStore persisted to `sessionStorage` via Zustand persist middleware | State survives page refreshes without re-fetching |
-| Backend | Firestore `WriteBatch` for segment writes | 4–8 sequential round-trips → 1 atomic commit |
-| Backend | `GlobalRateLimiter.locked()` + Retry-After header extraction | Correct backoff without hitting 429 cascades |
-| Backend | GCS `storage.Client()` singleton + `Bucket` cache | Eliminates per-upload connection pool creation under concurrent Imagen 3 |
-| Backend | Test mode: 6-chunk limit + 1 frame/segment + no Veo 2 | Fast iteration without burning Imagen/Veo quota |
-
-### Performance Targets
-
-| Metric | Target |
-|---|---|
-| First segment playable | < 45 seconds from document upload |
-| Voice interruption latency | < 300ms (historian stops mid-word) |
-| Historian response start | < 1.5 seconds after user speech ends |
-| Research subagent completion | < 30 seconds per agent |
-| Imagen 3 fast generation | ~5 seconds per image |
-| Frontend initial bundle | < 200KB gzipped |
-| Animation frame budget | 60fps maintained |
+| Tool | Role |
+|:---|:---|
+| Terraform | Full IaC -- 18 resource types in `terraform/main.tf` |
+| Docker | Container images for 3 Cloud Run services |
+| pnpm | Package manager (frontend + live-relay) |
 
 ---
 
-## Setup
+## Getting Started
 
 ### Prerequisites
 
 - Google Cloud project with billing enabled
-- `gcloud` CLI authenticated: `gcloud auth application-default login`
-- Terraform ≥ 1.6
+- `gcloud` CLI installed and authenticated
+- Terraform >= 1.5
 - Docker
-- Node.js 20, Python 3.12, `pnpm`
+- Node.js 20+
+- Python 3.12+
+- pnpm
 
-### 1. Clone and configure
+### Step 1 -- Clone and Configure
 
 ```bash
 git clone https://github.com/pancodo/gemini-live-agent-challenge
 cd gemini-live-agent-challenge
 cp backend/.env.example backend/.env
-# Fill in: GCP_PROJECT_ID, GCS_BUCKET_NAME, DOCUMENT_AI_PROCESSOR_NAME
 ```
 
-### 2. Provision infrastructure
+Edit `backend/.env` and fill in:
+
+| Variable | Description |
+|:---|:---|
+| `GCP_PROJECT_ID` | Your Google Cloud project ID |
+| `GCS_BUCKET_NAME` | GCS bucket for documents and generated assets |
+| `DOCUMENT_AI_PROCESSOR_NAME` | Full Document AI processor resource name |
+
+### Step 2 -- Provision Infrastructure
 
 ```bash
 cd terraform
@@ -429,52 +767,107 @@ terraform apply \
   -var="gemini_api_key=YOUR_GEMINI_API_KEY"
 ```
 
-Provisions: Firestore, GCS buckets (docs + assets), Pub/Sub, Secret Manager, Artifact Registry, 3 Cloud Run services, service account with all IAM roles.
+This single command provisions all infrastructure:
 
-### 3. Build and push images
+- Firestore database (Native mode)
+- GCS buckets for documents and generated assets
+- Pub/Sub topics and subscriptions
+- Secret Manager secrets
+- Artifact Registry repository
+- 3 Cloud Run services (placeholder images on first deploy)
+- Service account with all required IAM roles
+- All necessary GCP API enablements
+
+### Step 3 -- Create Firestore Vector Index
+
+```bash
+gcloud firestore indexes composite create \
+  --collection-group=chunks \
+  --query-scope=COLLECTION \
+  --field-config field-path=embedding,vector-config='{"dimension":"768","flat":"{}"}' \
+  --database="(default)" \
+  --project=YOUR_PROJECT_ID
+```
+
+This index takes 5--15 minutes to provision. It is required for the live historian's RAG-based document grounding -- enabling vector search over chunk embeddings so the voice persona can cite specific passages from the uploaded document.
+
+### Step 4 -- Build and Deploy
 
 ```bash
 PROJECT_ID=YOUR_PROJECT_ID
 REGION=us-central1
 REGISTRY=${REGION}-docker.pkg.dev/${PROJECT_ID}/historian
 
+# Authenticate Docker to Artifact Registry
 gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
-docker build -t ${REGISTRY}/historian-api:latest     backend/historian_api/    && docker push ${REGISTRY}/historian-api:latest
-docker build -t ${REGISTRY}/agent-orchestrator:latest backend/agent_orchestrator/ && docker push ${REGISTRY}/agent-orchestrator:latest
-docker build -t ${REGISTRY}/live-relay:latest         backend/live_relay/        && docker push ${REGISTRY}/live-relay:latest
+# Build and push all 3 services
+docker build -t ${REGISTRY}/historian-api:latest \
+  -f backend/historian_api/Dockerfile backend/
+docker push ${REGISTRY}/historian-api:latest
+
+docker build -t ${REGISTRY}/agent-orchestrator:latest \
+  -f backend/agent_orchestrator/Dockerfile backend/
+docker push ${REGISTRY}/agent-orchestrator:latest
+
+docker build -t ${REGISTRY}/live-relay:latest \
+  -f backend/live_relay/Dockerfile backend/live_relay/
+docker push ${REGISTRY}/live-relay:latest
+
+# Deploy real images to Cloud Run
+cd terraform
+terraform apply \
+  -var="project_id=$PROJECT_ID" \
+  -var="gemini_api_key=YOUR_GEMINI_API_KEY" \
+  -var="deploy_real_images=true"
 ```
 
-### 4. Configure secrets and frontend
+### Step 5 -- Configure Secrets and Frontend
 
 ```bash
-# Set Document AI processor
+# Set Document AI processor secret
 echo -n "projects/YOUR_PROJECT/locations/us/processors/YOUR_PROCESSOR_ID" | \
   gcloud secrets versions add document-ai-processor-name --data-file=-
 
-# Get service URLs
-terraform output historian_api_url   # → VITE_API_BASE_URL
-terraform output live_relay_url      # → VITE_RELAY_URL
+# Get deployed service URLs from Terraform
+terraform output historian_api_url    # Use as VITE_API_BASE_URL
+terraform output live_relay_url       # Use as VITE_RELAY_URL
 
-# Run frontend
+# Run the frontend
 cd frontend
 pnpm install
-echo "VITE_API_BASE_URL=https://YOUR_API_URL" > .env.local
+cat > .env.local << EOF
+VITE_API_BASE_URL=https://YOUR_HISTORIAN_API_URL
+VITE_RELAY_URL=wss://YOUR_LIVE_RELAY_URL
+EOF
 pnpm dev
 ```
 
-### Local development (no Docker)
+Open `http://localhost:5173` and upload a document.
+
+<details>
+<summary><strong>Local Development (No Docker)</strong></summary>
+
+For rapid iteration without container builds:
 
 ```bash
-# Backend
+# Terminal 1 -- Backend
 cd backend
+python -m venv .venv && source .venv/bin/activate
 pip install google-adk google-genai google-cloud-documentai \
-            google-cloud-firestore google-cloud-storage fastapi uvicorn pydantic
+            google-cloud-firestore google-cloud-storage \
+            fastapi uvicorn pydantic
 ./start.sh --reload
 
-# Frontend (separate terminal)
-cd frontend && pnpm install && pnpm dev
+# Terminal 2 -- Frontend
+cd frontend
+pnpm install
+pnpm dev
 ```
+
+The backend `start.sh` script starts both `historian-api` and `agent-orchestrator` locally. The live-relay service requires a separate `cd backend/live_relay && pnpm install && pnpm dev`.
+
+</details>
 
 ---
 
@@ -483,99 +876,84 @@ cd frontend && pnpm install && pnpm dev
 ```
 /
 ├── terraform/
-│   └── main.tf                         18 resource types — full GCP provisioning
+│   └── main.tf                              Full GCP provisioning (18 resource types)
 │
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       │   ├── upload/                 DropZone, FormatBadge, PersonaSelector
-│       │   ├── workspace/              WorkspaceLayout, PDFViewer, ResearchPanel,
-│       │   │                           HistorianPanel, AgentModal, SegmentCard,
-│       │   │                           ExpeditionLog, StoryboardStream, TopNav
-│       │   ├── player/                 DocumentaryPlayer, KenBurnsStage, TimelineMap,
-│       │   │                           CaptionTrack, PlayerSidebar, IrisOverlay,
-│       │   │                           SourcePanel, ShareButton, BranchTree
-│       │   ├── voice/                  VoiceButton, Waveform, VoiceLayer, LiveToast,
-│       │   │                           LivingPortrait (canvas)
-│       │   └── ui/                     Button, InkButton, Badge, Spinner, Modal,
-│       │                               VisualSourceBadge
-│       ├── hooks/
-│       │   ├── useSSE.ts               Adaptive drip SSE — 1/3/8 events per 150ms tick
-│       │   ├── useGeminiLive.ts        WebSocket session lifecycle + text messages
-│       │   ├── useAudioCapture.ts      Mic → 16kHz PCM via AudioWorklet
-│       │   ├── useAudioPlayback.ts     PCM chunk queue → Web Audio API
-│       │   ├── useAudioVisualSync.ts   AnalyserNode → CSS custom properties
-│       │   ├── useSegmentGeo.ts        Geo extraction via Gemini Flash for timeline map
-│       │   ├── usePortraitRenderer.ts   Canvas compositing engine for Living Portrait
-│       │   ├── useLipSync.ts           AnalyserNode frequency → mouth energy computation
-│       │   ├── useTextScramble.ts      Cipher/decode title reveal animation
-│       │   └── useVoiceState.ts        Voice button state machine with auto-reconnect
-│       ├── store/                      sessionStore · researchStore (sessionStorage) · voiceStore · playerStore
-│       ├── services/                   api.ts · upload.ts (GCS signed URL)
-│       ├── styles/                     map-style.json · map-style-light.json · timeline-map.css
-│       └── pages/                      LandingPage · UploadPage · WorkspacePage · PlayerPage ·
-│                                       InterleavedDemoPage (lazy-loaded)
+│       │   ├── upload/                      DropZone, FormatBadge, PersonaSelector
+│       │   ├── workspace/                   WorkspaceLayout, PDFViewer, ResearchPanel,
+│       │   │                                HistorianPanel, AgentModal, SegmentCard,
+│       │   │                                ExpeditionLog, StoryboardStream, TopNav
+│       │   ├── player/                      DocumentaryPlayer, KenBurnsStage, TimelineMap,
+│       │   │                                CaptionTrack, PlayerSidebar, IrisOverlay,
+│       │   │                                SourcePanel, ShareButton, BranchTree
+│       │   ├── voice/                       VoiceButton, Waveform, VoiceLayer, LiveToast,
+│       │   │                                LivingPortrait (canvas)
+│       │   └── ui/                          Button, InkButton, Badge, Spinner, Modal
+│       ├── hooks/                           useSSE, useGeminiLive, useAudioCapture,
+│       │                                    useAudioPlayback, useAudioVisualSync,
+│       │                                    usePortraitRenderer, useLipSync,
+│       │                                    useTextScramble, useVoiceState, useSegmentGeo
+│       ├── store/                           sessionStore, researchStore, voiceStore, playerStore
+│       ├── services/                        api.ts, upload.ts (GCS signed URL)
+│       └── pages/                           LandingPage, UploadPage, WorkspacePage, PlayerPage
 │
 ├── backend/
 │   ├── historian_api/
 │   │   └── routes/
-│   │       ├── session.py              Session lifecycle, SSE stream, signed URL refresh
-│   │       ├── pipeline.py             Pipeline trigger, segment endpoints
-│   │       ├── retrieve.py             POST /api/session/{id}/retrieve — RAG vector search
-│   │       ├── illustrate.py           POST /api/session/{id}/illustrate — live Imagen 3 on user questions
-│   │       ├── narrate.py              POST /api/session/{id}/segment/{segId}/narrate — beat-driven interleaved narration
-│   │       └── demo_interleaved.py     GET /api/demo/interleaved — standalone TEXT+IMAGE demo
+│   │       ├── session.py                   Session lifecycle, SSE, signed URL refresh
+│   │       ├── pipeline.py                  Pipeline trigger, segment endpoints
+│   │       ├── retrieve.py                  RAG vector search endpoint
+│   │       ├── illustrate.py                Live Imagen 3 on user questions
+│   │       └── narrate.py                   Beat-driven interleaved narration
+│   │
 │   ├── agent_orchestrator/
 │   │   └── agents/
-│   │       ├── pipeline.py             ResumablePipelineAgent + StreamingPipelineAgent
-│   │       ├── document_analyzer.py    Phase I — OCR, chunking, summarization, curation
-│   │       ├── scene_research_agent.py Phase II — ParallelAgent scene research
-│   │       ├── script_agent_orchestrator.py  Phase III — script gen + WriteBatch
-│   │       ├── narrative_director_agent.py   Phase 3.1 — Gemini TEXT+IMAGE storyboard
-│   │       ├── beat_illustration_agent.py    Phase 3.2 — TEXT+IMAGE player beats
-│   │       ├── visual_interleave_agent.py    Phase 3.3 — beat visual_type assignment
-│   │       ├── fact_validator_agent.py Phase III.5 — hallucination firewall
-│   │       ├── geo_location_agent.py   Phase 3.8 — geographic mapping + geocoding
-│   │       ├── narrative_visual_planner.py   Phase 4.0 — VisualStoryboard
-│   │       ├── visual_research_orchestrator.py Phase IV — 6-stage visual research
-│   │       ├── visual_director_orchestrator.py Phase V — beat-aware Imagen 3 + Veo 2
-│   │       ├── branch_pipeline.py      Branching documentary graph from user questions
-│   │       ├── entity_extractor.py     Named entity extraction for PDF highlights
-│   │       ├── research_deduplicator.py Source deduplication across scenes
-│   │       ├── prompt_style_helpers.py Visual prompt styling and era markers
-│   │       ├── checkpoint_helpers.py   Phase checkpoint load/save (Firestore)
-│   │       ├── rate_limiter.py         GlobalRateLimiter + Retry-After backoff
-│   │       ├── sse_helpers.py          SSE event builders
-│   │       ├── chunk_types.py          ChunkRecord · SceneBrief · DocumentMap
-│   │       ├── script_types.py         SegmentScript
-│   │       ├── storyboard_types.py     VisualStoryboard
-│   │       ├── visual_detail_types.py  VisualDetailManifest
-│   │       ├── visual_interleave_types.py BeatVisualAssignment
-│   │       └── geo_types.py            SegmentGeo
-│   └── live_relay/                     Node.js 20 WebSocket proxy → Gemini Live API
-│                                       + RAG injection · transcript forwarding · Firestore context
+│   │       ├── pipeline.py                  ResumablePipelineAgent + StreamingPipelineAgent
+│   │       ├── document_analyzer.py         Phase I -- OCR + chunking + curation
+│   │       ├── scene_research_agent.py      Phase II -- parallel google_search research
+│   │       ├── script_agent_orchestrator.py Phase III -- script generation
+│   │       ├── narrative_director_agent.py  Phase 3.1 -- TEXT+IMAGE storyboard
+│   │       ├── beat_illustration_agent.py   Phase 3.2 -- TEXT+IMAGE beat visuals
+│   │       ├── visual_interleave_agent.py   Phase 3.3 -- visual type assignment
+│   │       ├── fact_validator_agent.py      Phase III.5 -- hallucination firewall
+│   │       ├── geo_location_agent.py        Phase 3.8 -- geographic mapping
+│   │       ├── narrative_visual_planner.py  Phase 4.0 -- visual storyboard planning
+│   │       ├── visual_research_orchestrator.py  Phase IV -- 6-stage visual detail pipeline
+│   │       └── visual_director_orchestrator.py  Phase V -- Imagen 3 + Veo 2 generation
+│   │
+│   └── live_relay/                          Node.js WebSocket proxy + RAG injection
 │
 └── docs/
-    ├── spec/                            Product specs (PRD, SRS, FRONTEND_PLAN, RESOURCES)
-    ├── project/                         Tasks, UI improvements, feature backlog
-    ├── architecture/                    Diagrams and generator script
-    │   ├── architecture-diagram.md      Full + compact Mermaid diagrams
-    │   └── architecture-diagram.png     Generated PNG
-    ├── demo/                            Demo script and interactive prototype
-    │   └── DEMO_SCRIPT.md              7-shot demo video shot list with timing
-    ├── blog/                            Blog drafts and posting strategy
-    └── plans/                           Dated engineering design documents
+    ├── spec/                                Product specs, frontend plan, resources
+    ├── architecture/                        Diagrams
+    ├── demo/                                Demo script (7-shot shot list)
+    └── plans/                               Engineering design documents
 ```
 
 ---
 
 ## Team
 
-**Berkay** — Live Voice Layer & Real-Time Interaction
-`live-relay` · Gemini Live API · browser audio pipeline (PCM encoding) · interruption handling · voice button state machine · session resumption · RAG context injection · transcript forwarding
+<table>
+<tr>
+<td width="50%">
 
-**Efe** — Research Pipeline, Agent Visualization & Documentary Engine
-ADK 11-phase agent pipeline · Gemini interleaved TEXT+IMAGE (Phases 3.1–3.3) · beat-driven narration engine · Document AI OCR · FastAPI gateway · SSE streaming · documentary player · Research Activity panel · Agent Modal · Timeline Map · Living Portrait avatar · live illustration engine · light/dark theme
+**Berkay** -- Live Voice Layer & Real-Time Interaction
+
+`live-relay` service, Gemini Live API integration, browser audio pipeline (PCM capture + playback), interruption handling, voice button state machine, session resumption with compression, RAG context injection, transcript forwarding
+
+</td>
+<td width="50%">
+
+**Efe** -- Research Pipeline, Agent Visualization & Documentary Engine
+
+ADK 11-phase pipeline, Gemini interleaved TEXT+IMAGE, Document AI OCR, FastAPI gateway, SSE streaming, documentary player, Research Panel, Timeline Map, Living Portrait avatar, live illustration, light/dark theme system
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -583,6 +961,14 @@ ADK 11-phase agent pipeline · Gemini interleaved TEXT+IMAGE (Phases 3.1–3.3) 
 
 <img src="frontend/public/logo.png" alt="AI Historian" width="48" />
 
-Built for the **[Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/)** by Google · `#GeminiLiveAgentChallenge`
+<br />
+
+Built for the **Gemini Live Agent Challenge** by Google
+
+`#GeminiLiveAgentChallenge`
+
+<br />
+
+[MIT License](LICENSE)
 
 </div>
