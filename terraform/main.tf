@@ -162,6 +162,7 @@ locals {
     "roles/secretmanager.secretAccessor", # Read secrets at runtime
     "roles/run.invoker",             # Service-to-service calls
     "roles/logging.logWriter",       # Structured logging from Cloud Run
+    "roles/iam.serviceAccountTokenCreator", # Sign blobs for GCS signed URLs
   ]
 }
 
