@@ -71,9 +71,12 @@ export function VoiceLayer() {
     onTurnComplete: () => {
       const currentState = useVoiceStore.getState().state;
       if (currentState === 'historian_speaking') {
-        transition('idle');
+        // During narration, stay connected for the next beat.
+        // Voice goes idle when isNarrating becomes false (separate effect).
+        if (!usePlayerStore.getState().isNarrating) {
+          transition('idle');
+        }
       }
-      // Signal beat advancement if narrating
       if (usePlayerStore.getState().isNarrating) {
         usePlayerStore.getState().incrementBeatAdvanceSignal();
       }
@@ -196,12 +199,15 @@ export function VoiceLayer() {
   sendTextRef.current = (text: string) => {
     const currentState = useVoiceStore.getState().state;
     if (currentState === 'idle') {
-      // Queue text — sent reliably when onReady fires (no fragile setTimeout)
-      // Do NOT start mic capture here — this is for narration playback only.
-      // Mic activates separately when user presses Space to ask a question.
+      transition('historian_speaking');
+      // Try direct send first — WS may still be alive from previous beat/segment.
+      // sendText silently no-ops if WS is closed or not ready.
+      sendTextStableRef.current(text);
+      // Safety net: if WS was closed, connect() opens a new one and
+      // onReady sends the pending text. If WS was open, connect() no-ops
+      // and pendingGreeting is harmlessly orphaned.
       pendingGreetingRef.current = text;
       connect();
-      transition('historian_speaking');
     } else {
       sendTextStableRef.current(text);
     }
@@ -265,6 +271,19 @@ export function VoiceLayer() {
     }
     setConversationMode(isConversing);
   }, [state, isPlayerOpen, setConversationMode]);
+
+  // Release voice session to idle when narration ends.
+  // During narration, onTurnComplete holds state in historian_speaking (Fix 1).
+  // This effect fires when isNarrating becomes false, allowing idle transition.
+  const isNarrating = usePlayerStore((s) => s.isNarrating);
+  useEffect(() => {
+    if (!isNarrating) {
+      const currentState = useVoiceStore.getState().state;
+      if (currentState === 'historian_speaking') {
+        transition('idle');
+      }
+    }
+  }, [isNarrating, transition]);
 
   // Hide on landing page and during pipeline processing (voice is useless until documentary is ready)
   const location = useLocation();
