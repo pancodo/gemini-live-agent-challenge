@@ -334,14 +334,22 @@ export function DocumentaryPlayer() {
   // When narration finishes (isNarrating false after beats played), auto-advance.
   const wasNarratingRef = useRef(false);
 
+  // Track if at least one beat was actually sent to historian
+  const beatWasSpokenRef = useRef(false);
+  useEffect(() => {
+    if (lastSentBeatRef.current >= 0) beatWasSpokenRef.current = true;
+  }, [beats, currentBeatIndex]);
+
   useEffect(() => {
     if (isNarrating) {
       wasNarratingRef.current = true;
       setShowEndCard(false);
       return;
     }
-    if (!wasNarratingRef.current) return;
+    // Only auto-advance if narration actually happened (a beat was sent)
+    if (!wasNarratingRef.current || !beatWasSpokenRef.current) return;
     wasNarratingRef.current = false;
+    beatWasSpokenRef.current = false;
     if (beats.length === 0) return;
 
     // Narration just finished — auto-advance after cinematic pause
@@ -356,11 +364,15 @@ export function DocumentaryPlayer() {
         setShowInterstitial(true);
         setTimeout(() => {
           setShowInterstitial(false);
-          if ('startViewTransition' in document) {
-            (document as Document & { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
+          try {
+            if ('startViewTransition' in document) {
+              (document as Document & { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
+                open(nextSeg.id);
+              });
+            } else {
               open(nextSeg.id);
-            });
-          } else {
+            }
+          } catch {
             open(nextSeg.id);
           }
         }, 2500);
