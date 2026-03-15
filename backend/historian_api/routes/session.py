@@ -37,6 +37,8 @@ from ..models import (
     GroundingSourcesResponse,
     SegmentResponse,
     SegmentsResponse,
+    SessionListItem,
+    SessionListResponse,
     SessionStatusResponse,
     UrlMetaResponse,
 )
@@ -97,12 +99,23 @@ def get_signing_credentials():
     return _signing_creds
 
 
+def _derive_label(gcs_path: str | None, label: str | None = None) -> str:
+    """Derive a human-readable label from gcsPath if none provided."""
+    if label:
+        return label
+    if not gcs_path:
+        return "Document"
+    filename = gcs_path.rstrip("/").split("/")[-1]
+    return filename.replace("sample-", "").replace(".pdf", "").replace("-", " ").title()
+
+
 @router.get("/session/create", response_model=CreateSessionResponse)
 async def create_session(
     filename: str = "document.pdf",
     language: str | None = None,
     persona: str = "professor",
     mode: str = "normal",
+    label: str | None = None,
 ) -> CreateSessionResponse:
     """Create a new session: write Firestore doc + generate signed GCS upload URL."""
     session_id = str(uuid.uuid4())
@@ -125,6 +138,7 @@ async def create_session(
         raise HTTPException(status_code=500, detail="Could not generate upload URL") from exc
 
     # Write initial session document to Firestore
+    session_label = _derive_label(gcs_path, label)
     try:
         db = get_db()
         await db.collection("sessions").document(session_id).set({
@@ -133,6 +147,7 @@ async def create_session(
             "language": language,
             "persona": persona,
             "mode": mode,
+            "label": session_label,
             "visualBible": None,
             "createdAt": firestore.SERVER_TIMESTAMP,
         })
@@ -145,6 +160,49 @@ async def create_session(
         uploadUrl=upload_url,
         gcsPath=gcs_path,
     )
+
+
+@router.get("/sessions", response_model=SessionListResponse)
+async def list_sessions(
+    limit: int = Query(default=50, ge=1, le=200),
+    status: str | None = Query(default=None),
+) -> SessionListResponse:
+    """List all sessions ordered by creation time (newest first)."""
+    try:
+        db = get_db()
+        query = db.collection("sessions").order_by(
+            "createdAt", direction=firestore.Query.DESCENDING
+        )
+        if status:
+            query = query.where(filter=firestore.FieldFilter("status", "==", status))
+        query = query.limit(limit)
+        docs = await query.get()
+    except Exception as exc:
+        logger.exception("Failed to list sessions")
+        raise HTTPException(status_code=500, detail="Could not list sessions") from exc
+
+    items: list[SessionListItem] = []
+    for doc in docs:
+        d = doc.to_dict() or {}
+        created = d.get("createdAt")
+        created_iso: str | None = None
+        if created is not None:
+            try:
+                created_iso = created.isoformat()
+            except Exception:
+                pass
+        items.append(
+            SessionListItem(
+                sessionId=doc.id,
+                status=d.get("status", "idle"),
+                label=d.get("label") or _derive_label(d.get("gcsPath")),
+                language=d.get("language"),
+                persona=d.get("persona"),
+                createdAt=created_iso,
+            )
+        )
+
+    return SessionListResponse(sessions=items)
 
 
 @router.get("/session/{session_id}/status", response_model=SessionStatusResponse)
