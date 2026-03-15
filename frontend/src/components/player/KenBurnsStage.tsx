@@ -47,9 +47,14 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
   const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
   const voiceState = useVoiceStore((s) => s.state);
 
-  // Current beat visual
+  // Current beat visual — if beat has no image, assign a segment image
   const currentBeat = beats[currentBeatIndex] ?? null;
-  const primaryUrl = currentBeat?.cinematicUrl ?? currentBeat?.imageUrl ?? null;
+  const images = segment?.imageUrls ?? [];
+  const beatOwnUrl = currentBeat?.cinematicUrl ?? currentBeat?.imageUrl ?? null;
+  // When beat has no image but segment has images, assign by beat index
+  const primaryUrl = beatOwnUrl ?? (beats.length > 0 && images.length > 0
+    ? images[currentBeatIndex % images.length]
+    : null);
   const beatVideoUrl = currentBeat?.videoUrl ?? null;
   const hasBeatVisual = Boolean(primaryUrl || beatVideoUrl);
 
@@ -64,13 +69,12 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     isKenBurnsPaused ||
     voiceState === 'listening' ||
     voiceState === 'processing';
-
-  const images = segment?.imageUrls ?? [];
   const hasVideo = Boolean(segment?.videoUrl);
 
-  // Get supplementary image for current beat (Imagen frame from segment)
-  const supplementaryUrl = images.length > 0
-    ? images[currentBeatIndex % images.length]
+  // Get supplementary image for current beat — offset by 1 from primary
+  // so it's always a different image for visual variety
+  const supplementaryUrl = images.length > 1
+    ? images[(currentBeatIndex + 1) % images.length]
     : null;
 
   // ── Beat-driven: show supplementary image 8s into each beat ──
