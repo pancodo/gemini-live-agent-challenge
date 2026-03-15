@@ -274,12 +274,6 @@ resource "google_storage_bucket" "historian_docs" {
     max_age_seconds = 3600
   }
 
-  # Uploaded documents expire after 30 days.
-  lifecycle_rule {
-    action { type = "Delete" }
-    condition { age = 30 }
-  }
-
   depends_on = [google_project_service.apis["storage.googleapis.com"]]
 }
 
@@ -297,12 +291,6 @@ resource "google_storage_bucket" "historian_assets" {
     method          = ["GET", "HEAD"]
     response_header = ["Content-Type", "Content-Length"]
     max_age_seconds = 3600
-  }
-
-  # Generated images and videos expire after 7 days.
-  lifecycle_rule {
-    action { type = "Delete" }
-    condition { age = 7 }
   }
 
   depends_on = [google_project_service.apis["storage.googleapis.com"]]
