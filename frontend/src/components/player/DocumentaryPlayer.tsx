@@ -370,11 +370,7 @@ export function DocumentaryPlayer() {
           // Auto-start narration for next segment (single-stream)
           const send = useVoiceStore.getState().sendTextToHistorian;
           if (send && nextSeg.script) {
-            send(
-              `You are narrating "${nextSeg.title}". ` +
-              `Deliver this naturally. Do not introduce yourself.\n\n` +
-              `Script:\n${nextSeg.script}`
-            );
+            send(buildNarrationPrompt(nextSeg.title, nextSeg.script));
             setIsNarrating(true);
             beatWasSpokenRef.current = true;
           }
@@ -434,6 +430,21 @@ export function DocumentaryPlayer() {
     };
   }, [setIdle]);
 
+  // ── Build narration prompt from segment script ─────
+  const buildNarrationPrompt = useCallback((title: string, script: string) => {
+    // Sanitize: strip control chars, collapse whitespace, limit length
+    const clean = script
+      .replace(/[\x00-\x1F\x7F]/g, ' ')  // strip control characters
+      .replace(/\s+/g, ' ')               // collapse whitespace
+      .trim()
+      .slice(0, 3000);                    // cap at ~3000 chars for Live API
+    return (
+      `You are narrating "${title}". ` +
+      `Deliver this naturally in your historian voice. Do not introduce yourself. ` +
+      `Read the following script aloud exactly as written: ${clean}`
+    );
+  }, []);
+
   // ── Play overlay handler — sends FULL script as one message (single-stream) ─────
   const handlePlay = useCallback(() => {
     setShowPlayOverlay(false);
@@ -441,15 +452,10 @@ export function DocumentaryPlayer() {
     const seg = currentSegmentId ? useResearchStore.getState().segments[currentSegmentId] : null;
     if (!send || !seg?.script) return;
 
-    // Send full script as one message — continuous narration
-    send(
-      `You are narrating "${seg.title}". ` +
-      `Deliver this naturally in your historian voice. Do not introduce yourself.\n\n` +
-      `Script:\n${seg.script}`
-    );
+    send(buildNarrationPrompt(seg.title, seg.script));
     setIsNarrating(true);
     beatWasSpokenRef.current = true;
-  }, [currentSegmentId, setIsNarrating]);
+  }, [currentSegmentId, setIsNarrating, buildNarrationPrompt]);
 
   // ── Auto-show keyboard shortcuts on first visit ────────────────
   useEffect(() => {
@@ -606,11 +612,7 @@ export function DocumentaryPlayer() {
           const send = useVoiceStore.getState().sendTextToHistorian;
           const seg = useResearchStore.getState().segments[currentSegmentId ?? ''];
           if (send && seg?.script) {
-            send(
-              `You are narrating "${seg.title}". ` +
-              `Deliver this naturally in your historian voice. Do not introduce yourself.\n\n` +
-              `Script:\n${seg.script}`
-            );
+            send(buildNarrationPrompt(seg.title, seg.script));
             setIsNarrating(true);
             beatWasSpokenRef.current = true;
             setShowPlayOverlay(false);
