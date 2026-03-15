@@ -314,6 +314,16 @@ export interface SegmentGeo {
 
 export type MapViewMode = 'ken-burns' | 'map' | 'split';
 
+// ── Session History ──────────────────────────────────────────
+export interface SessionListItem {
+  sessionId: string;
+  status: SessionStatus;
+  label: string;
+  language: string | null;
+  persona: string | null;
+  createdAt: string | null;
+}
+
 // ── API Responses ─────────────────────────────────────────────
 export interface CreateSessionResponse {
   sessionId: string;
