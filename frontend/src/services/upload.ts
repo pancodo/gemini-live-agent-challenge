@@ -2,6 +2,11 @@ import { createSession } from './api';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+function getAccessHeaders(): Record<string, string> {
+  const code = localStorage.getItem('ai-historian-access');
+  return code ? { 'X-Access-Code': code } : {};
+}
+
 export async function uploadDocument(
   file: File,
   language?: string,
@@ -26,7 +31,7 @@ export async function uploadDocument(
   // Trigger the agent pipeline
   const res = await fetch(`${BASE_URL}/api/session/${sessionId}/process`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAccessHeaders() },
     body: JSON.stringify({ gcsPath, mode: mode || 'normal' }),
   });
   if (!res.ok) throw new Error(`Pipeline trigger failed: ${res.status}`);
