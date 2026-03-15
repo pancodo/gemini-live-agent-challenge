@@ -141,38 +141,63 @@ export function DocumentaryPlayer() {
     ? segmentsRecord[currentSegmentId] ?? null
     : null;
 
-  // ── Caption bridge (voiceStore → playerStore) ─────
-  // Delay captions 500ms — Gemini sends transcription before audio arrives.
+  // ── Caption bridge (voiceStore → playerStore) — energy-gated ─────
+  // Captions only appear when audio energy is above threshold,
+  // syncing text to actual audible speech instead of Gemini's early transcription.
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
+  const analyserNode = useVoiceStore((s) => s.analyserNode);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
-  const captionTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const captionPendingRef = useRef<string | null>(null);
+  const captionRafRef = useRef(0);
 
+  // Buffer incoming captions + track WPS
   useEffect(() => {
     if (!voiceCaption) return;
-    // Debounce: only show the latest caption after 500ms
-    // This syncs captions closer to audio playback timing
-    clearTimeout(captionTimerRef.current);
-    captionTimerRef.current = setTimeout(() => {
-      const now = Date.now();
-      const wordCount = voiceCaption.trim().split(/\s+/).length;
+    captionPendingRef.current = voiceCaption;
 
-      if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
-        turnStartRef.current = now;
-        turnWordCountRef.current = wordCount;
-      } else {
-        turnWordCountRef.current = wordCount;
-        const elapsed = (now - turnStartRef.current) / 1000;
-        if (elapsed > 0.5 && wordCount > 3) {
-          setCaptionWps(wordCount / elapsed);
-        }
+    const now = Date.now();
+    const wordCount = voiceCaption.trim().split(/\s+/).length;
+    if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
+      turnStartRef.current = now;
+      turnWordCountRef.current = wordCount;
+    } else {
+      turnWordCountRef.current = wordCount;
+      const elapsed = (now - turnStartRef.current) / 1000;
+      if (elapsed > 0.5 && wordCount > 3) {
+        setCaptionWps(wordCount / elapsed);
       }
+    }
+
+    // Fallback: no analyser yet — show captions immediately
+    if (!useVoiceStore.getState().analyserNode) {
       setCaption(voiceCaption);
-    }, 500);
-    return () => clearTimeout(captionTimerRef.current);
-  }, [voiceCaption, setCaption, setCaptionWps]);
+      captionPendingRef.current = null;
+    }
+  }, [voiceCaption, setCaptionWps, setCaption]);
+
+  // rAF loop: only forward caption when audio energy detected
+  useEffect(() => {
+    if (!analyserNode) return;
+    const data = new Uint8Array(analyserNode.frequencyBinCount);
+
+    function checkEnergy() {
+      analyserNode!.getByteFrequencyData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i];
+      const energy = sum / data.length / 255;
+
+      if (energy > 0.02 && captionPendingRef.current) {
+        setCaption(captionPendingRef.current);
+        captionPendingRef.current = null;
+      }
+      captionRafRef.current = requestAnimationFrame(checkEnergy);
+    }
+    captionRafRef.current = requestAnimationFrame(checkEnergy);
+    return () => cancelAnimationFrame(captionRafRef.current);
+  }, [analyserNode, setCaption]);
 
   // ── Beat-driven narration (interleaved TEXT+IMAGE) ──────────
   const sendTextToHistorian = useVoiceStore((s) => s.sendTextToHistorian);
@@ -188,14 +213,14 @@ export function DocumentaryPlayer() {
 
   // Track which segment we started narration for
   const narrationStartedRef = useRef<Set<string>>(new Set());
-  // Track which beat index we last sent to historian
-  const lastSentBeatRef = useRef<number>(-1);
-  // Safety timeout for beat advancement (fallback if turn_complete missed)
-  const beatSafetyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   // Auto-advance timer between segments
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  // Track previous beatAdvanceSignal to detect increments
-  const prevBeatSignalRef = useRef(0);
+  // Pre-calculated image change timers (one per beat boundary)
+  const imageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Track previous beatAdvanceSignal for turn_complete detection
+  const prevSignalRef = useRef(0);
+  // Track which segment's image timers have been started
+  const imageTimersStartedRef = useRef<string | null>(null);
   // Interstitial title card state
   const [showInterstitial, setShowInterstitial] = useState(false);
   const [interstitialTitle, setInterstitialTitle] = useState('');
@@ -204,7 +229,7 @@ export function DocumentaryPlayer() {
 
   const loadBeatsForSegment = usePlayerStore((s) => s.loadBeatsForSegment);
 
-  // ── Effect 1: Load pre-generated beats or trigger on-demand ────────
+  // ── Effect 1: Load pre-generated beats (for image timing) ────────
   useEffect(() => {
     if (!currentSegment || !sessionId) return;
     if (!currentSegment.script || currentSegment.script.length < 50) return;
@@ -216,19 +241,17 @@ export function DocumentaryPlayer() {
     const mapBeats = usePlayerStore.getState().beatsMap[currentSegment.id];
     if (mapBeats && mapBeats.length > 0) {
       loadBeatsForSegment(currentSegment.id);
-      setIsNarrating(true);
       return;
     }
 
     // Fallback: beats not in map (pipeline incomplete?) — call on-demand endpoint
-    setIsNarrating(true);
     const controller = new AbortController();
     startNarration(sessionId, currentSegment.id, controller.signal).catch(() => {
       // Silently fail — fallback timer below will handle it
     });
 
     return () => controller.abort();
-  }, [currentSegment, sessionId, setIsNarrating, loadBeatsForSegment]);
+  }, [currentSegment, sessionId, loadBeatsForSegment]);
 
   // ── Effect 2: Send beat text to Gemini Live as beats arrive ──
   useEffect(() => {
