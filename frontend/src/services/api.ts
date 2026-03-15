@@ -2,37 +2,42 @@ import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, S
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+function getAccessHeaders(): Record<string, string> {
+  const code = localStorage.getItem('ai-historian-access');
+  return code ? { 'X-Access-Code': code } : {};
+}
+
 export async function createSession(filename: string, language?: string, persona?: string, mode?: string): Promise<CreateSessionResponse> {
   const params = new URLSearchParams({ filename });
   if (language) params.set('language', language);
   if (persona) params.set('persona', persona);
   if (mode) params.set('mode', mode);
-  const res = await fetch(`${BASE_URL}/api/session/create?${params}`);
+  const res = await fetch(`${BASE_URL}/api/session/create?${params}`, { headers: getAccessHeaders() });
   if (!res.ok) throw new Error(`Session create failed: ${res.status}`);
   return res.json() as Promise<CreateSessionResponse>;
 }
 
 export async function getSessionStatus(sessionId: string, signal?: AbortSignal): Promise<SessionStatusResponse> {
-  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/status`, { signal });
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/status`, { signal, headers: getAccessHeaders() });
   if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
   return res.json() as Promise<SessionStatusResponse>;
 }
 
 export async function getAgentLogs(sessionId: string, agentId: string, signal?: AbortSignal): Promise<AgentLogsResponse> {
-  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/agent/${agentId}/logs`, { signal });
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/agent/${agentId}/logs`, { signal, headers: getAccessHeaders() });
   if (!res.ok) throw new Error(`Agent logs fetch failed: ${res.status}`);
   return res.json() as Promise<AgentLogsResponse>;
 }
 
 export async function getSegments(sessionId: string, signal?: AbortSignal): Promise<Segment[]> {
-  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/segments`, { signal });
+  const res = await fetch(`${BASE_URL}/api/session/${sessionId}/segments`, { signal, headers: getAccessHeaders() });
   if (!res.ok) throw new Error(`Segments fetch failed: ${res.status}`);
   const data = await res.json() as { segments: Segment[] };
   return data.segments;
 }
 
 export async function getUrlMeta(url: string, signal?: AbortSignal): Promise<UrlMeta> {
-  const res = await fetch(`${BASE_URL}/api/meta?url=${encodeURIComponent(url)}`, { signal });
+  const res = await fetch(`${BASE_URL}/api/meta?url=${encodeURIComponent(url)}`, { signal, headers: getAccessHeaders() });
   if (!res.ok) throw new Error(`Meta fetch failed: ${res.status}`);
   return res.json() as Promise<UrlMeta>;
 }
@@ -172,6 +177,7 @@ Rules:
 export async function startNarration(sessionId: string, segmentId: string, signal?: AbortSignal): Promise<{ beatsGenerated: number; segmentId: string }> {
   const res = await fetch(`${BASE_URL}/api/session/${sessionId}/segment/${segmentId}/narrate`, {
     method: 'POST',
+    headers: getAccessHeaders(),
     signal: signal
       ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
       : AbortSignal.timeout(60_000),

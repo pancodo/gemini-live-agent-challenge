@@ -40,6 +40,7 @@ const { PERSONA_PROMPTS } = require('./personas');
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const ACCESS_CODE = process.env.ACCESS_CODE || '';
 const GEMINI_MODEL =
   process.env.GEMINI_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025';
 
@@ -313,6 +314,17 @@ httpServer.on('upgrade', (req, socket, head) => {
   }
 
   const sessionId = match[1];
+
+  // Access code validation — if ACCESS_CODE is set, require it as a query param.
+  if (ACCESS_CODE) {
+    const providedCode = url.searchParams.get('access_code');
+    if (providedCode !== ACCESS_CODE) {
+      console.warn(`[live-relay] Rejected connection for session=${sessionId}: invalid access code`);
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+  }
 
   wss.handleUpgrade(req, socket, head, (clientWs) => {
     wss.emit('connection', clientWs, req, sessionId, url.searchParams);

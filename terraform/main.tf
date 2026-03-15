@@ -14,7 +14,7 @@
 # ============================================================
 
 terraform {
-  required_version = ">= 1.6"
+  required_version = ">= 1.5"
 
   required_providers {
     google = {
@@ -73,6 +73,13 @@ variable "environment" {
   description = "Deployment environment label"
   type        = string
   default     = "production"
+}
+
+variable "access_code" {
+  description = "Access code to protect public endpoints from unauthorized use"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 # Placeholder image used on first terraform apply before real
@@ -218,9 +225,9 @@ resource "google_firestore_database" "historian" {
 
   project                     = var.project_id
   name                        = "(default)"
-  location_id                 = "nam5"
+  location_id                 = "us-central1"
   type                        = "FIRESTORE_NATIVE"
-  concurrency_mode            = "OPTIMISTIC"
+  concurrency_mode            = "PESSIMISTIC"
   app_engine_integration_mode = "DISABLED"
 
   depends_on = [google_project_service.apis["firestore.googleapis.com"]]
@@ -421,6 +428,10 @@ resource "google_cloud_run_v2_service" "historian_api" {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
       }
+      env {
+        name  = "ACCESS_CODE"
+        value = var.access_code
+      }
       # AGENT_ORCHESTRATOR_URL is set after first apply via:
       #   gcloud run services update historian-api --region=REGION \
       #     --update-env-vars AGENT_ORCHESTRATOR_URL=$(terraform output -raw agent_orchestrator_url)
@@ -542,6 +553,10 @@ resource "google_cloud_run_v2_service" "agent_orchestrator" {
         value = var.project_id
       }
       env {
+        name  = "ACCESS_CODE"
+        value = var.access_code
+      }
+      env {
         name = "DOCUMENT_AI_PROCESSOR_NAME"
         value_source {
           secret_key_ref {
@@ -645,6 +660,10 @@ resource "google_cloud_run_v2_service" "live_relay" {
       env {
         name  = "GEMINI_MODEL"
         value = "gemini-2.5-flash-native-audio-preview-12-2025"
+      }
+      env {
+        name  = "ACCESS_CODE"
+        value = var.access_code
       }
       env {
         name  = "HISTORIAN_API_URL"

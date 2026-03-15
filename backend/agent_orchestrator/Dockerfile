@@ -1,11 +1,10 @@
 FROM python:3.12-slim
 WORKDIR /app
 
-# Install dependencies
+# Shares the same requirements as historian_api
 COPY historian_api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy both modules (historian_api imports agent_orchestrator)
 COPY historian_api/ historian_api/
 COPY agent_orchestrator/ agent_orchestrator/
 
