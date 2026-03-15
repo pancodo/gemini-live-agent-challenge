@@ -120,10 +120,6 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
     if (resumptionToken) {
       params.set('token', resumptionToken);
     }
-    const accessCode = localStorage.getItem('ai-historian-access');
-    if (accessCode) {
-      params.set('access_code', accessCode);
-    }
     const qs = params.toString();
     if (qs) {
       url += `?${qs}`;
