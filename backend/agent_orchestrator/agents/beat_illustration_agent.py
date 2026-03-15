@@ -522,6 +522,59 @@ class BeatIllustrationAgent(BaseAgent):
                     beat_index, exc, exc_info=True,
                 )
 
+        # ── Imagen 3 fallback: if interleaved generation produced no image ──
+        if signed_url is None and visual_moment:
+            try:
+                imagen_prompt = (
+                    f"{visual_moment}. "
+                    f"Cinematic 16:9 historical illustration. {visual_bible or ''}"
+                )[:1000]
+                imagen_response = await client.aio.models.generate_images(
+                    model="imagen-3.0-fast-generate-001",
+                    prompt=imagen_prompt,
+                    config=google_genai.types.GenerateImagesConfig(
+                        number_of_images=1,
+                        aspect_ratio="16:9",
+                        safety_filter_level="BLOCK_ONLY_HIGH",
+                    ),
+                )
+                if imagen_response.generated_images:
+                    fb_bytes = imagen_response.generated_images[0].image.image_bytes
+                    if fb_bytes:
+                        fb_path = (
+                            f"sessions/{session_id}/beats/"
+                            f"{segment_id}_{beat_index}_fb_{uuid.uuid4().hex[:6]}.jpg"
+                        )
+                        loop = asyncio.get_running_loop()
+                        await loop.run_in_executor(
+                            None,
+                            lambda: bucket.blob(fb_path).upload_from_string(
+                                data=fb_bytes, content_type="image/jpeg"
+                            ),
+                        )
+                        from .signing_helpers import get_signing_credentials
+
+                        blob = bucket.blob(fb_path)
+                        signed_url = await loop.run_in_executor(
+                            None,
+                            lambda: blob.generate_signed_url(
+                                credentials=get_signing_credentials(),
+                                expiration=timedelta(hours=4),
+                                method="GET",
+                                version="v4",
+                            ),
+                        )
+                        logger.info(
+                            "[BeatIllustration] Imagen 3 fallback succeeded for beat %d",
+                            beat_index,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "[BeatIllustration] Imagen 3 fallback failed for beat %d: %s",
+                    beat_index,
+                    exc,
+                )
+
         # Emit SSE event
         if self.emitter:
             event = build_narration_beat_event(
