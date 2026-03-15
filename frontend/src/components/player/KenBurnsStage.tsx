@@ -82,7 +82,8 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
     setShowSupplementary(false);
     clearTimeout(supplementaryTimerRef.current);
 
-    if (!hasBeatVisual || !supplementaryUrl || shouldPause) return;
+    // Only show supplementary when primary is a real beat image (not segment fallback)
+    if (!beatOwnUrl || !supplementaryUrl || shouldPause) return;
     // Don't show supplementary if it's the same as primary
     if (supplementaryUrl === primaryUrl) return;
 
