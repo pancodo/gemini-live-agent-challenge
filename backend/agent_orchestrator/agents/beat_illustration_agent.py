@@ -61,20 +61,34 @@ _COMPOSITION_HINTS = [
 # Beat decomposition prompt
 # ---------------------------------------------------------------------------
 
-_DECOMPOSE_PROMPT = """You are a documentary script editor.
+_DECOMPOSE_PROMPT = """You are a documentary visual director.
 
-Split this narration script into {beat_count} dramatic beats.
-Each beat is a distinct emotional or narrative moment.
+Split this narration into {beat_count} dramatic beats. Each beat is a distinct visual moment in the story's timeline.
+
+For each beat, write a SPECIFIC visual_moment that describes exactly what the camera should show — not a summary of the text, but what we physically SEE on screen. Focus on the most vivid, cinematic image from that narration.
+
+EXAMPLES of good visual_moments:
+- "Vesuvius crater trembling, thin column of white smoke rising against blue sky"
+- "Roman priest's hands shaking as he pours wine over a cracked stone altar"
+- "Aerial view of Pompeii streets, tiny figures running between columns as ash falls"
+- "Close-up of a mosaic floor cracking under seismic pressure, dust rising between tiles"
+
+BAD visual_moments (too generic — never write these):
+- "Illustrate: In 80 AD, the emperor..."
+- "A scene from ancient Rome"
+- "Historical event taking place"
 
 SCRIPT:
 {script}
 
-Return ONLY a JSON array (no markdown fences) where each element is:
-{{
-  "beat_index": <int>,
-  "narration_text": "<the narration text for this beat>",
-  "visual_moment": "<brief description of what the viewer should see>"
-}}
+Return ONLY a JSON array (no markdown fences):
+[
+  {{
+    "beat_index": 0,
+    "narration_text": "<exact narration text for this beat>",
+    "visual_moment": "<SPECIFIC visual description — what does the camera show?>"
+  }}
+]
 """
 
 # ---------------------------------------------------------------------------
@@ -89,19 +103,23 @@ VISUAL BIBLE: {visual_bible}
 SCENE: {title} | MOOD: {mood}
 BEAT {beat_index} of {total_beats}
 
-NARRATION for this moment:
-{narration_text}
+NARRATION the viewer hears during this image:
+"{narration_text}"
 
-VISUAL DIRECTION:
+WHAT THE CAMERA SHOWS:
 {visual_moment}
 
-First, write a brief creative direction note (1-2 sentences).
-Then generate ONE cinematic 16:9 illustration for this moment.
-- Match the Visual Bible style
+Generate ONE cinematic 16:9 illustration that DIRECTLY depicts what the narration describes.
+The viewer must look at this image and immediately understand what the narrator is talking about.
+The image IS the narration made visible.
+
+Rules:
+- Depict the specific action, object, or scene described in the narration
+- Match the Visual Bible style exactly
 - Historically accurate, NO anachronisms
 - {composition_hint}
 
-Generate now."""
+First write a 1-sentence direction note, then generate the illustration."""
 
 
 # ---------------------------------------------------------------------------
@@ -394,10 +412,13 @@ class BeatIllustrationAgent(BaseAgent):
             text = ". ".join(sentences[start:end])
             if text and not text.endswith("."):
                 text += "."
+            # Pick the longest sentence as the visual moment (most descriptive)
+            beat_sentences = [s.strip() for s in text.split(".") if s.strip()]
+            visual_sentence = max(beat_sentences, key=len) if beat_sentences else text[:120]
             beats.append({
                 "beat_index": i,
                 "narration_text": text,
-                "visual_moment": f"Illustrate: {text[:120]}",
+                "visual_moment": visual_sentence,
             })
         return [b for b in beats if b["narration_text"].strip()]
 
