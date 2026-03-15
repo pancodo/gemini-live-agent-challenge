@@ -236,12 +236,10 @@ export function DocumentaryPlayer() {
 
     lastSentBeatRef.current = currentBeatIndex;
 
-    // For beat 0: only send if user has initiated voice (pressed Space/Play).
-    // For beats 1+: always send — sendTextToHistorian handles reconnection.
-    if (currentBeatIndex === 0) {
-      const voiceActive = useVoiceStore.getState().state !== 'idle';
-      if (!voiceActive) return;
-    }
+    // Only send beat text if voice is active (user pressed Space/Play).
+    // During narration, voice stays connected (doesn't go idle between beats).
+    const vs = useVoiceStore.getState().state;
+    if (vs === 'idle') return;
 
     const prefix = currentBeatIndex === 0
       ? `You are narrating "${currentSegment.title}". Deliver this naturally — no announcements. `
