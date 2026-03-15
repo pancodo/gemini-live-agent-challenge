@@ -1,14 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { DropZone, PersonaSelector } from '../components/upload';
 import { Badge } from '../components/ui';
 import { useSessionStore } from '../store/sessionStore';
-import type { RecentSession } from '../store/sessionStore';
 import { useResearchStore } from '../store/researchStore';
 import { usePlayerStore } from '../store/playerStore';
 import { uploadDocument } from '../services/upload';
-import type { SessionStatus, PersonaType } from '../types';
+import { listSessions } from '../services/api';
+import type { SessionStatus, PersonaType, SessionListItem } from '../types';
 
 /** Prefetch the WorkspacePage chunk so it is cached before navigation */
 const prefetchWorkspace = () => import('./WorkspacePage');
@@ -63,7 +63,7 @@ function SampleDocuments() {
         if (!res.ok) throw new Error('fetch failed');
         const blob = await res.blob();
         const file = new File([blob], doc.filename, { type: 'application/pdf' });
-        const { sessionId, gcsPath } = await uploadDocument(file, doc.language, persona, undefined, researchMode);
+        const { sessionId, gcsPath } = await uploadDocument(file, doc.language, persona, undefined, researchMode, doc.label);
         resetResearch();
         setSession({ sessionId, gcsPath, status: 'processing', documentLabel: doc.label });
         navigate('/workspace');
@@ -130,32 +130,58 @@ function formatRelativeTime(timestamp: number): string {
   return `${months} month${months === 1 ? '' : 's'} ago`;
 }
 
-function RecentSessions() {
+function SessionHistory() {
   const navigate = useNavigate();
-  const recentSessions = useSessionStore((s) => s.recentSessions);
   const setSession = useSessionStore((s) => s.setSession);
+  const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (recentSessions.length === 0) return null;
+  useEffect(() => {
+    const controller = new AbortController();
+    listSessions(50, controller.signal)
+      .then(setSessions)
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          console.warn('[SessionHistory] Failed to fetch:', err);
+        }
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, []);
 
-  const visible = recentSessions.slice(0, 3);
+  if (loading) {
+    return (
+      <div className="w-full max-w-xl mt-8">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--muted)] font-sans mb-2 text-center">
+          Past Sessions
+        </p>
+        <div className="flex justify-center py-4">
+          <span className="inline-block w-4 h-4 border border-[var(--muted)]/40 border-t-[var(--gold)] rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
-  const handleResume = (entry: RecentSession) => {
+  if (sessions.length === 0) return null;
+
+  const handleResume = (entry: SessionListItem) => {
+    const target = entry.status === 'ready' || entry.status === 'playing' ? '/workspace' : '/workspace';
     setSession({
       sessionId: entry.sessionId,
-      gcsPath: entry.gcsPath,
       language: entry.language,
-      status: 'processing',
+      status: entry.status === 'error' ? 'error' : entry.status,
+      documentLabel: entry.label,
     });
-    navigate('/workspace');
+    navigate(target);
   };
 
   return (
-    <div className="w-full max-w-xl mt-6">
+    <div className="w-full max-w-xl mt-8">
       <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--muted)] font-sans mb-2 text-center">
-        Recent Sessions
+        Past Sessions
       </p>
-      <div className="flex flex-col gap-1.5">
-        {visible.map((entry) => (
+      <div className="flex flex-col gap-1.5 max-h-[360px] overflow-y-auto pr-1">
+        {sessions.map((entry) => (
           <button
             key={entry.sessionId}
             onClick={() => handleResume(entry)}
@@ -166,18 +192,27 @@ function RecentSessions() {
                 <p className="text-[13px] text-[var(--text)] font-sans truncate">
                   {entry.label}
                 </p>
-                <p className="text-[11px] text-[var(--muted)] font-sans mt-0.5">
-                  {formatRelativeTime(entry.createdAt)}
-                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {entry.createdAt && (
+                    <p className="text-[11px] text-[var(--muted)] font-sans">
+                      {formatRelativeTime(new Date(entry.createdAt).getTime())}
+                    </p>
+                  )}
+                  {entry.language && (
+                    <span className="text-[10px] text-[var(--muted)]/60 font-sans">
+                      · {entry.language}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2.5 flex-shrink-0 ml-3">
               <Badge variant={STATUS_VARIANTS[entry.status]}>
                 {entry.status}
               </Badge>
-              <span className="text-[11px] text-[var(--muted)] font-sans whitespace-nowrap">
-                Resume &rarr;
-              </span>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[var(--muted)] flex-shrink-0">
+                <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
           </button>
         ))}
@@ -352,7 +387,7 @@ export function UploadPage() {
         <ResearchModeToggle />
         <DropZone />
         <SampleDocuments />
-        <RecentSessions />
+        <SessionHistory />
       </section>
 
       <footer className="pb-6 text-center">

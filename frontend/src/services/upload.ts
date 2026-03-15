@@ -13,8 +13,10 @@ export async function uploadDocument(
   persona?: string,
   onProgress?: (pct: number) => void,
   mode?: string,
+  label?: string,
 ): Promise<{ sessionId: string; gcsPath: string }> {
-  const { sessionId, uploadUrl, gcsPath } = await createSession(file.name, language, persona, mode);
+  const docLabel = label || file.name.replace(/\.pdf$/i, '').replace(/^sample-/, '').replace(/-/g, ' ');
+  const { sessionId, uploadUrl, gcsPath } = await createSession(file.name, language, persona, mode, docLabel);
 
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
