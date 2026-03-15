@@ -273,16 +273,21 @@ export function VoiceLayer() {
   }, [state, isPlayerOpen, setConversationMode]);
 
   // Release voice session to idle when narration ends.
-  // During narration, onTurnComplete holds state in historian_speaking (Fix 1).
-  // This effect fires when isNarrating becomes false, allowing idle transition.
+  // Delay 10s to allow auto-advance to restart narration for the next segment.
+  // If isNarrating becomes true again (next segment started), cancel the idle.
   const isNarrating = usePlayerStore((s) => s.isNarrating);
+  const idleDelayRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
+    clearTimeout(idleDelayRef.current);
     if (!isNarrating) {
-      const currentState = useVoiceStore.getState().state;
-      if (currentState === 'historian_speaking') {
-        transition('idle');
-      }
+      idleDelayRef.current = setTimeout(() => {
+        const currentState = useVoiceStore.getState().state;
+        if (currentState === 'historian_speaking' && !usePlayerStore.getState().isNarrating) {
+          transition('idle');
+        }
+      }, 10_000);
     }
+    return () => clearTimeout(idleDelayRef.current);
   }, [isNarrating, transition]);
 
   // Hide on landing page and during pipeline processing (voice is useless until documentary is ready)
