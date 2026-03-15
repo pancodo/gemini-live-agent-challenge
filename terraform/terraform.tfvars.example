@@ -5,7 +5,6 @@ project_id     = "your-gcp-project-id"
 region         = "us-central1"
 gemini_api_key = "your-gemini-api-key"
 environment    = "production"
-access_code    = "your-secret-access-code"
 
 # Set to true after pushing container images to Artifact Registry.
 # On first apply, leave false — services use gcr.io/cloudrun/hello.

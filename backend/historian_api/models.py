@@ -10,6 +10,19 @@ class CreateSessionResponse(BaseModel):
     gcsPath: str
 
 
+class SessionListItem(BaseModel):
+    sessionId: str
+    status: str
+    label: str
+    language: str | None = None
+    persona: str | None = None
+    createdAt: str | None = None  # ISO 8601
+
+
+class SessionListResponse(BaseModel):
+    sessions: list[SessionListItem]
+
+
 class SessionStatusResponse(BaseModel):
     sessionId: str
     status: str

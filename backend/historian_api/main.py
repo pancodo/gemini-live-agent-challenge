@@ -2,14 +2,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from .routes import session as session_router
 from .routes import pipeline as pipeline_router
@@ -34,46 +30,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-class AccessCodeMiddleware(BaseHTTPMiddleware):
-    """Reject requests to /api/* that lack a valid access code.
-
-    When the ACCESS_CODE env var is unset or empty, all requests pass through
-    (dev mode).  Otherwise the code must be provided via:
-      - ``X-Access-Code`` header  (REST calls), **or**
-      - ``access_code`` query parameter  (SSE EventSource, which cannot send headers).
-    """
-
-    async def dispatch(self, request: Request, call_next):
-        access_code = os.environ.get("ACCESS_CODE", "")
-
-        # Dev mode — no protection when the env var is absent.
-        if not access_code:
-            return await call_next(request)
-
-        path = request.url.path
-
-        # Health endpoint is always open.
-        if path == "/health":
-            return await call_next(request)
-
-        # Only gate /api/* paths.
-        if path.startswith("/api"):
-            provided = (
-                request.headers.get("X-Access-Code")
-                or request.query_params.get("access_code")
-            )
-            if provided != access_code:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Invalid access code"},
-                )
-
-        return await call_next(request)
-
-
 app = FastAPI(title="AI Historian API", version="1.0.0", lifespan=lifespan)
-
-app.add_middleware(AccessCodeMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

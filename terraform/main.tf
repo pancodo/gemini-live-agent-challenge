@@ -75,12 +75,7 @@ variable "environment" {
   default     = "production"
 }
 
-variable "access_code" {
-  description = "Access code to protect public endpoints from unauthorized use"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
+
 
 # Placeholder image used on first terraform apply before real
 # container images are pushed to Artifact Registry.
@@ -274,12 +269,6 @@ resource "google_storage_bucket" "historian_docs" {
     max_age_seconds = 3600
   }
 
-  # Uploaded documents expire after 30 days.
-  lifecycle_rule {
-    action { type = "Delete" }
-    condition { age = 30 }
-  }
-
   depends_on = [google_project_service.apis["storage.googleapis.com"]]
 }
 
@@ -297,12 +286,6 @@ resource "google_storage_bucket" "historian_assets" {
     method          = ["GET", "HEAD"]
     response_header = ["Content-Type", "Content-Length"]
     max_age_seconds = 3600
-  }
-
-  # Generated images and videos expire after 7 days.
-  lifecycle_rule {
-    action { type = "Delete" }
-    condition { age = 7 }
   }
 
   depends_on = [google_project_service.apis["storage.googleapis.com"]]
@@ -429,10 +412,7 @@ resource "google_cloud_run_v2_service" "historian_api" {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
       }
-      env {
-        name  = "ACCESS_CODE"
-        value = var.access_code
-      }
+
       # AGENT_ORCHESTRATOR_URL is set after first apply via:
       #   gcloud run services update historian-api --region=REGION \
       #     --update-env-vars AGENT_ORCHESTRATOR_URL=$(terraform output -raw agent_orchestrator_url)
@@ -553,10 +533,7 @@ resource "google_cloud_run_v2_service" "agent_orchestrator" {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
       }
-      env {
-        name  = "ACCESS_CODE"
-        value = var.access_code
-      }
+
       env {
         name = "DOCUMENT_AI_PROCESSOR_NAME"
         value_source {
@@ -662,10 +639,7 @@ resource "google_cloud_run_v2_service" "live_relay" {
         name  = "GEMINI_MODEL"
         value = "gemini-2.5-flash-native-audio-preview-12-2025"
       }
-      env {
-        name  = "ACCESS_CODE"
-        value = var.access_code
-      }
+
       env {
         name  = "HISTORIAN_API_URL"
         value = google_cloud_run_v2_service.historian_api.uri

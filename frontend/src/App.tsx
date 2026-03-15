@@ -7,7 +7,7 @@ import { VoiceLayer } from './components/voice/VoiceLayer';
 import { IrisOverlay } from './components/player/IrisOverlay';
 import { TopNav } from './components/workspace/TopNav';
 import { useTheme } from './hooks/useTheme';
-import { AccessGate } from './components/ui/AccessGate';
+
 
 const LandingPage = lazy(() =>
   import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })),
@@ -86,7 +86,7 @@ function RootLayout() {
   const isPlayer = location.pathname.startsWith('/player');
 
   return (
-    <AccessGate>
+    <>
       <div className={isPlayer ? '' : 'flex flex-col h-screen'}>
         {!isPlayer && <TopNav />}
         <div className={isPlayer ? '' : 'flex-1 min-h-0'}>
@@ -95,7 +95,7 @@ function RootLayout() {
       </div>
       <VoiceLayer />
       <IrisOverlay />
-    </AccessGate>
+    </>
   );
 }
 
