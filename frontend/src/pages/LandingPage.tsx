@@ -364,7 +364,7 @@ function HeroSection() {
           style={{ color: C.text2, fontFamily: 'var(--font-sans)', fontSize: 15 }}
         >
           Upload any historical document — PDF, image, or ancient manuscript.
-          Watch seven AI agents research it in parallel while a live voice historian narrates a cinematic documentary.
+          Eleven AI pipeline phases research, fact-check, and illustrate it in parallel while a live voice historian narrates a cinematic documentary.
         </motion.p>
 
         {/* CTAs */}
@@ -413,7 +413,7 @@ function HeroSection() {
             { value: 45, suffix: 's', label: 'First segment' },
             { value: 200, suffix: '+', label: 'Languages' },
             { value: 300, suffix: 'ms', label: 'Voice latency' },
-            { value: 7, suffix: '', label: 'AI pipeline phases' },
+            { value: 11, suffix: '', label: 'AI pipeline phases' },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p
@@ -686,14 +686,14 @@ function HowItWorksSection() {
     {
       n: '02',
       title: 'AI Researches',
-      desc: 'Seven parallel AI agents immediately begin researching your document. Google Search grounding, Wikipedia, and Gemini multimodal evaluation — all simultaneously.',
-      detail: 'Parallel agents · Google Search grounding · < 30s',
+      desc: 'Eleven pipeline phases fire in parallel — scene research with Google Search grounding, fact validation against sources, geographic mapping, visual storyboarding, and cinematic image generation.',
+      detail: '11 phases · Fact-checked · Geo-mapped · Streaming',
     },
     {
       n: '03',
       title: 'Watch & Converse',
-      desc: 'A cinematic documentary begins playing. Interrupt the historian mid-sentence with your voice. Ask anything. The narrative branches and adapts in real time.',
-      detail: 'Gemini Live · < 300ms latency · Infinite branching',
+      desc: 'A cinematic documentary streams segment by segment as each finishes. Interrupt the historian mid-sentence with your voice. Ask anything. The narrative branches and adapts in real time.',
+      detail: 'Gemini Live · < 300ms latency · Streaming delivery',
     },
   ];
 
@@ -895,7 +895,7 @@ function AgentDemoSection() {
               color: C.text,
             }}
           >
-            Four agents. Thirty seconds. Hundreds of facts.
+            Eleven phases. Parallel execution. Hundreds of verified facts.
           </motion.h2>
         </motion.div>
 
@@ -991,7 +991,7 @@ function FeatureBentoSection() {
       span: 'md:col-span-2 md:row-span-2',
       label: 'The transformation',
       title: 'A document becomes cinema.',
-      desc: 'Upload any historical document. Within 45 seconds, a self-generating documentary begins — cinematic imagery, AI narration, and a live historian you can interrupt and converse with at any moment.',
+      desc: 'Upload any historical document. An 11-phase pipeline researches, fact-checks, geo-maps, storyboards, and illustrates it — streaming each segment the moment it\'s ready. A live historian narrates while you converse.',
       accent: true,
       icon: '◈',
     },
@@ -1016,15 +1016,15 @@ function FeatureBentoSection() {
       span: 'md:col-span-2',
       label: 'Imagen 3 + Veo 2',
       title: 'Cinematic visuals, generated.',
-      desc: 'Four Imagen 3 frames per segment. Veo 2 dramatic clips. Period-accurate with anachronism guards.',
+      desc: 'Beat-aware visual pipeline: Gemini storyboards each scene, Imagen 3 generates period-accurate frames, Veo 2 creates dramatic video clips — all with anachronism guards.',
       icon: '▣',
     },
     {
       id: 'rag',
       span: '',
-      label: 'RAG context injection',
-      title: 'Grounded answers.',
-      desc: 'Every voice response is backed by vector-retrieved document chunks. No hallucinations on source material.',
+      label: 'Fact validation & grounding',
+      title: 'Every claim verified.',
+      desc: 'A hallucination firewall cross-references every narration claim against research evidence. Google Search grounding ensures accuracy.',
       icon: '⬡',
     },
   ];
@@ -1315,7 +1315,7 @@ function StatsSection() {
     { value: 45, suffix: 's', label: 'Time to first segment' },
     { value: 300, suffix: 'ms', label: 'Voice interruption latency' },
     { value: 200, suffix: '+', label: 'Languages supported' },
-    { value: 7, suffix: '', label: 'AI pipeline phases' },
+    { value: 11, suffix: '', label: 'AI pipeline phases' },
     { value: 4, suffix: '×', label: 'Imagen frames per segment' },
   ];
 
@@ -1396,7 +1396,7 @@ function FooterCTA() {
         </motion.h2>
 
         <WordReveal
-          text="No signup required. Upload any historical document and watch AI agents research it in parallel — a cinematic voice documentary begins in under 45 seconds."
+          text="No signup required. Upload any historical document and watch eleven AI phases research, fact-check, and illustrate it — a cinematic voice documentary streams as each segment completes."
           className="mb-10 leading-relaxed max-w-lg mx-auto text-[13px]"
         />
 
@@ -1407,7 +1407,7 @@ function FooterCTA() {
           className="text-[10px] uppercase tracking-[0.2em] mb-1"
           style={{ color: C.muted, fontFamily: 'var(--font-sans)' }}
         >
-          No signup · Any language · Documentary in 45 seconds
+          No signup · Any language · Streaming documentary
         </motion.p>
 
         {/* Divider */}
