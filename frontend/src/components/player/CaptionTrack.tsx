@@ -33,11 +33,12 @@ export function CaptionTrack() {
 
   return (
     <div
-      className="flex flex-col items-center px-6 py-4 rounded-lg"
+      className="flex flex-col items-center px-8 py-4 rounded-lg"
       style={{
         opacity: isEmpty ? 0 : 1,
         transition: 'opacity 0.3s ease',
-        background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, transparent 100%)',
+        background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.2) 80%, transparent 100%)',
+        backdropFilter: 'blur(4px)',
         maxWidth: 900,
         margin: '0 auto',
       }}
