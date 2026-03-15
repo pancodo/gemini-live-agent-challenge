@@ -70,15 +70,11 @@ export function VoiceLayer() {
     },
     onTurnComplete: () => {
       const currentState = useVoiceStore.getState().state;
-      const narrating = usePlayerStore.getState().isNarrating;
       if (currentState === 'historian_speaking') {
-        // During beat narration, DON'T go idle — keep connection alive for next beat
-        if (!narrating) {
-          transition('idle');
-        }
+        transition('idle');
       }
-      // Audio-synced beat advancement: signal the player to advance
-      if (narrating && currentState === 'historian_speaking') {
+      // Signal beat advancement if narrating
+      if (usePlayerStore.getState().isNarrating) {
         usePlayerStore.getState().incrementBeatAdvanceSignal();
       }
     },
