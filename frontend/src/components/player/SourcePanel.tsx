@@ -92,12 +92,12 @@ export function SourcePanel({ sources }: SourcePanelProps) {
           className="space-y-1"
           style={{ overflow: 'hidden' }}
         >
-          {visible.map((src) => {
+          {visible.map((src, index) => {
             const hostname = extractHostname(src.url);
             const badge = relevanceBadge(src.relevanceScore);
 
             return (
-              <motion.li key={src.url} variants={itemVariants}>
+              <motion.li key={`${src.url}-${index}`} variants={itemVariants}>
                 <a
                   href={src.url}
                   target="_blank"

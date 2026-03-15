@@ -399,7 +399,7 @@ const AgentCard = memo(function AgentCard({ agent, onClick, onEntityClick }: Age
             >
               {visibleSources.map((src, index) => (
                 <motion.div
-                  key={src.url}
+                  key={`${src.url}-${index}`}
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.05 }}
