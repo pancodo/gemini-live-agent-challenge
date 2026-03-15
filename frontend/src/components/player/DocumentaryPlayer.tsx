@@ -142,55 +142,32 @@ export function DocumentaryPlayer() {
     : null;
 
   // ── Caption bridge (voiceStore → playerStore) ─────
-  // Buffer captions until audio is actually playing (historian_speaking)
-  // to prevent captions appearing before voice is audible.
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
-  const captionBufferRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!voiceCaption) return;
+    if (voiceCaption) {
+      // Track word rate
+      const now = Date.now();
+      const wordCount = voiceCaption.trim().split(/\s+/).length;
 
-    // Only forward captions when audio is actually playing
-    const vs = useVoiceStore.getState().state;
-    if (vs !== 'historian_speaking') {
-      // Buffer caption — will be flushed when audio starts
-      captionBufferRef.current = voiceCaption;
-      return;
-    }
-
-    // Track word rate
-    const now = Date.now();
-    const wordCount = voiceCaption.trim().split(/\s+/).length;
-
-    if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
-      turnStartRef.current = now;
-      turnWordCountRef.current = wordCount;
-    } else {
-      turnWordCountRef.current = wordCount;
-      const elapsed = (now - turnStartRef.current) / 1000;
-      if (elapsed > 0.5 && wordCount > 3) {
-        setCaptionWps(wordCount / elapsed);
+      if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
+        turnStartRef.current = now;
+        turnWordCountRef.current = wordCount;
+      } else {
+        turnWordCountRef.current = wordCount;
+        const elapsed = (now - turnStartRef.current) / 1000;
+        if (elapsed > 0.5 && wordCount > 3) {
+          setCaptionWps(wordCount / elapsed);
+        }
       }
-    }
 
-    setCaption(voiceCaption);
+      setCaption(voiceCaption);
+    }
   }, [voiceCaption, setCaption, setCaptionWps]);
-
-  // Flush buffered captions when historian starts speaking
-  useEffect(() => {
-    if (voiceState === 'historian_speaking' && captionBufferRef.current) {
-      setCaption(captionBufferRef.current);
-      captionBufferRef.current = null;
-    }
-  }, [voiceState, setCaption]);
-
-  // Note: Pre-connecting WebSocket was attempted but caused dual-connection
-  // issues with sendTextToHistorian. The reduced pre-buffer (3→1) already
-  // cuts ~500ms from voice start latency.
 
   // ── Beat-driven narration (interleaved TEXT+IMAGE) ──────────
   const sendTextToHistorian = useVoiceStore((s) => s.sendTextToHistorian);
