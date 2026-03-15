@@ -142,14 +142,20 @@ export function DocumentaryPlayer() {
     : null;
 
   // ── Caption bridge (voiceStore → playerStore) ─────
+  // Delay captions 500ms — Gemini sends transcription before audio arrives.
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
+  const captionTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    if (voiceCaption) {
+    if (!voiceCaption) return;
+    // Debounce: only show the latest caption after 500ms
+    // This syncs captions closer to audio playback timing
+    clearTimeout(captionTimerRef.current);
+    captionTimerRef.current = setTimeout(() => {
       const now = Date.now();
       const wordCount = voiceCaption.trim().split(/\s+/).length;
 
@@ -163,9 +169,9 @@ export function DocumentaryPlayer() {
           setCaptionWps(wordCount / elapsed);
         }
       }
-
       setCaption(voiceCaption);
-    }
+    }, 500);
+    return () => clearTimeout(captionTimerRef.current);
   }, [voiceCaption, setCaption, setCaptionWps]);
 
   // ── Beat-driven narration (interleaved TEXT+IMAGE) ──────────
@@ -236,10 +242,12 @@ export function DocumentaryPlayer() {
 
     lastSentBeatRef.current = currentBeatIndex;
 
-    // Only send beat text if voice is active (user pressed Space/Play).
-    // During narration, voice stays connected (doesn't go idle between beats).
-    const vs = useVoiceStore.getState().state;
-    if (vs === 'idle') return;
+    // Beat 0: only send if voice active (user clicked Play/Space)
+    // Beats 1+: always send — sendTextToHistorian reconnects from idle
+    if (currentBeatIndex === 0) {
+      const vs = useVoiceStore.getState().state;
+      if (vs === 'idle') return;
+    }
 
     const prefix = currentBeatIndex === 0
       ? `You are narrating "${currentSegment.title}". Deliver this naturally — no announcements. `
@@ -247,22 +255,19 @@ export function DocumentaryPlayer() {
 
     sendTextToHistorian(prefix + beat.narrationText);
 
-    // Safety timeout: generous fallback in case turn_complete is missed
+    // Timer-based beat advancement (primary driver)
+    // turn_complete can accelerate this if it arrives sooner
     const wordCount = beat.narrationText.trim().split(/\s+/).length;
-    const safetyMs = Math.max(wordCount * 800, 5000);
+    const durationMs = Math.max(wordCount * 500, 4000); // ~2 wps, min 4s
 
     clearTimeout(beatSafetyTimerRef.current);
     beatSafetyTimerRef.current = setTimeout(() => {
-      // Only fire if beatAdvanceSignal hasn't incremented (turn_complete didn't arrive)
-      const currentSignal = usePlayerStore.getState().beatAdvanceSignal;
-      if (currentSignal === prevBeatSignalRef.current) {
-        if (currentBeatIndex < beat.totalBeats - 1) {
-          advanceBeat();
-        } else {
-          setIsNarrating(false);
-        }
+      if (currentBeatIndex < beat.totalBeats - 1) {
+        advanceBeat();
+      } else {
+        setIsNarrating(false);
       }
-    }, safetyMs);
+    }, durationMs);
 
     return () => clearTimeout(beatSafetyTimerRef.current);
   }, [beats, currentBeatIndex, currentSegment, sendTextToHistorian, advanceBeat, setIsNarrating]);
