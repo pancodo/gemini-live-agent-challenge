@@ -142,14 +142,21 @@ export function DocumentaryPlayer() {
     : null;
 
   // ── Caption bridge (voiceStore → playerStore) ─────
+  // Delay captions by 800ms to sync with audio playback.
+  // Gemini sends outputTranscription ~500-1000ms before corresponding
+  // audio chunks arrive, so this delay aligns text with speech.
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
+  const captionDelayRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    if (voiceCaption) {
+    if (!voiceCaption) return;
+
+    clearTimeout(captionDelayRef.current);
+    captionDelayRef.current = setTimeout(() => {
       // Track word rate
       const now = Date.now();
       const wordCount = voiceCaption.trim().split(/\s+/).length;
@@ -166,7 +173,9 @@ export function DocumentaryPlayer() {
       }
 
       setCaption(voiceCaption);
-    }
+    }, 800);
+
+    return () => clearTimeout(captionDelayRef.current);
   }, [voiceCaption, setCaption, setCaptionWps]);
 
   // ── Beat-driven narration (interleaved TEXT+IMAGE) ──────────
