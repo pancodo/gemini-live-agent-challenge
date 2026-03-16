@@ -1180,37 +1180,20 @@ function BeforeAfterSection() {
           className="relative rounded-2xl overflow-hidden aspect-video"
           style={{ border: `1px solid ${C.border}` }}
         >
-          {/* BEFORE — parchment document */}
-          <div
-            className="absolute inset-0 flex items-center justify-center p-10"
-            style={{
-              background: `
-                radial-gradient(ellipse 80% 70% at 50% 40%, #e8d8b8 0%, #c8b08a 40%, #a08060 100%)
-              `,
-            }}
-          >
-            <div className="text-center opacity-80">
+          {/* BEFORE — actual PDF document page */}
+          <div className="absolute inset-0">
+            <img
+              src="/samples/showcase/pdf-pompeii-page1.jpg"
+              alt="Original PDF document"
+              className="w-full h-full object-cover"
+            />
+            {/* Label overlay */}
+            <div className="absolute bottom-4 left-0 right-0 flex justify-center">
               <div
-                className="text-[9px] uppercase tracking-[0.3em] mb-4"
-                style={{ color: '#5c3d0e', fontFamily: 'var(--font-sans)' }}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] uppercase tracking-[0.2em]"
+                style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(6px)', color: '#3d2a10', fontFamily: 'var(--font-sans)' }}
               >
-                Original document
-              </div>
-              <div
-                className="leading-[2.2] text-[11px] max-w-xs mx-auto"
-                style={{ fontFamily: 'var(--font-serif)', color: '#3d2a10', fontStyle: 'italic' }}
-              >
-                بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ<br />
-                Hükm-ü şerîf oldur ki...<br />
-                <span className="opacity-60 not-italic text-[10px]">
-                  Imperial Decree · Ottoman Turkish · c. 1572
-                </span>
-              </div>
-              <div
-                className="mt-6 inline-flex items-center gap-2 px-3 py-1 rounded text-[9px] uppercase tracking-[0.2em]"
-                style={{ background: 'rgba(92,61,14,0.1)', color: '#5c3d0e', border: '1px solid rgba(92,61,14,0.2)', fontFamily: 'var(--font-sans)' }}
-              >
-                <span>PDF · 28 pages · Unprocessed</span>
+                PDF · Original Document · Unprocessed
               </div>
             </div>
           </div>
