@@ -218,6 +218,8 @@ export function DocumentaryPlayer() {
   const prevSignalRef = useRef(0);
   // Track which segment's image timers have been started
   const imageTimersStartedRef = useRef<string | null>(null);
+  // Count turn_complete signals — end narration when all beats spoken
+  const turnCompleteCountRef = useRef(0);
   // Interstitial title card state
   const [showInterstitial, setShowInterstitial] = useState(false);
   const [interstitialTitle, setInterstitialTitle] = useState('');
@@ -316,22 +318,23 @@ export function DocumentaryPlayer() {
     startImageTimers();
   }, [isNarrating, beats, currentSegmentId, startImageTimers]);
 
-  // ── Effect 2b: turn_complete handling ──
-  // Each beat gets its own turn_complete. On the last beat, end narration.
+  // ── Effect 2b: Count turn_completes — end narration when all beats spoken ──
   useEffect(() => {
     if (beatAdvanceSignal === 0) return;
     if (beatAdvanceSignal === prevSignalRef.current) return;
     prevSignalRef.current = beatAdvanceSignal;
 
-    const currentBeats = usePlayerStore.getState().beats;
-    const idx = usePlayerStore.getState().currentBeatIndex;
-    const beat = currentBeats[idx];
+    turnCompleteCountRef.current++;
+    const totalBeats = usePlayerStore.getState().beats.length || 1;
 
-    // Last beat finished — end narration and clean up timers
-    if (!beat || idx >= currentBeats.length - 1) {
+    console.log(`[DocumentaryPlayer] turn_complete ${turnCompleteCountRef.current}/${totalBeats}`);
+
+    if (turnCompleteCountRef.current >= totalBeats) {
+      // All beats have been spoken — end narration
       imageTimersRef.current.forEach(clearTimeout);
       imageTimersRef.current = [];
       setIsNarrating(false);
+      turnCompleteCountRef.current = 0;
     }
   }, [beatAdvanceSignal, setIsNarrating]);
 
@@ -441,6 +444,7 @@ export function DocumentaryPlayer() {
     imageTimersStartedRef.current = null;
     imageTimersRef.current.forEach(clearTimeout);
     imageTimersRef.current = [];
+    turnCompleteCountRef.current = 0;
     setShowEndCard(false);
     setShowInterstitial(false);
   }, [currentSegment?.id]);
