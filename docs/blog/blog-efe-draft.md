@@ -16,7 +16,7 @@ Document Analyzer → Scene Research (parallel) → Aggregator
 → Visual Research → Visual Director
 ```
 
-Each stage is a custom `BaseAgent` subclass in Google ADK. State flows between agents via `session.state["key"]` — ADK's built-in state sharing mechanism. The entire pipeline is wrapped in a `ResumablePipelineAgent` that checkpoints to Firestore after each phase, so a crash at Phase IV resumes from Phase IV, not from the beginning.
+Each stage is a custom `BaseAgent` subclass in Google ADK. State flows between agents via `session.state["key"]` — ADK's built-in state sharing mechanism. The entire pipeline is wrapped in a `ResumablePipelineAgent` that checkpoints to Firestore after each phase, so a crash at Phase X resumes from Phase X, not from the beginning.
 
 Here is the function that wires everything together:
 
@@ -37,10 +37,10 @@ def build_new_pipeline(emitter=None) -> ResumablePipelineAgent:
             scene_research,           # Phase II
             _make_aggregator_agent(), # Phase II (aggregator)
             script_orch,              # Phase III
-            fact_validator,           # Phase III.5
-            visual_planner,           # Phase 4.0
-            visual_research_orch,     # Phase IV
-            visual_director_orch,     # Phase V
+            fact_validator,           # Phase VII
+            visual_planner,           # Phase IX
+            visual_research_orch,     # Phase X
+            visual_director_orch,     # Phase XI
         ],
     )
 ```
@@ -116,11 +116,11 @@ All agents are wrapped in a `ParallelAgent` and execute concurrently. Important 
 
 The Script Agent (Gemini 2.0 Pro) reads scene briefs plus aggregated research and produces `SegmentScript` objects — one per scene. Each segment carries a title, a 60-120 second narration script, four Imagen 3 visual descriptions, an optional Veo 2 scene, mood, narrative role, and source citations.
 
-Scripts are written to Firestore immediately at `/sessions/{id}/segments/{segmentId}`. The frontend shows skeleton segment cards that fill in as each segment arrives. A fact validation agent (Phase III.5) then cross-references every narration claim against the research evidence before visual production begins — a hallucination firewall.
+Scripts are written to Firestore immediately at `/sessions/{id}/segments/{segmentId}`. The frontend shows skeleton segment cards that fill in as each segment arrives. A fact validation agent (Phase VII) then cross-references every narration claim against the research evidence before visual production begins — a hallucination firewall.
 
 One parsing lesson: always handle LLM JSON output defensively. We parse bare arrays, `{"segments": [...]}` envelopes, and markdown code fences. The model does not always return the same wrapper.
 
-## Phase IV — Visual Research: Google Search Grounding for Period Accuracy
+## Phase X — Visual Research: Google Search Grounding for Period Accuracy
 
 Before generating images, we research what things actually looked like. The `VisualResearchOrchestrator` runs a 6-stage micro-pipeline per scene using direct `client.aio.models.generate_content` calls with Google Search Grounding:
 
@@ -138,7 +138,7 @@ The grounding response includes `grounding_chunks[].web.uri` — actual URLs of 
 
 The manifests include `era_markers` — things that should not appear in the image. These become Imagen 3 negative prompts. If the scene is set in 1550s Constantinople, the negative prompt prevents modern buildings, electric lights, and automobiles from appearing.
 
-## Phase V — Imagen 3 and Veo 2: Progressive Delivery
+## Phase XI — Imagen 3 and Veo 2: Progressive Delivery
 
 The `VisualDirectorOrchestrator` reads the manifests and generates images. Each scene gets a variable number of frames based on its narrative role — a climax scene gets 3 frames (wide, human, dramatic), while an opening gets just 1 establishing wide shot. Each frame gets distinct composition modifiers, lens specifications, film stock references, and era-specific art style anchors:
 
@@ -185,7 +185,7 @@ This turns pipeline waiting into the first act of the documentary. By the time S
 
 **Imagen 3 `negative_prompt` works and matters.** Without it, you get modern elements leaking into historical scenes. The `era_markers` from visual research directly populate this field.
 
-**Resumable pipelines save hours.** A crash at Phase V (visual generation) used to mean re-running OCR, research, and scripting — 3 minutes of wasted compute. Checkpointing to Firestore after each phase means you restart from exactly where you stopped.
+**Resumable pipelines save hours.** A crash at Phase XI (visual generation) used to mean re-running OCR, research, and scripting — 3 minutes of wasted compute. Checkpointing to Firestore after each phase means you restart from exactly where you stopped.
 
 ## The Stack
 

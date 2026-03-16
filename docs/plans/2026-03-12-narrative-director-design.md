@@ -12,7 +12,7 @@
 The hackathon's **Creative Storytellers** category (40% of total score) rewards:
 > Fluid multimodal narrative where media types flow together naturally, not sequentially.
 
-The current pipeline produces text and images **sequentially**: Script Agent writes narration (Phase III), then Visual Director generates images (Phase V). These are separate API calls, separate models, separate creative steps.
+The current pipeline produces text and images **sequentially**: Script Agent writes narration (Phase III), then Visual Director generates images (Phase XI). These are separate API calls, separate models, separate creative steps.
 
 The **Narrative Director** makes ONE Gemini API call that produces **interleaved text and images in a single response**. The model writes a narration paragraph, then generates an illustration, then writes more narration, then generates another illustration -- all in one unified creative act.
 
@@ -55,14 +55,14 @@ Phase I    document_analyzer        (OCR, chunking, scene briefs)
 Phase II   scene_research           (parallel google_search)
            aggregator               (merge research)
 Phase III  script_orch              (structured JSON segments)  <-- EXISTING
-Phase III.5 fact_validator          (hallucination firewall)
-Phase III-A narrative_director      (interleaved text+image)    <-- NEW
-Phase 4.0  narrative_visual_planner (visual storyboard planning)
-Phase IV   visual_research_orch     (6-stage visual research)
-Phase V    visual_director_orch     (Imagen 3 + Veo 2)
+Phase VII  fact_validator           (hallucination firewall)
+Phase IV   narrative_director       (interleaved text+image)    <-- NEW
+Phase IX   narrative_visual_planner (visual storyboard planning)
+Phase X    visual_research_orch     (6-stage visual research)
+Phase XI   visual_director_orch     (Imagen 3 + Veo 2)
 ```
 
-The Narrative Director runs AFTER the Script Agent and Fact Validator, so it can reference the validated script as a foundation. It runs BEFORE Phase IV/V, so its storyboard images can serve as composition references for the final Imagen 3 generation.
+The Narrative Director runs AFTER the Script Agent and Fact Validator, so it can reference the validated script as a foundation. It runs BEFORE Phase X/XI, so its storyboard images can serve as composition references for the final Imagen 3 generation.
 
 ### Integration with `pipeline.py`
 
@@ -73,11 +73,11 @@ _PHASE_AGENT_MAP: list[tuple[int | float, list[int]]] = [
     (1, [0]),       # Phase I:     document_analyzer
     (2, [1, 2]),    # Phase II:    scene_research + aggregator
     (3, [3]),       # Phase III:   script_orch
-    (3.5, [4]),     # Phase III.5: fact_validator
-    (3.7, [5]),     # Phase III-A: narrative_director         <-- NEW
-    (4, [6]),       # Phase 4.0:   narrative_visual_planner
-    (5, [7]),       # Phase IV:    visual_research_orch
-    (6, [8]),       # Phase V:     visual_director_orch
+    (7, [4]),       # Phase VII:   fact_validator
+    (4, [5]),       # Phase IV:    narrative_director         <-- NEW
+    (9, [6]),       # Phase IX:    narrative_visual_planner
+    (10, [7]),      # Phase X:     visual_research_orch
+    (11, [8]),      # Phase XI:    visual_director_orch
 ]
 ```
 
@@ -95,7 +95,7 @@ And add it to the `sub_agents` list at index 5 (shifting all subsequent indices 
 
 ## 4. The Gemini Prompt
 
-The prompt casts Gemini as a **Creative Director** -- not a scriptwriter (that's the Script Agent's job) and not an image generator (that's Phase V's job). The Creative Director is the person who *sees the documentary as a unified whole*.
+The prompt casts Gemini as a **Creative Director** -- not a scriptwriter (that's the Script Agent's job) and not an image generator (that's Phase XI's job). The Creative Director is the person who *sees the documentary as a unified whole*.
 
 Key prompt design decisions:
 
@@ -163,13 +163,13 @@ Edge cases handled:
 }
 ```
 
-This new status sits between "generating" (Phase III) and "ready" (Phase IV) in the segment lifecycle:
+This new status sits between "generating" (Phase III) and "ready" (Phase X) in the segment lifecycle:
 
 ```
-"generating"    --> Phase III:  skeleton card gets title/mood
-"storyboarded"  --> Phase III-A: storyboard thumbnails appear on card
-"ready"         --> Phase IV:   visual research manifest complete
-"complete"      --> Phase V:    final Imagen 3 frames ready
+"generating"    --> Phase III:   skeleton card gets title/mood
+"storyboarded"  --> Phase IV:   storyboard thumbnails appear on card
+"ready"         --> Phase X:    visual research manifest complete
+"complete"      --> Phase XI:   final Imagen 3 frames ready
 ```
 
 ### Frontend rendering
@@ -217,9 +217,9 @@ The existing `/sessions/{sessionId}/segments/{segmentId}` documents gain:
 
 ---
 
-## 8. Phase V Enhancement: Storyboard as Composition Reference
+## 8. Phase XI Enhancement: Storyboard as Composition Reference
 
-The VisualDirectorOrchestrator (Phase V) can use storyboard images as composition references when building Imagen 3 prompts. This is optional but powerful.
+The VisualDirectorOrchestrator (Phase XI) can use storyboard images as composition references when building Imagen 3 prompts. This is optional but powerful.
 
 In `_build_imagen_prompt`, after constructing the text prompt:
 
@@ -232,7 +232,7 @@ if scene_storyboards:
     # Append to the prompt: "Composition reference: maintain the framing
     # and spatial arrangement shown in the storyboard, but render at
     # full cinematic quality with period-accurate details."
-    pass  # Implementation detail for Phase V enhancement
+    pass  # Implementation detail for Phase XI enhancement
 ```
 
 This creates a virtuous loop: the Creative Director's interleaved images guide the final cinematic frames, producing more visually coherent documentaries.
@@ -244,7 +244,7 @@ This creates a virtuous loop: the Creative Director's interleaved images guide t
 The Narrative Director is designed to be **gracefully skippable**. If it fails:
 
 1. The Script Agent's structured output (Phase III) is still the authoritative data contract.
-2. Phase IV and V proceed normally using `visual_descriptions` from the script.
+2. Phase X and XI proceed normally using `visual_descriptions` from the script.
 3. The frontend shows the segment lifecycle without the "storyboarded" step.
 4. A warning is logged but the pipeline does not halt.
 
@@ -262,7 +262,7 @@ This is achieved by:
 |---|---|
 | Gemini interleaved call latency | 15-25s for 6 scenes with 12 images |
 | GCS upload (12 storyboard images) | 3-5s concurrent |
-| Total Phase III-A time | 20-30s |
+| Total Phase IV time | 20-30s |
 | Image resolution | Model-dependent (typically 1024x1024) |
 | Image format | PNG (inline_data default) |
 | Token budget | ~4000 input tokens, ~8000 output tokens |

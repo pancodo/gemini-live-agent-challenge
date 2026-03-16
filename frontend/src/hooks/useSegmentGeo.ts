@@ -5,7 +5,7 @@ import type { SegmentGeo } from '../types';
 /**
  * Provides geographic metadata for a documentary segment.
  *
- * Data comes from the backend pipeline (Phase 3.8) via:
+ * Data comes from the backend pipeline (Phase VIII — Geographic Mapping) via:
  * 1. SSE `geo_update` event → `playerStore.segmentGeo` (real-time)
  * 2. REST `/segments` response → `playerStore.segmentGeo` (hydration)
  *
