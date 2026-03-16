@@ -255,21 +255,32 @@ export function DocumentaryPlayer() {
     text.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim()
   , []);
 
-  // ── Send one beat at a time ─────
+  // ── Send one beat at a time (falls back to script if beats not loaded) ─────
   const sendBeatNarration = useCallback((beatIndex: number) => {
     const send = useVoiceStore.getState().sendTextToHistorian;
     const seg = currentSegmentId ? useResearchStore.getState().segments[currentSegmentId] : null;
-    const currentBeats = usePlayerStore.getState().beats;
     if (!send || !seg) return;
 
+    const currentBeats = usePlayerStore.getState().beats;
     const beat = currentBeats[beatIndex];
-    if (!beat) return;
 
-    const prefix = beatIndex === 0
-      ? `You are narrating "${seg.title}". Deliver this naturally — no announcements. `
-      : 'Continue narrating the next moment: ';
+    let text: string;
+    if (beat) {
+      const prefix = beatIndex === 0
+        ? `You are narrating "${seg.title}". Deliver this naturally — no announcements. `
+        : 'Continue narrating the next moment: ';
+      text = prefix + sanitize(beat.narrationText);
+    } else if (beatIndex === 0 && seg.script) {
+      // Beats not loaded yet — send first ~600 chars of script as fallback
+      const snippet = sanitize(seg.script).slice(0, 600);
+      text = `You are narrating "${seg.title}". Deliver this naturally — no announcements. ${snippet}`;
+    } else {
+      console.warn('[DocumentaryPlayer] sendBeatNarration: no beat or script for index', beatIndex);
+      return;
+    }
 
-    send(prefix + sanitize(beat.narrationText));
+    console.log(`[DocumentaryPlayer] sendBeatNarration(${beatIndex}): ${text.slice(0, 80)}...`);
+    send(text);
   }, [currentSegmentId, sanitize]);
 
   // ── startImageTimers: pre-calculate image + narration changes based on word count ──
