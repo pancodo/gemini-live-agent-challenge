@@ -561,7 +561,7 @@ function ProductPreviewCard() {
               border: `1px solid ${C.border}`,
             }}
           >
-            Segment 1 of 5
+            Segment {imageIdx + 1} of {SHOWCASE_IMAGES.length}
           </span>
         </div>
 

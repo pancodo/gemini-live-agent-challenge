@@ -48,3 +48,5 @@ terraform/terraform.tfvars
 service-account-key.json
 *-service-account*.json
 *-key.json
+.vercel
+.env*.local

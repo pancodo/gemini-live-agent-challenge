@@ -639,6 +639,26 @@ async def _embed_and_write_background(
 # ---------------------------------------------------------------------------
 
 
+async def _derive_document_title(ocr_text: str) -> str | None:
+    """Use Gemini Flash to derive a short document title from OCR text."""
+    snippet = ocr_text[:2000]
+    client = google_genai.Client(
+        vertexai=True,
+        project=os.environ["GCP_PROJECT_ID"],
+        location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
+    )
+    resp = await client.aio.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=f"Read this document excerpt and return ONLY a short title (3-8 words) that describes what this document is about. No quotes, no explanation, just the title.\n\n{snippet}",
+        config=genai_types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=30,
+        ),
+    )
+    title = (resp.text or "").strip().strip('"\'')
+    return title if title else None
+
+
 def _build_document_map(chunks: list[ChunkRecord]) -> str:
     """Build a human-readable Document Map from summarised chunks.
 
@@ -861,6 +881,25 @@ class DocumentAnalyzerAgent(BaseAgent):
 
         ctx.session.state["gcs_ocr_path"] = gcs_ocr_path
         ctx.session.state["total_pages"] = total_pages
+
+        # ------------------------------------------------------------------
+        # Auto-derive document title from OCR text
+        # ------------------------------------------------------------------
+        try:
+            doc_title = await _derive_document_title(ocr_text)
+            if doc_title:
+                db = firestore.AsyncClient(project=self.firestore_project)
+                await db.collection("sessions").document(session_id).update({
+                    "label": doc_title,
+                })
+                logger.info("Auto-derived document title: %s", doc_title)
+                if self.emitter is not None:
+                    await self.emitter.emit(
+                        "session_label",
+                        {"type": "session_label", "label": doc_title},
+                    )
+        except Exception as exc:
+            logger.warning("Failed to auto-derive document title: %s", exc)
 
         # ------------------------------------------------------------------
         # 2. Semantic chunking

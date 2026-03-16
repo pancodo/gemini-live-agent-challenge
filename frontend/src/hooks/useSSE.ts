@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, startTransition } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useResearchStore } from '../store/researchStore';
 import { usePlayerStore } from '../store/playerStore';
+import { useSessionStore } from '../store/sessionStore';
 import type { SSEEvent } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
@@ -55,6 +56,8 @@ export function useSSE(sessionId: string | null): void {
       updateBeatVisual: s.updateBeatVisual,
     })),
   );
+
+  const renameSession = useSessionStore((s) => s.renameSession);
 
   const processEvent = useCallback(
     (event: SSEEvent) => {
@@ -164,6 +167,12 @@ export function useSSE(sessionId: string | null): void {
           });
           break;
 
+        case 'session_label':
+          if ('label' in event && sessionId) {
+            renameSession(sessionId, (event as { label: string }).label);
+          }
+          break;
+
         case 'error':
           // If error targets a specific agent, mark it as errored with message
           if (event.agentId) {
@@ -175,7 +184,7 @@ export function useSSE(sessionId: string | null): void {
           break;
       }
     },
-    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage, addBeat, updateBeatVisual],
+    [setAgent, setSegment, appendSegmentImage, updateStats, addPhaseMessage, setScanEntities, addEvaluatedSource, setSegmentGeo, addStoryboardScene, appendStoryboardText, setStoryboardImage, addBeat, updateBeatVisual, renameSession, sessionId],
   );
 
   const processEventRef = useRef(processEvent);

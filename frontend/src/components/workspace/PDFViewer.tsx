@@ -305,16 +305,23 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
     onHandleReady?.(handle);
   }, [handle, onHandleReady]);
 
-  // Load PDF document — only reload when the base path changes (not the signature).
-  // The signed URL is refreshed every poll but the actual document doesn't change.
+  // Load PDF document — reload when basePath changes or when a fresh signed URL
+  // arrives after an error (e.g. expired URL from persisted state on session resume).
   const docUrlRef = useRef(documentUrl);
   docUrlRef.current = documentUrl;
 
   const basePath = documentUrl ? documentUrl.split('?')[0] : null;
+  const prevBasePathRef = useRef<string | null>(null);
 
   useEffect(() => {
     const url = docUrlRef.current;
     if (!url) return;
+
+    // If we already have a loaded PDF for this basePath, skip reload
+    // unless there was an error (retry with fresh signed URL).
+    const isNewDoc = basePath !== prevBasePathRef.current;
+    if (!isNewDoc && pdf && !error) return;
+    prevBasePathRef.current = basePath;
 
     setLoading(true);
     setError(null);
@@ -327,7 +334,7 @@ export function PDFViewer({ onHandleReady }: PDFViewerProps) {
     }).finally(() => {
       setLoading(false);
     });
-  }, [basePath]); // eslint-disable-line react-hooks/exhaustive-deps -- docUrlRef always has latest signed URL
+  }, [basePath, documentUrl]); // eslint-disable-line react-hooks/exhaustive-deps -- retry on fresh signed URL
 
   // Render a single page: canvas layer + text layer
   const renderPage = useCallback(
