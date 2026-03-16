@@ -1217,63 +1217,58 @@ function BeforeAfterSection() {
 
           {/* AFTER — documentary frame (scroll-wipe reveal) */}
           <motion.div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{
-              clipPath: wipe.get() ? `inset(0 ${wipe.get()} 0 0)` : undefined,
-              background: `
-                radial-gradient(ellipse 90% 70% at 35% 45%, rgba(139,94,26,0.25) 0%, transparent 55%),
-                radial-gradient(ellipse 70% 60% at 70% 60%, rgba(20,50,70,0.3) 0%, transparent 50%),
-                linear-gradient(140deg, #1a1208 0%, #0a0e14 50%, #0d0b09 100%)
-              `,
-            }}
+            className="absolute inset-0"
+            style={{ clipPath: `inset(0 ${wipe} 0 0)` }}
           >
-            <motion.div style={{ clipPath: `inset(0 ${wipe} 0 0)` }} className="absolute inset-0">
-              <img
-                src="/samples/showcase/cinematic-pompeii-02.jpg"
-                alt="AI-generated documentary frame"
-                className="absolute inset-0 w-full h-full object-cover"
-                style={{ animation: 'ken-burns-1 25s ease-in-out infinite alternate' }}
-              />
-              <div
-                className="absolute inset-0"
+            <img
+              src="/samples/showcase/cinematic-pompeii-02.jpg"
+              alt="AI-generated documentary frame"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ animation: 'ken-burns-1 25s ease-in-out infinite alternate' }}
+            />
+            {/* Vignette */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 25%, rgba(13,11,9,0.4) 60%, rgba(13,11,9,0.85) 100%)',
+              }}
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 px-8">
+              <p
+                className="text-center italic mb-3 rounded-lg"
                 style={{
-                  background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 25%, rgba(13,11,9,0.4) 60%, rgba(13,11,9,0.85) 100%)',
+                  fontFamily: 'var(--font-serif)',
+                  fontWeight: 300,
+                  fontSize: 'clamp(13px, 2vw, 16px)',
+                  color: 'rgba(255,255,255,0.95)',
+                  background: 'rgba(0,0,0,0.55)',
+                  backdropFilter: 'blur(6px)',
+                  padding: '6px 14px',
+                  textShadow: '0 1px 8px rgba(0,0,0,0.7)',
                 }}
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 px-8">
-                <p
-                  className="text-center italic mb-3"
-                  style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontWeight: 300,
-                    fontSize: 'clamp(13px, 2vw, 16px)',
-                    color: C.text,
-                    textShadow: '0 2px 24px rgba(0,0,0,0.9)',
-                  }}
+              >
+                In the shadow of Suleiman's empire, a decree reshaped the fate of three provinces...
+              </p>
+              <div className="flex items-center gap-4">
+                <div
+                  className="text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
+                  style={{ color: 'rgba(255,255,255,0.8)', background: 'rgba(13,11,9,0.6)', border: '1px solid rgba(255,255,255,0.15)', fontFamily: 'var(--font-sans)' }}
                 >
-                  In the shadow of Suleiman's empire, a decree reshaped the fate of three provinces and the men who governed them…
-                </p>
-                <div className="flex items-center gap-4">
-                  <div
-                    className="text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
-                    style={{ color: C.gold, background: 'rgba(13,11,9,0.6)', border: `1px solid ${C.border}`, fontFamily: 'var(--font-sans)' }}
-                  >
-                    Segment 1 · 42s
-                  </div>
-                  <div className="flex items-end gap-[2px] h-3">
-                    {[0.5, 0.8, 0.6, 1, 0.7].map((h, i) => (
-                      <motion.div
-                        key={i}
-                        className="w-[3px] rounded-full"
-                        style={{ background: C.gold }}
-                        animate={{ scaleY: [h, h * 0.3, h] }}
-                        transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.08 }}
-                      />
-                    ))}
-                  </div>
+                  Segment 1 · 42s
+                </div>
+                <div className="flex items-end gap-[2px] h-3">
+                  {[0.5, 0.8, 0.6, 1, 0.7].map((h, i) => (
+                    <motion.div
+                      key={i}
+                      className="w-[3px] rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.7)' }}
+                      animate={{ scaleY: [h, h * 0.3, h] }}
+                      transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.08 }}
+                    />
+                  ))}
                 </div>
               </div>
-            </motion.div>
+            </div>
           </motion.div>
 
           {/* Divider line */}
