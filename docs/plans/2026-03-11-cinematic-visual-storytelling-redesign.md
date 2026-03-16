@@ -2,14 +2,14 @@
 **Date:** 2026-03-11
 **Status:** Planning
 **Author:** Efe
-**Scope:** Phase IV–V visual pipeline (Phases I–III unchanged)
+**Scope:** Phase X–XI visual pipeline (Phases I–III unchanged)
 
 ---
 
 ## The Problem We're Solving
 
 ### Problem 1: Visual Monotony (Critical)
-The current Phase IV treats every scene as **fully isolated**. For a Colosseum document with 4 scenes, all 4 scene pipelines independently discover sources, and all of them will naturally find the same canonical Colosseum reference images. Result: 16 images that all look like variations of the same Colosseum shot.
+The current Phase X treats every scene as **fully isolated**. For a Colosseum document with 4 scenes, all 4 scene pipelines independently discover sources, and all of them will naturally find the same canonical Colosseum reference images. Result: 16 images that all look like variations of the same Colosseum shot.
 
 A real documentary director never lets two consecutive scenes show the same subject from the same angle. Scene 1 is the exterior establishing shot. Scene 2 is inside the arena, workers laying sand. Scene 3 is the Emperor's box, ornate ceremony. Scene 4 is the hypogeum — the underground mechanics. Completely different visual territory per scene.
 
@@ -25,7 +25,7 @@ Current per-scene call count (deep path):
 - Stage 5: 1 Gemini call per accepted source = up to 10 calls
 - Stage 6: 1 Gemini Pro call (manifest synthesis)
 
-**~44 Gemini calls per scene × 4 scenes = ~176 calls for Phase IV alone.**
+**~44 Gemini calls per scene × 4 scenes = ~176 calls for Phase X alone.**
 
 Most of these evaluate mediocre sources. 3 excellent, targeted sources produce a better manifest than 10 random ones.
 
@@ -53,7 +53,7 @@ This mirrors how real documentary directors work: the director's treatment comes
 ## New 7-Agent Architecture
 
 ```
-Phase 4.0  [Sequential, ~8s]
+Phase IX   [Sequential, ~8s]
 ───────────────────────────
 Agent 1: NarrativeVisualPlanner
   Input:  scene_briefs (all), script (all), visual_bible
@@ -67,7 +67,7 @@ Agent 1: NarrativeVisualPlanner
           ├─ 4 distinct frame_concepts (NOT just camera angle variants)
           └─ narrative_visual_bridge (how this scene transitions to next)
 
-Phase 4.1  [Concurrent, 6 agents, ~20s]
+Phase X    [Concurrent, 6 agents, ~20s]
 ────────────────────────────────────────
 Agents 2–7: VisualResearchAgent (one per scene, max 6 concurrent)
   Input:  storyboard[scene_id] (pre-planned queries)
@@ -78,7 +78,7 @@ Agents 2–7: VisualResearchAgent (one per scene, max 6 concurrent)
     Step D: Synthesize manifest from accepted sources + storyboard frame_concepts
   Output: VisualDetailManifest with 4 distinct frame_prompts
 
-Phase 4.2  [Inline after each scene, concurrent]
+Phase XI   [Inline after each scene, concurrent]
 ──────────────────────────────────────────────────
 VisualDirectorOrchestrator (unchanged structure, improved prompt strategy)
   - Uses manifest.frame_prompts[i] as primary (not enriched_prompt + modifier)
@@ -284,7 +284,7 @@ This means only `climax` scenes trigger Veo 2 — **massive cost saving** (Veo 2
 ### Session State Additions
 
 ```
-session.state["visual_storyboard"]  →  dict[scene_id, SceneVisualPlan]  (Phase 4.0 output)
+session.state["visual_storyboard"]  →  dict[scene_id, SceneVisualPlan]  (Phase IX output)
 ```
 
 ### Modified Flow
@@ -293,15 +293,15 @@ session.state["visual_storyboard"]  →  dict[scene_id, SceneVisualPlan]  (Phase
 Phase III (script_agent_orchestrator)
   └── session.state["script"] = [SegmentScript, ...]
 
-Phase 4.0 — NarrativeVisualPlanner (NEW, sequential, ~8s)
+Phase IX  — NarrativeVisualPlanner (NEW, sequential, ~8s)
   ├── reads: scene_briefs, script, visual_bible
   └── writes: visual_storyboard
 
-Phase 4.1 — VisualResearchOrchestrator (MODIFIED, 6 concurrent scenes)
+Phase X   — VisualResearchOrchestrator (MODIFIED, 6 concurrent scenes)
   ├── reads: visual_storyboard[scene_id] (pre-planned queries + frame_concepts)
   └── writes: visual_research_manifest[scene_id] (4 distinct frame_prompts)
 
-Phase 5 — VisualDirectorOrchestrator (MODIFIED, inline after each manifest)
+Phase XI  — VisualDirectorOrchestrator (MODIFIED, inline after each manifest)
   ├── reads: manifest.frame_prompts (4 unique subjects)
   ├── applies: narrative_role styling prefix/suffix
   └── writes: imageUrls to Firestore + emits segment_update(complete)
@@ -324,7 +324,7 @@ Phase 5 — VisualDirectorOrchestrator (MODIFIED, inline after each manifest)
 |------|--------|--------|
 | `agents/visual_research_orchestrator.py` | Replace Stages 0–2 with storyboard lookup; replace dual Stage 4 with single-call eval; merge Stages 5–6 into one synthesis call | 77% fewer Gemini calls |
 | `agents/visual_director_orchestrator.py` | Use `frame_prompts[i]` directly; add `narrative_role` style prefix/suffix; limit Veo 2 to climax scenes only | Better visual differentiation, lower cost |
-| `agents/pipeline.py` | Wire Phase 4.0 NarrativeVisualPlanner before VisualResearchOrchestrator | New sequential step |
+| `agents/pipeline.py` | Wire Phase IX NarrativeVisualPlanner before VisualResearchOrchestrator | New sequential step |
 | `agents/visual_detail_types.py` | Minor: ensure `frame_prompts` validation is strict (exactly 4 items) | Type safety |
 
 ### Unchanged Files
@@ -352,7 +352,7 @@ Create `narrative_visual_planner.py`:
 - Single Gemini Pro call with system + user prompt
 - Parse JSON response into `VisualStoryboard`
 - Write to `session.state["visual_storyboard"]`
-- Emit `pipeline_phase(4.0, "VISUAL STORYBOARD")`
+- Emit `pipeline_phase(9, "VISUAL STORYBOARD")`
 - Factory: `build_narrative_visual_planner(emitter)`
 
 **Prompt engineering is the critical work here.** The prompt must:
@@ -386,11 +386,11 @@ Modify `pipeline.py`:
 
 | Metric | Before | After | Change |
 |--------|--------|-------|--------|
-| Gemini calls Phase IV (4 scenes) | ~176 | ~40 | −77% |
+| Gemini calls Phase X (4 scenes) | ~176 | ~40 | −77% |
 | Imagen 3 calls | 16 (4 scenes × 4 frames) | 16 | same |
 | Veo 2 calls | 4 (one per scene) | 1 (climax only) | −75% |
-| Phase IV latency (4 scenes) | ~90s | ~30s | −67% |
-| Phase 4.0 latency (planner) | 0 (new step) | ~8s | +8s net |
+| Phase X latency (4 scenes) | ~90s | ~30s | −67% |
+| Phase IX latency (planner) | 0 (new step) | ~8s | +8s net |
 | Visual diversity | All scenes same subject | All scenes unique subjects | ∞ improvement |
 
 ---
@@ -441,9 +441,9 @@ No markdown, no explanation.
 ## Open Questions
 
 1. **Frame count**: Should `narrative_role` determine frame count (e.g., 6 frames for `climax`, 2 for `coda`)? Or keep 4 universal?
-   → Recommend: keep 4 universal for Phase V simplicity, revisit later.
+   → Recommend: keep 4 universal for Phase XI simplicity, revisit later.
 
-2. **Storyboard failure mode**: If NarrativeVisualPlanner fails or returns invalid JSON, should Phase 4.1 fall back to the old isolated search approach?
+2. **Storyboard failure mode**: If NarrativeVisualPlanner fails or returns invalid JSON, should Phase X fall back to the old isolated search approach?
    → Yes, add `visual_storyboard_fallback` mode using old stage_0 query generation.
 
 3. **Source language**: For non-English documents, should `targeted_searches` include queries in the source document's language?
@@ -458,9 +458,9 @@ No markdown, no explanation.
 
 - [ ] All scenes in a multi-scene documentary show **different** primary subjects
 - [ ] Zero instances of the same architectural element appearing in 2+ consecutive scenes as the primary subject
-- [ ] Phase IV total cost ≤ 50 Gemini Flash calls for a 4-scene document
-- [ ] Phase 4.0 (NarrativeVisualPlanner) completes in < 10 seconds
-- [ ] Phase 4.1 (concurrent research) completes in < 25 seconds for 4 scenes
+- [ ] Phase X total cost ≤ 50 Gemini Flash calls for a 4-scene document
+- [ ] Phase IX (NarrativeVisualPlanner) completes in < 10 seconds
+- [ ] Phase X (concurrent research) completes in < 25 seconds for 4 scenes
 - [ ] `manifest.frame_prompts` always has exactly 4 entries, each 80–120 words
 - [ ] `narrative_role == "climax"` → Veo 2 triggers; all others → Imagen 3 only
 - [ ] Colosseum test document produces 4 visually distinct scene images on first run

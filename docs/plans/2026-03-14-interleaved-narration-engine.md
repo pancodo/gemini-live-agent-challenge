@@ -5,7 +5,7 @@
 
 ## Problem
 
-The documentary player stitches 3 independent streams (pre-gen Imagen 3 images, Gemini Live audio, forwarded captions). The one genuine `response_modalities=["TEXT","IMAGE"]` call (NarrativeDirectorAgent, Phase 3.1) only appears in the workspace storyboard panel. Judges watching the documentary player never see native interleaved output.
+The documentary player stitches 3 independent streams (pre-gen Imagen 3 images, Gemini Live audio, forwarded captions). The one genuine `response_modalities=["TEXT","IMAGE"]` call (NarrativeDirectorAgent, Phase IV) only appears in the workspace storyboard panel. Judges watching the documentary player never see native interleaved output.
 
 ## Solution: Beat-Driven Interleaved Playback
 
