@@ -94,15 +94,15 @@ flowchart TD
         P1["I<br/>Document<br/>Analyzer"]
         P2["II<br/>Scene<br/>Research"]
         P3["III<br/>Script<br/>Generator"]
-        P31["IV<br/>Narrative<br/>Director"]
-        P32["V<br/>Beat<br/>Illustrator"]
-        P33["VI<br/>Visual<br/>Interleave"]
-        P35["VII<br/>Fact<br/>Validator"]
-        P38["VIII<br/>Geo<br/>Mapping"]
-        P40["IX<br/>Visual<br/>Planner"]
-        P4["X<br/>Visual<br/>Research"]
-        P5["XI<br/>Visual<br/>Director"]
-        P1 --> P2 --> P3 --> P31 --> P32 --> P33 --> P35 --> P38 --> P40 --> P4 --> P5
+        P4["IV<br/>Narrative<br/>Director"]
+        P5["V<br/>Beat<br/>Illustrator"]
+        P6["VI<br/>Visual<br/>Interleave"]
+        P7["VII<br/>Fact<br/>Validator"]
+        P8["VIII<br/>Geo<br/>Mapping"]
+        P9["IX<br/>Visual<br/>Planner"]
+        P10["X<br/>Visual<br/>Research"]
+        P11["XI<br/>Visual<br/>Director"]
+        P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11
     end
 
     subgraph DATA["Google Cloud Services"]
@@ -118,18 +118,18 @@ flowchart TD
 
     API -->|"Triggers pipeline"| ORCH
     ORCH -->|"Google ADK<br/>SequentialAgent + ParallelAgent"| PIPELINE
-    P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
-    P3 & P40 -->|"GenAI SDK"| PRO
-    P31 & P32 & P33 -->|"GenAI SDK<br/>TEXT+IMAGE"| FLASH
-    P5 -->|"Vertex AI<br/>GenAI SDK"| IMAGEN
-    P5 -.->|"Vertex AI<br/>Async generation"| VEO
+    P1 & P2 & P7 & P10 -->|"GenAI SDK"| FLASH
+    P3 & P9 -->|"GenAI SDK"| PRO
+    P4 & P5 & P6 -->|"GenAI SDK<br/>TEXT+IMAGE"| FLASH
+    P11 -->|"Vertex AI<br/>GenAI SDK"| IMAGEN
+    P11 -.->|"Vertex AI<br/>Async generation"| VEO
 
     RELAY <-.->|"WebSocket<br/>BidiGenerateContent"| LIVE_API
 
     ORCH <-->|"Checkpoint resume"| FS
     P1 --> DAI
-    P1 & P3 & P31 & P32 & P5 --> GCS
-    P3 & P4 & P5 --> FS
+    P1 & P3 & P4 & P5 & P11 --> GCS
+    P3 & P10 & P11 --> FS
     ORCH --> PS
     API --> SM
 ```
