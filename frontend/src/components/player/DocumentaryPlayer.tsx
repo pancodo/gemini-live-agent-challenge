@@ -228,11 +228,10 @@ export function DocumentaryPlayer() {
     console.log(`[Effect2b] turn_complete: beat ${lastSentBeatRef.current} done, next=${nextBeat}/${totalBeats}`);
 
     if (nextBeat < totalBeats) {
-      // Advance image only when enough beats have passed to justify a new visual.
-      // This prevents images cycling too fast when there are many short beats.
-      // E.g. 8 beats / 4 images = advance image every 2 beats.
-      const imageCount = currentSegment?.imageUrls?.length || totalBeats;
-      const beatsPerImage = Math.max(1, Math.floor(totalBeats / Math.min(imageCount, totalBeats)));
+      // Advance image only every N beats so each visual holds long enough.
+      // Minimum 3 beats per image, or spread evenly across available images.
+      const imageCount = currentSegment?.imageUrls?.length || 1;
+      const beatsPerImage = Math.max(3, Math.ceil(totalBeats / imageCount));
       if (nextBeat % beatsPerImage === 0) {
         setBeatTransitioning(true);
         setTimeout(() => setBeatTransitioning(false), 300);
