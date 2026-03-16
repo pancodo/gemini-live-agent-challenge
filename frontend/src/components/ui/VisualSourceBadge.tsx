@@ -7,6 +7,10 @@ interface VisualSourceBadgeProps {
   source: VisualSource;
   /** Compact mode for player overlay (translucent, smaller) */
   compact?: boolean;
+  /** Current beat index (0-based) — displayed as 1-based in badge */
+  beatIndex?: number;
+  /** Total number of beats */
+  totalBeats?: number;
 }
 
 const CONFIG: Record<VisualSource, { label: string; icon: string; className: string }> = {
@@ -35,8 +39,12 @@ const CONFIG: Record<VisualSource, { label: string; icon: string; className: str
 export const VisualSourceBadge = memo(function VisualSourceBadge({
   source,
   compact = false,
+  beatIndex,
+  totalBeats,
 }: VisualSourceBadgeProps) {
   const { label, icon, className } = CONFIG[source];
+  const showCounter = beatIndex !== undefined && totalBeats !== undefined && totalBeats > 0;
+  const displayLabel = showCounter ? `${label} (${beatIndex + 1}/${totalBeats})` : label;
 
   if (compact) {
     return (
@@ -50,7 +58,7 @@ export const VisualSourceBadge = memo(function VisualSourceBadge({
           className={`visual-source-pill visual-source-pill--compact ${className}`}
         >
           <span className="visual-source-pill__icon">{icon}</span>
-          <span className="visual-source-pill__label">{label}</span>
+          <span className="visual-source-pill__label">{displayLabel}</span>
         </motion.span>
       </AnimatePresence>
     );
@@ -67,7 +75,7 @@ export const VisualSourceBadge = memo(function VisualSourceBadge({
         className={`visual-source-pill ${className}`}
       >
         <span className="visual-source-pill__icon">{icon}</span>
-        <span className="visual-source-pill__label">{label}</span>
+        <span className="visual-source-pill__label">{displayLabel}</span>
       </motion.span>
     </AnimatePresence>
   );
