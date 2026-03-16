@@ -82,7 +82,7 @@ export const usePlayerStore = create<PlayerStore>()((set) => ({
     const segBeats = state.beatsMap[segmentId] ?? [];
     return { isOpen: true, currentSegmentId: segmentId, isIdle: false, beats: segBeats, currentBeatIndex: 0, isNarrating: false };
   }),
-  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', segmentGeo: {}, pipelineComplete: false, beats: [], currentBeatIndex: 0, isNarrating: false }),
+  close: () => set({ isOpen: false, currentSegmentId: null, playbackOffset: 0, captionText: '', pipelineComplete: false, beats: [], currentBeatIndex: 0, isNarrating: false }),
   setCaption: (captionText) => set({ captionText }),
   setKenBurnsPaused: (isKenBurnsPaused) => set({ isKenBurnsPaused }),
   setIdle: (isIdle) => set({ isIdle }),
