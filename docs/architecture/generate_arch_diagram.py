@@ -194,19 +194,20 @@ phases = [
         ("I", "Document\nAnalyzer", "Document AI OCR\nSemantic Chunking\nNarrative Curator", ACCENT_WARM),
         ("II", "Scene\nResearch", "ParallelAgent\ngoogle_search × N\nAggregator", ACCENT_GREEN),
         ("III", "Script\nGenerator", "Gemini 2.0 Pro\nSegment Scripts\nNarration + Visuals", ACCENT_PURPLE),
-        ("III.5", "Fact\nValidator", "Hallucination\nFirewall\nCross-reference", "#DC2626"),
+        ("IV", "Narrative\nDirector", "TEXT+IMAGE\nStoryboard\nCreative Direction", ACCENT_PURPLE),
     ],
     # Row 2: Creative Pipeline
     [
-        ("3.1", "Narrative\nDirector", "TEXT+IMAGE\nStoryboard\nCreative Direction", ACCENT_PURPLE),
-        ("3.2", "Beat\nIllustration", "TEXT+IMAGE\nBeat 0 Fast Path\nBeats 1-N Concurrent", ACCENT_PURPLE),
-        ("3.3", "Visual\nInterleave", "Assigns visual_type\nillustration / cinematic\n/ video per beat", ACCENT_AMBER),
-        ("3.8", "Geographic\nMapping", "Gemini + Maps\nGeocode Locations\nFirestore + SSE", ACCENT_TEAL),
+        ("V", "Beat\nIllustration", "TEXT+IMAGE\nBeat 0 Fast Path\nBeats 1-N Concurrent", ACCENT_PURPLE),
+        ("VI", "Visual\nInterleave", "Assigns visual_type\nillustration / cinematic\n/ video per beat", ACCENT_AMBER),
+        ("VII", "Fact\nValidator", "Hallucination\nFirewall\nCross-reference", "#DC2626"),
+        ("VIII", "Geographic\nMapping", "Gemini + Maps\nGeocode Locations\nFirestore + SSE", ACCENT_TEAL),
     ],
     # Row 3: Visual Generation
     [
-        ("IV", "Visual\nResearch", "6-Stage Pipeline\n10 Sources Deep Path\nAccept/Reject Eval", ACCENT_WARM),
-        ("V", "Visual\nDirector", "Imagen 3 (4 frames)\nVeo 2 (async video)\nBeat-Aware Gen", ACCENT_PURPLE),
+        ("IX", "Visual\nPlanner", "Gemini 2.0 Pro\nVisual Territory\nPer-Scene Planning", ACCENT_AMBER),
+        ("X", "Visual\nResearch", "6-Stage Pipeline\n10 Sources Deep Path\nAccept/Reject Eval", ACCENT_WARM),
+        ("XI", "Visual\nDirector", "Imagen 3 (4 frames)\nVeo 2 (async video)\nBeat-Aware Gen", ACCENT_PURPLE),
     ],
 ]
 
