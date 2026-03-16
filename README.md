@@ -22,7 +22,7 @@
 
 > ### :globe_with_meridians: Explore the Full System Architecture
 >
-> **[:arrow_right: Interactive Architecture Diagram :arrow_left:](https://historia.efeecllk.com/architecture.html)**
+> **[:arrow_right: Interactive Architecture Diagram :arrow_left:](https://historia.efeecllk.com/architecture.html)** · [**Overview Diagram**](docs/architecture/architecture-diagram.png)
 >
 > _Click to explore all 11 pipeline phases, service connections, and data flows in a live interactive view._
 >
