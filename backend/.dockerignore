@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.env
+.env.*
+!.env.example
+*.egg-info
+.venv
+venv
+service-account-key.json
+live_relay/node_modules

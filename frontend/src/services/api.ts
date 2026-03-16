@@ -1,15 +1,24 @@
-import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, Segment, UrlMeta, SegmentGeo, GeoEvent, GeoRoute } from '../types';
+import type { CreateSessionResponse, SessionStatusResponse, AgentLogsResponse, Segment, UrlMeta, SegmentGeo, GeoEvent, GeoRoute, SessionListItem } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-export async function createSession(filename: string, language?: string, persona?: string, mode?: string): Promise<CreateSessionResponse> {
+export async function createSession(filename: string, language?: string, persona?: string, mode?: string, label?: string): Promise<CreateSessionResponse> {
   const params = new URLSearchParams({ filename });
   if (language) params.set('language', language);
   if (persona) params.set('persona', persona);
   if (mode) params.set('mode', mode);
+  if (label) params.set('label', label);
   const res = await fetch(`${BASE_URL}/api/session/create?${params}`);
   if (!res.ok) throw new Error(`Session create failed: ${res.status}`);
   return res.json() as Promise<CreateSessionResponse>;
+}
+
+export async function listSessions(limit = 50, signal?: AbortSignal): Promise<SessionListItem[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const res = await fetch(`${BASE_URL}/api/sessions?${params}`, { signal });
+  if (!res.ok) throw new Error(`Session list failed: ${res.status}`);
+  const data = await res.json() as { sessions: SessionListItem[] };
+  return data.sessions;
 }
 
 export async function getSessionStatus(sessionId: string, signal?: AbortSignal): Promise<SessionStatusResponse> {

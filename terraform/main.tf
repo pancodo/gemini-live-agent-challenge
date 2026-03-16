@@ -14,7 +14,7 @@
 # ============================================================
 
 terraform {
-  required_version = ">= 1.6"
+  required_version = ">= 1.5"
 
   required_providers {
     google = {
@@ -74,6 +74,8 @@ variable "environment" {
   type        = string
   default     = "production"
 }
+
+
 
 # Placeholder image used on first terraform apply before real
 # container images are pushed to Artifact Registry.
@@ -155,6 +157,7 @@ locals {
     "roles/secretmanager.secretAccessor", # Read secrets at runtime
     "roles/run.invoker",             # Service-to-service calls
     "roles/logging.logWriter",       # Structured logging from Cloud Run
+    "roles/iam.serviceAccountTokenCreator", # Sign blobs for GCS signed URLs
   ]
 }
 
@@ -218,9 +221,9 @@ resource "google_firestore_database" "historian" {
 
   project                     = var.project_id
   name                        = "(default)"
-  location_id                 = "nam5"
+  location_id                 = "us-central1"
   type                        = "FIRESTORE_NATIVE"
-  concurrency_mode            = "OPTIMISTIC"
+  concurrency_mode            = "PESSIMISTIC"
   app_engine_integration_mode = "DISABLED"
 
   depends_on = [google_project_service.apis["firestore.googleapis.com"]]
@@ -266,12 +269,6 @@ resource "google_storage_bucket" "historian_docs" {
     max_age_seconds = 3600
   }
 
-  # Uploaded documents expire after 30 days.
-  lifecycle_rule {
-    action { type = "Delete" }
-    condition { age = 30 }
-  }
-
   depends_on = [google_project_service.apis["storage.googleapis.com"]]
 }
 
@@ -289,12 +286,6 @@ resource "google_storage_bucket" "historian_assets" {
     method          = ["GET", "HEAD"]
     response_header = ["Content-Type", "Content-Length"]
     max_age_seconds = 3600
-  }
-
-  # Generated images and videos expire after 7 days.
-  lifecycle_rule {
-    action { type = "Delete" }
-    condition { age = 7 }
   }
 
   depends_on = [google_project_service.apis["storage.googleapis.com"]]
@@ -421,6 +412,7 @@ resource "google_cloud_run_v2_service" "historian_api" {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
       }
+
       # AGENT_ORCHESTRATOR_URL is set after first apply via:
       #   gcloud run services update historian-api --region=REGION \
       #     --update-env-vars AGENT_ORCHESTRATOR_URL=$(terraform output -raw agent_orchestrator_url)
@@ -541,6 +533,7 @@ resource "google_cloud_run_v2_service" "agent_orchestrator" {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
       }
+
       env {
         name = "DOCUMENT_AI_PROCESSOR_NAME"
         value_source {
@@ -646,6 +639,7 @@ resource "google_cloud_run_v2_service" "live_relay" {
         name  = "GEMINI_MODEL"
         value = "gemini-2.5-flash-native-audio-preview-12-2025"
       }
+
       env {
         name  = "HISTORIAN_API_URL"
         value = google_cloud_run_v2_service.historian_api.uri
