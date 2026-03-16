@@ -116,8 +116,13 @@ export function useGeminiLive(config: GeminiLiveConfig): GeminiLiveReturn {
 
     // Build URL
     let url = `${WS_BASE}/session/${sessionId}`;
+    const params = new URLSearchParams();
     if (resumptionToken) {
-      url += `?token=${encodeURIComponent(resumptionToken)}`;
+      params.set('token', resumptionToken);
+    }
+    const qs = params.toString();
+    if (qs) {
+      url += `?${qs}`;
     }
 
     const ws = new WebSocket(url);

@@ -40,6 +40,7 @@ const { PERSONA_PROMPTS } = require('./personas');
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+
 const GEMINI_MODEL =
   process.env.GEMINI_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025';
 
