@@ -142,13 +142,13 @@ sequenceDiagram
     participant PI as Phase I: Document Analysis
     participant PII as Phase II: Scene Research
     participant PIII as Phase III: Script Generation
-    participant PIII5 as Phase III.5: Fact Validation
-    participant P31 as Phase 3.1: Narrative Director
-    participant P32 as Phase 3.2: Beat Illustration
-    participant P33 as Phase 3.3: Visual Interleave
-    participant P38 as Phase 3.8: Geo Mapping
-    participant PIV as Phase IV: Visual Research
-    participant PV as Phase V: Visual Director
+    participant PVII as Phase VII: Fact Validation
+    participant PIV as Phase IV: Narrative Director
+    participant PV as Phase V: Beat Illustration
+    participant PVI as Phase VI: Visual Interleave
+    participant PVIII as Phase VIII: Geo Mapping
+    participant PX as Phase X: Visual Research
+    participant PXI as Phase XI: Visual Director
 
     P->>PI: Start pipeline
     PI-->>FE: pipeline_phase(1, "TRANSLATION & SCAN")
@@ -165,35 +165,35 @@ sequenceDiagram
     PIII-->>FE: pipeline_phase(3, "SYNTHESIS")
     PIII->>PIII: Generate SegmentScript per scene
     PIII-->>FE: segment_update(generating)
-    PIII->>PIII5: segments written to Firestore
+    PIII->>PVII: segments written to Firestore
 
-    PIII5->>PIII5: LLM-judge validates facts
-    PIII5-->>FE: agent_status(fact_validator)
+    PVII->>PVII: LLM-judge validates facts
+    PVII-->>FE: agent_status(fact_validator)
 
-    P31-->>FE: pipeline_phase(3.1, "STORYBOARD")
-    P31->>P31: TEXT+IMAGE per scene
-    P31->>P32: storyboard_images in state
+    PIV-->>FE: pipeline_phase(4, "STORYBOARD")
+    PIV->>PIV: TEXT+IMAGE per scene
+    PIV->>PV: storyboard_images in state
 
-    P32-->>FE: pipeline_phase(3.2, "BEAT ILLUSTRATION")
-    P32->>P32: Beat 0/Seg 0 first (fast path)
-    P32->>P32: Remaining beats concurrent
-    P32-->>FE: segment_update(beat images)
+    PV-->>FE: pipeline_phase(5, "BEAT ILLUSTRATION")
+    PV->>PV: Beat 0/Seg 0 first (fast path)
+    PV->>PV: Remaining beats concurrent
+    PV-->>FE: segment_update(beat images)
 
-    P33->>P33: Assign visual_type per beat
-    P33->>P38: beat annotations in state
+    PVI->>PVI: Assign visual_type per beat
+    PVI->>PVIII: beat annotations in state
 
-    P38-->>FE: pipeline_phase(3.8, "MAPPING")
-    P38->>P38: Extract locations, geocode
-    P38-->>FE: geo_update per segment
+    PVIII-->>FE: pipeline_phase(8, "MAPPING")
+    PVIII->>PVIII: Extract locations, geocode
+    PVIII-->>FE: geo_update per segment
 
-    PIV-->>FE: pipeline_phase(4, "VISUAL COMPOSITION")
-    PIV->>PIV: 6-stage visual research
-    PIV-->>FE: agent_source_evaluation events
+    PX-->>FE: pipeline_phase(10, "VISUAL COMPOSITION")
+    PX->>PX: 6-stage visual research
+    PX-->>FE: agent_source_evaluation events
 
-    PV-->>FE: pipeline_phase(5, "GENERATION")
-    PV->>PV: Scene 0 first (progressive)
-    PV->>PV: Imagen 3 + Veo 2 concurrent
-    PV-->>FE: segment_update(complete, imageUrls, videoUrl)
+    PXI-->>FE: pipeline_phase(11, "GENERATION")
+    PXI->>PXI: Scene 0 first (progressive)
+    PXI->>PXI: Imagen 3 + Veo 2 concurrent
+    PXI-->>FE: segment_update(complete, imageUrls, videoUrl)
 ```
 
 ### Two Pipeline Executors
@@ -202,7 +202,7 @@ The system provides two execution modes:
 
 | Executor | Class | Behavior |
 |---|---|---|
-| **ResumablePipelineAgent** | Batch mode | Checkpoint-aware. Runs all 11 phases sequentially with phase-level resume. If the process crashes mid-Phase IV, it restarts from Phase IV, not Phase I. Used for reliability. |
+| **ResumablePipelineAgent** | Batch mode | Checkpoint-aware. Runs all 11 phases sequentially with phase-level resume. If the process crashes mid-Phase X, it restarts from Phase X, not Phase I. Used for reliability. |
 | **StreamingPipelineAgent** | Streaming mode | Runs global phases (I + II) once, then processes segments in parallel for faster first-segment delivery. Optimizes for time-to-first-playable-segment. |
 
 Both executors use the same phase implementations and SSE emitter protocol.
@@ -406,13 +406,13 @@ SegmentScript:
 
 ---
 
-### Phase III.5: Fact Validation
+### Phase VII: Fact Validation
 
 **File:** `fact_validator_agent.py`
 **Agent Type:** BaseAgent
 **Model:** Gemini 2.0 Flash
 
-Phase III.5 is the **hallucination firewall**. An LLM-judge cross-references every sentence in the narration script against the grounded research from Phase II.
+Phase VII is the **hallucination firewall**. An LLM-judge cross-references every sentence in the narration script against the grounded research from Phase II.
 
 #### Sentence Classification
 
@@ -433,13 +433,13 @@ The validator overwrites the narration script in place -- downstream phases rece
 
 ---
 
-### Phase 3.1: Narrative Director
+### Phase IV: Narrative Director
 
 **File:** `narrative_director_agent.py`
 **Agent Type:** BaseAgent
 **Model:** Gemini 2.0 Flash with `response_modalities=["TEXT", "IMAGE"]`
 
-Phase 3.1 uses Gemini's native **interleaved TEXT+IMAGE output** -- a single API call produces both creative direction prose and a storyboard illustration. This is a key differentiator: the storyboard images are not generated separately and matched to text; they emerge from the same model call that produces the narrative direction.
+Phase IV uses Gemini's native **interleaved TEXT+IMAGE output** -- a single API call produces both creative direction prose and a storyboard illustration. This is a key differentiator: the storyboard images are not generated separately and matched to text; they emerge from the same model call that produces the narrative direction.
 
 #### Per-Scene Process
 
@@ -457,18 +457,18 @@ And produces:
 Storyboard images are uploaded to GCS at `gs://{bucket}/sessions/{id}/storyboards/scene_{i}.png` and their URIs stored in `session.state["storyboard_images"]`.
 
 **SSE Events Emitted:**
-- `pipeline_phase` (phase=3.1, label="STORYBOARD")
+- `pipeline_phase` (phase=4, label="STORYBOARD")
 - `agent_status` per scene
 
 ---
 
-### Phase 3.2: Beat Illustration
+### Phase V: Beat Illustration
 
 **File:** `beat_illustration_agent.py`
 **Agent Type:** BaseAgent
 **Model:** Gemini 2.0 Flash with `response_modalities=["TEXT", "IMAGE"]`
 
-Phase 3.2 decomposes each segment's narration into **3-4 dramatic beats** and generates a narration snippet plus a 16:9 illustration for each beat. These beat images are the **primary visual path** in the documentary player -- they are what the viewer sees while the historian narrates.
+Phase V decomposes each segment's narration into **3-4 dramatic beats** and generates a narration snippet plus a 16:9 illustration for each beat. These beat images are the **primary visual path** in the documentary player -- they are what the viewer sees while the historian narrates.
 
 ```mermaid
 flowchart TD
@@ -493,7 +493,7 @@ flowchart TD
 
 #### Fast Path Strategy
 
-Time-to-first-playable-segment is critical (target: < 45 seconds). Phase 3.2 implements a fast path:
+Time-to-first-playable-segment is critical (target: < 45 seconds). Phase V implements a fast path:
 
 1. **Beat 0 of Segment 0** generates first, alone
 2. The moment it completes, a `segment_update` SSE event fires -- the frontend can begin playback
@@ -502,42 +502,42 @@ Time-to-first-playable-segment is critical (target: < 45 seconds). Phase 3.2 imp
 This means the user can start watching the documentary while the rest is still being illustrated.
 
 **SSE Events Emitted:**
-- `pipeline_phase` (phase=3.2, label="BEAT ILLUSTRATION")
+- `pipeline_phase` (phase=5, label="BEAT ILLUSTRATION")
 - `segment_update` (beat images as they complete)
 
 ---
 
-### Phase 3.3: Visual Interleave
+### Phase VI: Visual Interleave
 
 **File:** `visual_interleave_agent.py`
 **Agent Type:** BaseAgent
 **Model:** Gemini 2.0 Flash
 
-Phase 3.3 assigns each beat a **visual type** that determines how it will be rendered in the final documentary:
+Phase VI assigns each beat a **visual type** that determines how it will be rendered in the final documentary:
 
 | Visual Type | Source | When Used |
 |---|---|---|
-| `illustration` | Keep the Phase 3.2 beat image as-is | Most beats -- the TEXT+IMAGE illustrations are already high quality |
-| `cinematic` | Generate a new image via Imagen 3 in Phase V | Beats requiring photorealistic quality, specific historical accuracy, or complex compositions |
-| `video` | Generate a video clip via Veo 2 in Phase V | Climactic moments, action sequences, or scenes with inherent motion (battles, journeys, ceremonies) |
+| `illustration` | Keep the Phase V beat image as-is | Most beats -- the TEXT+IMAGE illustrations are already high quality |
+| `cinematic` | Generate a new image via Imagen 3 in Phase XI | Beats requiring photorealistic quality, specific historical accuracy, or complex compositions |
+| `video` | Generate a video clip via Veo 2 in Phase XI | Climactic moments, action sequences, or scenes with inherent motion (battles, journeys, ceremonies) |
 
 The assignment is based on:
 
 - The beat's narrative role (opening beats are often `illustration`, climaxes may be `video`)
-- Available visual research detail (if Phase IV found rich reference material, `cinematic` is preferred)
+- Available visual research detail (if Phase X found rich reference material, `cinematic` is preferred)
 - Budget constraints (Veo 2 is expensive; typically 1-2 video beats per documentary)
 
-The annotations are written to session state for Phase V to consume.
+The annotations are written to session state for Phase XI to consume.
 
 ---
 
-### Phase 3.8: Geographic Mapping
+### Phase VIII: Geographic Mapping
 
 **File:** `geo_location_agent.py`
 **Agent Type:** BaseAgent
 **Model:** Gemini 2.0 Flash with Google Maps grounding
 
-Phase 3.8 extracts geographic locations from the narration and produces structured map data for the frontend's timeline map.
+Phase VIII extracts geographic locations from the narration and produces structured map data for the frontend's timeline map.
 
 #### Process
 
@@ -554,18 +554,18 @@ Phase 3.8 extracts geographic locations from the narration and produces structur
 The frontend consumes `geo_update` events to render an animated timeline map that tracks the documentary's geographic scope.
 
 **SSE Events Emitted:**
-- `pipeline_phase` (phase=3.8, label="MAPPING")
+- `pipeline_phase` (phase=8, label="MAPPING")
 - `geo_update` per segment (with full SegmentGeo payload)
 
 ---
 
-### Phase IV: Visual Research
+### Phase X: Visual Research
 
 **File:** `visual_research_orchestrator.py`
 **Agent Type:** BaseAgent (no ADK sub-agents -- all direct Gemini calls)
 **Model:** Gemini 2.0 Flash
 
-Phase IV is a 6-stage micro-pipeline that researches the visual details needed to generate historically accurate images. Unlike other phases, it uses **no ADK sub-agents** -- all calls are direct `client.aio.models.generate_content` invocations for maximum control over the research flow.
+Phase X is a 6-stage micro-pipeline that researches the visual details needed to generate historically accurate images. Unlike other phases, it uses **no ADK sub-agents** -- all calls are direct `client.aio.models.generate_content` invocations for maximum control over the research flow.
 
 ```mermaid
 flowchart TD
@@ -627,7 +627,7 @@ VisualDetailManifest:
   confidence:            float      -- 0.0-1.0 based on source quality
 ```
 
-The `enriched_prompt` is the primary input to Imagen 3 in Phase V. It contains far more historical detail than the original `visual_descriptions` from the script -- architectural specifics, fabric textures, lighting conditions, vegetation types -- all grounded in researched sources.
+The `enriched_prompt` is the primary input to Imagen 3 in Phase XI. It contains far more historical detail than the original `visual_descriptions` from the script -- architectural specifics, fabric textures, lighting conditions, vegetation types -- all grounded in researched sources.
 
 **SSE Events Emitted:**
 - `pipeline_phase` (phase=4, label="VISUAL COMPOSITION")
@@ -638,24 +638,24 @@ The `enriched_prompt` is the primary input to Imagen 3 in Phase V. It contains f
 
 ---
 
-### Phase V: Visual Director
+### Phase XI: Visual Director
 
 **File:** `visual_director_orchestrator.py`
 **Agent Type:** BaseAgent (no ADK sub-agents -- direct Vertex AI calls)
 **Models:** Imagen 3 (`imagen-3.0-fast-generate-001`), Veo 2 (`veo-2.0-generate-001`)
 
-Phase V is the final generation phase. It produces the actual images and videos that compose the documentary, using the beat annotations from Phase 3.3 and the visual research from Phase IV.
+Phase XI is the final generation phase. It produces the actual images and videos that compose the documentary, using the beat annotations from Phase VI and the visual research from Phase X.
 
 ```mermaid
 flowchart TD
-    A["Beat annotations<br/>(Phase 3.3)"] --> B{"visual_type?"}
-    B -- illustration --> C["Keep Phase 3.2<br/>beat image as-is"]
+    A["Beat annotations<br/>(Phase VI)"] --> B{"visual_type?"}
+    B -- illustration --> C["Keep Phase V<br/>beat image as-is"]
     B -- cinematic --> D["Generate via Imagen 3"]
     B -- video --> E["Generate via Veo 2"]
 
     D --> F["_build_imagen_prompt"]
     F --> G{"Prompt source?"}
-    G -- "Priority 1" --> H["Enriched manifest<br/>(Phase IV)"]
+    G -- "Priority 1" --> H["Enriched manifest<br/>(Phase X)"]
     G -- "Priority 2" --> I["Script visual_descriptions<br/>(Phase III)"]
     G -- "Priority 3" --> J["Generic fallback<br/>(title + mood + visual_bible)"]
 
@@ -683,7 +683,7 @@ flowchart TD
 
 The `_build_imagen_prompt` method follows a strict priority hierarchy:
 
-1. **Enriched manifest** (Phase IV) -- Contains historically-researched visual details: "Hagia Sophia interior, 1453, with Ottoman military banners draped over Byzantine mosaics, filtered sunlight through clerestory windows, dust motes visible in light shafts"
+1. **Enriched manifest** (Phase X) -- Contains historically-researched visual details: "Hagia Sophia interior, 1453, with Ottoman military banners draped over Byzantine mosaics, filtered sunlight through clerestory windows, dust motes visible in light shafts"
 2. **Script visual_descriptions** (Phase III) -- The original AI-written descriptions: "Interior of a grand cathedral being converted to a mosque"
 3. **Generic fallback** -- Constructed from segment title + mood + visual bible: "A reverent scene set in 15th century Constantinople, Ottoman architectural style"
 
@@ -870,12 +870,12 @@ The agent-orchestrator streams pipeline progress to the frontend via **Server-Se
 |---|---|---|---|
 | `pipeline_phase` | All | `{ phase: number, label: string }` | Marks the start of a new pipeline phase. Frontend renders phase headers in the Expedition Log. |
 | `agent_status` | All | `{ agentId: string, status: "queued"\|"searching"\|"evaluating"\|"done"\|"error", query?: string }` | Updates individual agent cards. Status transitions drive the 5-state visual machine (dot color, border animation, label). |
-| `agent_log` | I, II, IV | `{ agentId: string, step: string, detail: string, ts: number }` | Detailed log entries for the Agent Modal. Typewriter-animated at 20ms/char in the Expedition Log. |
-| `agent_source_evaluation` | IV | `{ agentId: string, sourceUrl: string, verdict: "accepted"\|"rejected", rationale: string }` | Real-time source accept/reject in the Agent Modal. Drives the shimmer-to-reveal animation. |
-| `segment_update` | III, 3.2, V | `{ segmentId: string, sceneId: number, status: string, title?: string, mood?: string, narration_script?: string, image_urls?: string[], video_url?: string }` | Progressive segment card population. Status transitions: generating --> visual_ready --> complete. |
-| `geo_update` | 3.8 | `{ segmentId: string, geo: SegmentGeo }` | Geographic data for the timeline map. Contains center, zoom, events, routes. |
+| `agent_log` | I, II, X | `{ agentId: string, step: string, detail: string, ts: number }` | Detailed log entries for the Agent Modal. Typewriter-animated at 20ms/char in the Expedition Log. |
+| `agent_source_evaluation` | X | `{ agentId: string, sourceUrl: string, verdict: "accepted"\|"rejected", rationale: string }` | Real-time source accept/reject in the Agent Modal. Drives the shimmer-to-reveal animation. |
+| `segment_update` | III, V, XI | `{ segmentId: string, sceneId: number, status: string, title?: string, mood?: string, narration_script?: string, image_urls?: string[], video_url?: string }` | Progressive segment card population. Status transitions: generating --> visual_ready --> complete. |
+| `geo_update` | VIII | `{ segmentId: string, geo: SegmentGeo }` | Geographic data for the timeline map. Contains center, zoom, events, routes. |
 | `stats_update` | All | `{ sourcesFound?: number, factsVerified?: number, segmentsReady?: number }` | Drives the accumulation counter in the Expedition Log stats bar. Gold flash on increment. |
-| `pipeline_complete` | V (final) | `{ sessionId: string }` | Signals the entire pipeline is done. Frontend enables "Watch Documentary" button. |
+| `pipeline_complete` | XI (final) | `{ sessionId: string }` | Signals the entire pipeline is done. Frontend enables "Watch Documentary" button. |
 | `pipeline_error` | Any | `{ phase: number, error: string, recoverable: boolean }` | Error handling. Recoverable errors allow retry; non-recoverable errors show explanation. |
 
 ### Frontend SSE Processing
@@ -1184,7 +1184,7 @@ erDiagram
 | `/sessions/{sessionId}/agents/{agentId}` | Agent state + logs | agent-orchestrator | historian-api, frontend |
 | `/sessions/{sessionId}/liveSession` | Voice session state | live-relay | live-relay (on reconnect) |
 | `/sessions/{sessionId}/chunks/{chunkId}` | Document chunks + embeddings | agent-orchestrator | historian-api (RAG search) |
-| `/sessions/{sessionId}/visualManifests/{sceneId}` | Visual research output | agent-orchestrator | agent-orchestrator (Phase V) |
+| `/sessions/{sessionId}/visualManifests/{sceneId}` | Visual research output | agent-orchestrator | agent-orchestrator (Phase XI) |
 
 ### GCS Bucket Structure
 
@@ -1197,23 +1197,23 @@ gs://{bucket}/
       original.pdf              <-- Uploaded document (signed URL PUT)
       ocr_text.txt              <-- Document AI output (backup)
     storyboards/
-      scene_0.png               <-- Phase 3.1 storyboard illustrations
+      scene_0.png               <-- Phase IV storyboard illustrations
       scene_1.png
       ...
     beats/
-      seg_0_beat_0.png          <-- Phase 3.2 beat illustrations
+      seg_0_beat_0.png          <-- Phase V beat illustrations
       seg_0_beat_1.png
       seg_1_beat_0.png
       ...
     images/
-      seg_0_frame_0.png         <-- Phase V Imagen 3 frames
+      seg_0_frame_0.png         <-- Phase XI Imagen 3 frames
       seg_0_frame_1.png
       seg_0_frame_2.png
       seg_0_frame_3.png
       seg_1_frame_0.png
       ...
     videos/
-      seg_0_veo2.mp4            <-- Phase V Veo 2 clips
+      seg_0_veo2.mp4            <-- Phase XI Veo 2 clips
       seg_2_veo2.mp4
       ...
 ```
@@ -1310,7 +1310,7 @@ This prevents unauthorized usage of the (expensive) Gemini, Imagen 3, and Veo 2 
 
 | Metric | Target | How Achieved |
 |---|---|---|
-| **First segment playable** | < 45 seconds from upload | Fast path in Phase 3.2 (Beat 0/Seg 0 first), Scene 0 fast path in Phase IV (3 sources, early exit), Scene 0 Imagen 3 before other scenes |
+| **First segment playable** | < 45 seconds from upload | Fast path in Phase V (Beat 0/Seg 0 first), Scene 0 fast path in Phase X (3 sources, early exit), Scene 0 Imagen 3 before other scenes |
 | **Voice interruption latency** | < 300ms | Server-side VAD (no round-trip), immediate audio queue flush, no debounce on interrupt signal |
 | **Historian response start** | < 1.5 seconds after user speech ends | Gemini 2.5 Flash Native Audio real-time streaming, pre-built system instruction, low-latency WebSocket relay |
 | **RAG retrieval** | < 500ms | Firestore vector search with pre-computed 768-dim embeddings, co-located data, 5-result limit |
@@ -1333,12 +1333,12 @@ Semantic chunking + summarization:     ~5s
 Narrative Curator:                     ~5s
 Phase II research (parallel):          ~15s
 Phase III script generation:           ~8s
-Phase 3.2 Beat 0/Seg 0 (fast path):   ~5s
+Phase V Beat 0/Seg 0 (fast path):     ~5s
                                        -----
 Total:                                 ~48s (target: <45s with optimization)
 ```
 
-The critical path runs through Phases I, II, III, and 3.2 (Beat 0 only). Phases III.5, 3.1, 3.3, 3.8, IV, and V run after the first segment is playable and do not affect this metric.
+The critical path runs through Phases I, II, III, and V (Beat 0 only). Phases VII, IV, VI, VIII, X, and XI run after the first segment is playable and do not affect this metric.
 
 ### Latency Budget Breakdown: Voice Interruption
 
@@ -1358,11 +1358,11 @@ Total:                                 ~150ms (well under 300ms target)
 
 | Model | Version | Phases | Calls per Session | Purpose |
 |---|---|---|---|---|
-| Gemini 2.0 Flash | `gemini-2.0-flash` | I, II, III.5, 3.1, 3.2, 3.3, 3.8, IV | ~50-100 | Fast reasoning: summarization, research, evaluation, illustration |
+| Gemini 2.0 Flash | `gemini-2.0-flash` | I, II, VII, IV, V, VI, VIII, X | ~50-100 | Fast reasoning: summarization, research, evaluation, illustration |
 | Gemini 2.0 Pro | `gemini-2.0-pro` | I (curator), III | ~5-10 | High-quality generation: scene selection, script writing |
 | Gemini 2.5 Flash Native Audio | `gemini-2.5-flash-native-audio-preview-12-2025` | Live voice | Continuous stream | Real-time voice conversation |
-| Imagen 3 Fast | `imagen-3.0-fast-generate-001` | V, live illustration | ~20-30 | Image generation at 200 req/min capacity |
-| Veo 2 | `veo-2.0-generate-001` | V | ~2-4 | Video clip generation (async, 1-2 min each) |
+| Imagen 3 Fast | `imagen-3.0-fast-generate-001` | XI, live illustration | ~20-30 | Image generation at 200 req/min capacity |
+| Veo 2 | `veo-2.0-generate-001` | XI | ~2-4 | Video clip generation (async, 1-2 min each) |
 | Gemini Embedding | `gemini-embedding-2-preview` | RAG setup | ~20-40 | 768-dim embeddings for vector search |
 
 ## Appendix B: ADK Pattern Reference
