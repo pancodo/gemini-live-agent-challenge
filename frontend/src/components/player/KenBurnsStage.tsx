@@ -298,13 +298,18 @@ export function KenBurnsStage({ segment, onActiveImageChange }: KenBurnsStagePro
         <div className="illustration-shimmer absolute inset-0 pointer-events-none" style={{ zIndex: 1 }} />
       )}
 
-      {/* Visual source badge */}
+      {/* Visual source badge — always visible, not affected by idle chrome fade */}
       {(hasBeatVisual || images.length > 0) && (
         <div
           className="absolute top-4 right-4 z-10 pointer-events-none"
-          style={{ opacity: 'var(--chrome-opacity, 1)', transition: 'opacity 0.4s ease' }}
+          style={{ opacity: 1 }}
         >
-          <VisualSourceBadge source={currentSource} compact />
+          <VisualSourceBadge
+            source={currentSource}
+            compact
+            beatIndex={currentBeatIndex}
+            totalBeats={beats.length}
+          />
         </div>
       )}
 
