@@ -332,20 +332,45 @@ export function DocumentaryPlayer() {
     }
   }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize, setInterstitialTitle, setShowInterstitial, setShowEndCard]);
 
-  // ── Safety timer: force-end narration if it runs too long without completing ──
+  // ── Safety timer: if no turn_complete arrives for 30s, force advance ──
+  // Handles cases where Gemini closes (1008) or drops connection mid-beat.
   const narrationSafetyRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     clearTimeout(narrationSafetyRef.current);
     if (isNarrating) {
-      // Max 2 minutes per segment — if still narrating, force-end
       narrationSafetyRef.current = setTimeout(() => {
-        if (usePlayerStore.getState().isNarrating) {
-          setIsNarrating(false);
-        }
-      }, 120_000);
+        if (!usePlayerStore.getState().isNarrating) return;
+        // Force-end narration — Effect 2b won't fire, so trigger advance directly
+        setIsNarrating(false);
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          const segs = readySegments;
+          const idx = segs.findIndex((s) => s.id === currentSegmentId);
+          const nextSeg = segs[idx + 1];
+          if (nextSeg) {
+            setInterstitialTitle(nextSeg.title || `Chapter ${idx + 2}`);
+            setShowInterstitial(true);
+            setTimeout(() => {
+              setShowInterstitial(false);
+              open(nextSeg.id);
+              setTimeout(() => {
+                const nextBeats = usePlayerStore.getState().beats;
+                const send = useVoiceStore.getState().sendTextToHistorian;
+                if (send && nextBeats.length > 0) {
+                  lastSentBeatRef.current = 0;
+                  send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` + sanitize(nextBeats[0].narrationText));
+                  setIsNarrating(true);
+                }
+              }, 1000);
+            }, 2500);
+          } else {
+            setShowEndCard(true);
+          }
+        }, 2000);
+      }, 30_000); // 30 seconds — generous but not 2 minutes
     }
     return () => clearTimeout(narrationSafetyRef.current);
-  }, [isNarrating, setIsNarrating]);
+  }, [isNarrating, setIsNarrating, readySegments, currentSegmentId, open, sanitize]);
 
   // ── Effect 3: Fallback — if no beats arrive in 30s, create synthetic beats ──
   useEffect(() => {
