@@ -390,7 +390,22 @@ export function UploadPage() {
         <SessionHistory />
       </section>
 
-      <footer className="pb-6 text-center">
+      <footer className="pb-6 flex flex-col items-center gap-3">
+        <a
+          href="/architecture.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--bg4)] bg-[var(--bg2)] hover:border-[var(--gold)]/40 hover:bg-[var(--bg3)] transition-colors text-[12px] text-[var(--muted)] font-sans uppercase tracking-[0.12em]"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
+            <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="4.5" y="8" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="3.5" y1="6" x2="3.5" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+            <line x1="10.5" y1="6" x2="10.5" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+          </svg>
+          Architecture Diagram
+        </a>
         <p className="text-[11px] text-[var(--muted)]/60 font-sans tracking-[0.1em]">
           Powered by Google Gemini &middot; Imagen 3 &middot; Cloud Document AI
         </p>
