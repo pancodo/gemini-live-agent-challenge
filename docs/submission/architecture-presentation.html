@@ -1,0 +1,2173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Historian — Architecture Deep Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  /* ═══════════════════════════════════════════════════
+     DESIGN TOKENS
+     ═══════════════════════════════════════════════════ */
+  :root {
+    --bg-deep: #F2EDE3;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #FAF7F2;
+    --bg-surface: #EBE4D8;
+    --gold: #8B5E1A;
+    --gold-bright: #5C3D0E;
+    --gold-dim: #A07738;
+    --gold-faint: rgba(139, 94, 26, 0.06);
+    --gold-glow: rgba(139, 94, 26, 0.18);
+    --text: #1E170C;
+    --text-muted: #6B5D4A;
+    --text-dim: #9A8B74;
+    --teal: #1A6B5E;
+    --teal-dim: #2A8A7A;
+    --green: #2E6E44;
+    --red: #A8342A;
+    --blue: #2A5E8A;
+    --purple: #6B4A9A;
+    --border: rgba(139, 94, 26, 0.15);
+    --border-strong: rgba(139, 94, 26, 0.30);
+    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --slide-transition: 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     RESET & BASE
+     ═══════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     FILM GRAIN OVERLAY
+     ═══════════════════════════════════════════════════ */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+    animation: grain-shift 0.5s steps(4) infinite;
+  }
+
+  @keyframes grain-shift {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-2px, 1px); }
+    50%  { transform: translate(1px, -1px); }
+    75%  { transform: translate(-1px, -2px); }
+    100% { transform: translate(0, 0); }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     SLIDE CONTAINER
+     ═══════════════════════════════════════════════════ */
+  .deck {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(30px) scale(0.98);
+    transition: opacity var(--slide-transition),
+                transform var(--slide-transition),
+                visibility 0s linear 0.7s;
+  }
+
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    transition: opacity var(--slide-transition),
+                transform var(--slide-transition),
+                visibility 0s linear 0s;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════════════ */
+  .nav-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 40px;
+    background: linear-gradient(to top, rgba(242,237,227,0.95), transparent);
+    pointer-events: none;
+  }
+
+  .nav-bar > * { pointer-events: auto; }
+
+  .slide-dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .slide-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    border: none;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    padding: 0;
+  }
+
+  .slide-dot.active {
+    background: var(--gold);
+    box-shadow: 0 0 12px var(--gold-glow);
+    width: 24px;
+    border-radius: 4px;
+  }
+
+  .nav-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .nav-arrows {
+    display: flex;
+    gap: 12px;
+  }
+
+  .nav-arrow {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    font-size: 16px;
+  }
+
+  .nav-arrow:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: var(--gold-faint);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     TYPOGRAPHY
+     ═══════════════════════════════════════════════════ */
+  .slide-number {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .slide-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-size: clamp(32px, 4vw, 56px);
+    color: var(--gold-bright);
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  .slide-subtitle {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-style: italic;
+    font-size: clamp(16px, 1.8vw, 22px);
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    margin-bottom: 40px;
+    text-align: center;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     DIVIDER
+     ═══════════════════════════════════════════════════ */
+  .divider {
+    width: 120px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+    margin: 0 auto 32px;
+    position: relative;
+  }
+
+  .divider::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    background: var(--gold-dim);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     ARCHITECTURE DIAGRAM COMPONENTS
+     ═══════════════════════════════════════════════════ */
+
+  /* --- Boxes --- */
+  .arch-diagram {
+    position: relative;
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .arch-box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    background: var(--bg-card);
+    position: relative;
+    transition: all 0.4s ease;
+  }
+
+  .arch-box:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-hover);
+    box-shadow: 0 2px 16px rgba(139, 94, 26, 0.08);
+  }
+
+  .arch-box-title {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 15px;
+    color: var(--gold-bright);
+    margin-bottom: 4px;
+  }
+
+  .arch-box-detail {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  .arch-box-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  /* --- Color Variants --- */
+  .arch-box.gold   { border-color: rgba(139, 94, 26, 0.25); }
+  .arch-box.teal   { border-color: rgba(26, 107, 94, 0.25); }
+  .arch-box.green  { border-color: rgba(46, 110, 68, 0.25); }
+  .arch-box.blue   { border-color: rgba(42, 94, 138, 0.25); }
+  .arch-box.purple { border-color: rgba(107, 74, 154, 0.25); }
+  .arch-box.red    { border-color: rgba(168, 52, 42, 0.25); }
+
+  .arch-box.gold .arch-box-title   { color: var(--gold-bright); }
+  .arch-box.teal .arch-box-title   { color: var(--teal); }
+  .arch-box.green .arch-box-title  { color: var(--green); }
+  .arch-box.blue .arch-box-title   { color: var(--blue); }
+  .arch-box.purple .arch-box-title { color: var(--purple); }
+  .arch-box.red .arch-box-title    { color: var(--red); }
+
+  /* --- Connector Lines (SVG) --- */
+  .arch-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .arch-svg line, .arch-svg path {
+    stroke: var(--border-strong);
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  .arch-svg .flow-arrow {
+    stroke: var(--gold-dim);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    animation: dash-flow 1.5s linear infinite;
+  }
+
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -20; }
+  }
+
+  .arch-svg .glow-line {
+    stroke: var(--gold);
+    stroke-width: 2;
+    filter: drop-shadow(0 0 4px var(--gold-glow));
+  }
+
+  /* --- Grid Layouts for Slides --- */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 24px;
+    width: 100%;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .overview-row {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    align-items: stretch;
+  }
+
+  .overview-row > .arch-box {
+    flex: 1;
+  }
+
+  .connector-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    text-align: center;
+    padding: 6px 0;
+  }
+
+  .connector-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 4px 0;
+  }
+
+  .connector-line::before,
+  .connector-line::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+  }
+
+  .connector-line .dot {
+    width: 4px;
+    height: 4px;
+    background: var(--gold-dim);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* --- Phase Pipeline --- */
+  .pipeline-track {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    max-width: 1050px;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+  }
+
+  .pipeline-phase {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+    position: relative;
+  }
+
+  .phase-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .phase-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .phase-dot.gold   { background: var(--gold); box-shadow: 0 0 8px var(--gold-glow); }
+  .phase-dot.teal   { background: var(--teal); box-shadow: 0 0 8px rgba(26,107,94,0.25); }
+  .phase-dot.green  { background: var(--green); box-shadow: 0 0 8px rgba(46,110,68,0.25); }
+  .phase-dot.blue   { background: var(--blue); box-shadow: 0 0 8px rgba(42,94,138,0.25); }
+  .phase-dot.purple { background: var(--purple); box-shadow: 0 0 8px rgba(107,74,154,0.25); }
+  .phase-dot.red    { background: var(--red); box-shadow: 0 0 8px rgba(168,52,42,0.25); }
+
+  .phase-bar {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+
+  .phase-bar:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-hover);
+  }
+
+  .phase-name {
+    font-family: var(--font-display);
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .phase-agent {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  .phase-model {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    background: rgba(139, 94, 26, 0.08);
+    padding: 2px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* Vertical timeline line */
+  .pipeline-track::before {
+    content: '';
+    position: absolute;
+    left: 53px;
+    top: 20px;
+    bottom: 20px;
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, var(--border-strong) 10%, var(--border-strong) 90%, transparent);
+    z-index: 1;
+  }
+
+  /* Phase group brackets */
+  .phase-group {
+    border-left: 2px solid var(--border);
+    margin-left: 53px;
+    padding-left: 24px;
+    position: relative;
+  }
+
+  .phase-group-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    position: absolute;
+    left: -60px;
+    top: 50%;
+    transform: rotate(-90deg) translateX(-50%);
+    white-space: nowrap;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     DEEP DIVE SLIDES
+     ═══════════════════════════════════════════════════ */
+  .deep-grid {
+    display: grid;
+    gap: 16px;
+    width: 100%;
+    max-width: 1050px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .deep-grid.two-col {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .deep-grid.three-col {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .deep-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    background: var(--bg-card);
+    transition: all 0.4s ease;
+  }
+
+  .deep-card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(139, 94, 26, 0.1);
+  }
+
+  .deep-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .deep-card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .deep-card-icon.gold   { background: rgba(139,94,26,0.10); color: var(--gold); }
+  .deep-card-icon.teal   { background: rgba(26,107,94,0.10); color: var(--teal); }
+  .deep-card-icon.green  { background: rgba(46,110,68,0.10); color: var(--green); }
+  .deep-card-icon.blue   { background: rgba(42,94,138,0.10); color: var(--blue); }
+  .deep-card-icon.purple { background: rgba(107,74,154,0.10); color: var(--purple); }
+  .deep-card-icon.red    { background: rgba(168,52,42,0.10); color: var(--red); }
+
+  .deep-card-title {
+    font-family: var(--font-display);
+    font-size: 16px;
+    color: var(--gold-bright);
+  }
+
+  .deep-card p, .deep-card li {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--text-muted);
+  }
+
+  .deep-card ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .deep-card li {
+    padding-left: 16px;
+    position: relative;
+    margin-bottom: 4px;
+  }
+
+  .deep-card li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--gold-dim);
+  }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+  }
+
+  .tag.gold   { background: rgba(139,94,26,0.10); color: var(--gold); }
+  .tag.teal   { background: rgba(26,107,94,0.10); color: var(--teal); }
+  .tag.green  { background: rgba(46,110,68,0.10); color: var(--green); }
+  .tag.blue   { background: rgba(42,94,138,0.10); color: var(--blue); }
+  .tag.purple { background: rgba(107,74,154,0.10); color: var(--purple); }
+
+  /* ═══════════════════════════════════════════════════
+     FLOW DIAGRAMS (CSS-based)
+     ═══════════════════════════════════════════════════ */
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    justify-content: center;
+    flex-wrap: nowrap;
+  }
+
+  .flow-node {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    text-align: center;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+
+  .flow-node:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-hover);
+  }
+
+  .flow-node-title {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--gold-bright);
+    white-space: nowrap;
+  }
+
+  .flow-node-sub {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .flow-arrow-right {
+    width: 28px;
+    height: 1px;
+    background: var(--border-strong);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .flow-arrow-right::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -3px;
+    border: solid var(--gold-dim);
+    border-width: 0 1.5px 1.5px 0;
+    padding: 3px;
+    transform: rotate(-45deg);
+  }
+
+  .flow-arrow-down {
+    width: 1px;
+    height: 24px;
+    background: var(--border-strong);
+    position: relative;
+    margin: 0 auto;
+  }
+
+  .flow-arrow-down::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -3px;
+    border: solid var(--gold-dim);
+    border-width: 0 1.5px 1.5px 0;
+    padding: 3px;
+    transform: rotate(45deg);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     PARALLEL AGENT VISUALIZATION
+     ═══════════════════════════════════════════════════ */
+  .parallel-container {
+    border: 1px dashed var(--border-strong);
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+    background: rgba(26,107,94,0.04);
+  }
+
+  .parallel-label {
+    position: absolute;
+    top: -8px;
+    left: 16px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--teal);
+    background: var(--bg-surface);
+    padding: 0 8px;
+  }
+
+  .parallel-agents {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .parallel-agent {
+    border: 1px solid rgba(94,173,160,0.25);
+    border-radius: 6px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    text-align: center;
+    min-width: 100px;
+  }
+
+  .parallel-agent .agent-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--teal);
+  }
+
+  .parallel-agent .agent-tool {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     SLIDE-SPECIFIC LAYOUTS
+     ═══════════════════════════════════════════════════ */
+  .slide-content {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .slide-header {
+    text-align: center;
+    margin-bottom: 32px;
+    width: 100%;
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .stat-item {
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 300;
+    color: var(--gold-bright);
+  }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     PROTOCOL / CODE BLOCKS
+     ═══════════════════════════════════════════════════ */
+  .code-block {
+    background: #F7F4EE;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .code-block .hl-gold { color: var(--gold); }
+  .code-block .hl-teal { color: var(--teal); }
+  .code-block .hl-green { color: var(--green); }
+  .code-block .hl-blue { color: var(--blue); }
+  .code-block .hl-dim { color: var(--text-dim); }
+
+  /* ═══════════════════════════════════════════════════
+     RESPONSIVE SCALING
+     ═══════════════════════════════════════════════════ */
+  @media (max-width: 900px) {
+    .slide { padding: 40px 24px; }
+    .deep-grid.two-col { grid-template-columns: 1fr; }
+    .deep-grid.three-col { grid-template-columns: 1fr; }
+    .overview-row { flex-direction: column; align-items: center; }
+    .flow-row { flex-wrap: wrap; gap: 8px; }
+    .stat-row { flex-wrap: wrap; }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     ANIMATE IN CHILDREN
+     ═══════════════════════════════════════════════════ */
+  .slide.active .anim-in {
+    animation: fade-up 0.6s ease forwards;
+  }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(16px); filter: blur(3px); }
+    to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+
+  .anim-in { opacity: 0; }
+  .anim-d1 { animation-delay: 0.1s !important; }
+  .anim-d2 { animation-delay: 0.2s !important; }
+  .anim-d3 { animation-delay: 0.3s !important; }
+  .anim-d4 { animation-delay: 0.4s !important; }
+  .anim-d5 { animation-delay: 0.5s !important; }
+  .anim-d6 { animation-delay: 0.6s !important; }
+  .anim-d7 { animation-delay: 0.7s !important; }
+  .anim-d8 { animation-delay: 0.8s !important; }
+
+  /* Scrollable slide content */
+  .slide-scroll {
+    overflow-y: auto;
+    max-height: calc(100vh - 140px);
+    width: 100%;
+    max-width: 1100px;
+    padding-right: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .slide-scroll::-webkit-scrollbar { width: 4px; }
+  .slide-scroll::-webkit-scrollbar-track { background: transparent; }
+  .slide-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ═══════════════════════════════════════════════════
+     WIDE FLOW DIAGRAM
+     ═══════════════════════════════════════════════════ */
+  .wide-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    max-width: 1050px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Section separators */
+  .section-break {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    margin: 4px auto;
+  }
+
+  .section-break::before,
+  .section-break::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .section-break span {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  /* Big feature cards */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 1050px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .feature-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    background: var(--bg-card);
+    text-align: center;
+    transition: all 0.4s ease;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--border-strong);
+    box-shadow: 0 12px 40px rgba(139, 94, 26, 0.1);
+  }
+
+  .feature-card .big-icon {
+    font-size: 28px;
+    margin-bottom: 10px;
+  }
+
+  .feature-card h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    color: var(--gold-bright);
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* Visual type badges */
+  .vtype-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .vtype-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    background: var(--bg-card);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .vtype-badge .vdot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  /* WS message diagram */
+  .ws-flow {
+    display: flex;
+    gap: 24px;
+    align-items: stretch;
+    justify-content: center;
+    max-width: 1050px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .ws-column {
+    flex: 1;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ws-column-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+
+  .ws-msg {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .ws-msg.outgoing { border-left: 3px solid var(--teal); }
+  .ws-msg.incoming { border-left: 3px solid var(--gold); }
+  .ws-msg.event    { border-left: 3px solid var(--purple); }
+
+  .ws-arrow-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    align-items: center;
+    width: 48px;
+    flex-shrink: 0;
+  }
+
+  .ws-arrow-right, .ws-arrow-left {
+    width: 40px;
+    height: 1px;
+    background: var(--border-strong);
+    position: relative;
+  }
+
+  .ws-arrow-right::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -3px;
+    border: solid var(--gold-dim);
+    border-width: 0 1.5px 1.5px 0;
+    padding: 3px;
+    transform: rotate(-45deg);
+  }
+
+  .ws-arrow-left::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: -3px;
+    border: solid var(--teal);
+    border-width: 0 1.5px 1.5px 0;
+    padding: 3px;
+    transform: rotate(135deg);
+  }
+
+  /* Full-width highlight box */
+  .highlight-box {
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, rgba(139,94,26,0.05), rgba(255,255,255,0.5));
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .highlight-box p {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-muted);
+  }
+
+  .highlight-box strong {
+    color: var(--gold-bright);
+    font-weight: 500;
+  }
+
+  /* Inline key-value pairs */
+  .kv-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .kv-item {
+    text-align: center;
+  }
+
+  .kv-key {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .kv-val {
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: var(--gold-bright);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 0 — TITLE
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide active" data-slide="0">
+    <div class="slide-header">
+      <div class="slide-number anim-in">Architecture Deep Dive</div>
+      <h1 class="slide-title anim-in anim-d1" style="font-size: clamp(40px, 5vw, 72px);">AI Historian</h1>
+      <div class="divider anim-in anim-d2"></div>
+      <p class="slide-subtitle anim-in anim-d3">A Real-Time Multimodal Research &amp; Documentary Engine</p>
+    </div>
+
+    <div class="stat-row anim-in anim-d4">
+      <div class="stat-item">
+        <div class="stat-value">11</div>
+        <div class="stat-label">Pipeline Phases</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">6</div>
+        <div class="stat-label">Gemini Models</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">3</div>
+        <div class="stat-label">Cloud Run Services</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">&lt;45s</div>
+        <div class="stat-label">First Segment</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">&lt;300ms</div>
+        <div class="stat-label">Interruption Latency</div>
+      </div>
+    </div>
+
+    <div class="kv-row anim-in anim-d5" style="margin-top: 24px;">
+      <div class="kv-item">
+        <div class="kv-key">Input</div>
+        <div class="kv-val" style="font-size: 14px;">Any historical document, any language</div>
+      </div>
+    </div>
+    <div class="kv-row anim-in anim-d6" style="margin-top: 8px;">
+      <div class="kv-item">
+        <div class="kv-key">Output</div>
+        <div class="kv-val" style="font-size: 14px;">Self-generating cinematic documentary + live voice historian</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 1 — SYSTEM OVERVIEW
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="1">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 1 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">System Overview</h1>
+        <p class="slide-subtitle anim-in anim-d2">Three services, one seamless experience</p>
+      </div>
+
+      <div class="overview-grid anim-in anim-d3">
+        <!-- Browser Layer -->
+        <div class="arch-box gold" style="text-align: center; padding: 20px;">
+          <div class="arch-box-label">Frontend</div>
+          <div class="arch-box-title" style="font-size: 18px;">Browser</div>
+          <div class="arch-box-detail" style="margin-top: 8px;">React 19 &middot; TypeScript &middot; Vite 6 &middot; Tailwind v4</div>
+          <div style="display: flex; gap: 16px; justify-content: center; margin-top: 14px; flex-wrap: wrap;">
+            <span class="tag gold">PDF Viewer</span>
+            <span class="tag gold">Research Panel</span>
+            <span class="tag gold">Documentary Player</span>
+            <span class="tag gold">Voice Button</span>
+          </div>
+        </div>
+
+        <!-- Connection Labels -->
+        <div style="display: flex; justify-content: space-around; padding: 0 60px;">
+          <div style="text-align: center;">
+            <div class="flow-arrow-down"></div>
+            <div class="connector-label">REST + SSE</div>
+          </div>
+          <div style="text-align: center;">
+            <div class="flow-arrow-down"></div>
+            <div class="connector-label">WebSocket</div>
+          </div>
+        </div>
+
+        <!-- Backend Services -->
+        <div class="overview-row">
+          <div class="arch-box teal" style="flex: 1.2;">
+            <div class="arch-box-label">Service 1</div>
+            <div class="arch-box-title">historian-api</div>
+            <div class="arch-box-detail">FastAPI &middot; Python 3.12 &middot; 2Gi / 2 CPU</div>
+            <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+              HTTP gateway, session lifecycle,<br>signed URL generation, semantic retrieval
+            </div>
+          </div>
+
+          <div class="arch-box blue" style="flex: 1.5;">
+            <div class="arch-box-label">Service 2</div>
+            <div class="arch-box-title">agent-orchestrator</div>
+            <div class="arch-box-detail">ADK + FastAPI &middot; Python 3.12 &middot; 4Gi / 4 CPU</div>
+            <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+              11-phase agent pipeline, SSE streaming,<br>parallel research, visual generation
+            </div>
+          </div>
+
+          <div class="arch-box purple" style="flex: 1.2;">
+            <div class="arch-box-label">Service 3</div>
+            <div class="arch-box-title">live-relay</div>
+            <div class="arch-box-detail">Node.js 20 &middot; 1Gi / 1 CPU</div>
+            <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+              WebSocket proxy to Gemini Live API,<br>bidirectional audio, interruption handling
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection to GCP -->
+        <div class="connector-line"><div class="dot"></div></div>
+
+        <!-- Google Cloud Layer -->
+        <div class="overview-row" style="flex-wrap: wrap; gap: 12px;">
+          <div class="arch-box green" style="flex: 1; min-width: 140px;">
+            <div class="arch-box-title" style="font-size: 13px;">Firestore</div>
+            <div class="arch-box-detail">Sessions, Segments, Chunks, Geo</div>
+          </div>
+          <div class="arch-box green" style="flex: 1; min-width: 140px;">
+            <div class="arch-box-title" style="font-size: 13px;">Cloud Storage</div>
+            <div class="arch-box-detail">PDFs, Images, Videos</div>
+          </div>
+          <div class="arch-box green" style="flex: 1; min-width: 140px;">
+            <div class="arch-box-title" style="font-size: 13px;">Document AI</div>
+            <div class="arch-box-detail">Multilingual OCR</div>
+          </div>
+          <div class="arch-box green" style="flex: 1; min-width: 140px;">
+            <div class="arch-box-title" style="font-size: 13px;">Vertex AI</div>
+            <div class="arch-box-detail">Imagen 3, Veo 2</div>
+          </div>
+          <div class="arch-box green" style="flex: 1; min-width: 140px;">
+            <div class="arch-box-title" style="font-size: 13px;">Gemini Live API</div>
+            <div class="arch-box-detail">2.5 Flash Native Audio</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 2 — 11-PHASE PIPELINE
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="2">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 2 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">The 11-Phase Pipeline</h1>
+        <p class="slide-subtitle anim-in anim-d2">SequentialAgent orchestrating document to documentary</p>
+      </div>
+
+      <div class="pipeline-track anim-in anim-d3">
+        <div style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--teal); margin-left: 70px; margin-bottom: 8px;">Global Phases (run once)</div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">I</div>
+          <div class="phase-dot gold"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Translation &amp; Scan</div>
+              <div class="phase-agent">document_analyzer &mdash; OCR, chunking, semantic curation</div>
+            </div>
+            <div class="phase-model">gemini-2.0-flash</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">II</div>
+          <div class="phase-dot teal"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Field Research</div>
+              <div class="phase-agent">scene_research &mdash; ParallelAgent with N google_search sub-agents</div>
+            </div>
+            <div class="phase-model">gemini-2.0-flash</div>
+          </div>
+        </div>
+
+        <div style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--gold); margin-left: 70px; margin-top: 12px; margin-bottom: 8px;">Per-Segment Streaming (Scene 0 first, then 1&ndash;N in parallel)</div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">III</div>
+          <div class="phase-dot gold"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Synthesis</div>
+              <div class="phase-agent">script_orch &mdash; generates SegmentScript with narration + visual descriptions</div>
+            </div>
+            <div class="phase-model">gemini-2.5-flash</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">IV</div>
+          <div class="phase-dot blue"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Creative Direction</div>
+              <div class="phase-agent">narrative_director &mdash; TEXT+IMAGE interleaved storyboard</div>
+            </div>
+            <div class="phase-model">gemini-2.5-flash-image</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">V</div>
+          <div class="phase-dot blue"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Interleaved Composition</div>
+              <div class="phase-agent">beat_illustration &mdash; pre-generates narration beats with images</div>
+            </div>
+            <div class="phase-model">gemini-2.5-flash-image</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">VI</div>
+          <div class="phase-dot purple"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Visual Interleave</div>
+              <div class="phase-agent">visual_interleave &mdash; assigns illustration / cinematic / video per beat</div>
+            </div>
+            <div class="phase-model">gemini-2.0-flash</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">VII</div>
+          <div class="phase-dot red"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Fact Validation</div>
+              <div class="phase-agent">fact_validator &mdash; hallucination firewall, cross-references research</div>
+            </div>
+            <div class="phase-model">gemini-2.0-flash</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">VIII</div>
+          <div class="phase-dot green"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Geographic Mapping</div>
+              <div class="phase-agent">geo_location_agent &mdash; geocoding with Google Maps grounding</div>
+            </div>
+            <div class="phase-model">gemini-2.0-flash</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">IX</div>
+          <div class="phase-dot gold"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Visual Storyboard</div>
+              <div class="phase-agent">narrative_visual_planner &mdash; plans unique visual territory per scene</div>
+            </div>
+            <div class="phase-model">gemini-2.0-pro</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">X</div>
+          <div class="phase-dot teal"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Visual Composition</div>
+              <div class="phase-agent">visual_research_orch &mdash; 6-stage visual detail micro-pipeline</div>
+            </div>
+            <div class="phase-model">gemini-2.0-flash</div>
+          </div>
+        </div>
+
+        <div class="pipeline-phase">
+          <div class="phase-num">XI</div>
+          <div class="phase-dot gold"></div>
+          <div class="phase-bar">
+            <div>
+              <div class="phase-name">Generation</div>
+              <div class="phase-agent">visual_director_orch &mdash; Imagen 3 frames + Veo 2 video clips</div>
+            </div>
+            <div class="phase-model">imagen-3 + veo-2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 3 — PHASE I+II: DOCUMENT ANALYSIS + RESEARCH
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="3">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 3 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">Phase I &amp; II</h1>
+        <p class="slide-subtitle anim-in anim-d2">Document Analysis &amp; Parallel Research</p>
+      </div>
+
+      <!-- Phase I Flow -->
+      <div class="section-break anim-in anim-d3"><span>Phase I &mdash; Translation &amp; Scan</span></div>
+
+      <div class="wide-flow anim-in anim-d3" style="margin-bottom: 28px;">
+        <div class="flow-row">
+          <div class="flow-node" style="border-color: rgba(46,110,68,0.3);">
+            <div class="flow-node-title" style="color: var(--green);">Document AI OCR</div>
+            <div class="flow-node-sub">Any language, any script</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node">
+            <div class="flow-node-title">Semantic Chunker</div>
+            <div class="flow-node-sub">Page breaks, headings, topics</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(26,107,94,0.3);">
+            <div class="flow-node-title" style="color: var(--teal);">Parallel Summarizer</div>
+            <div class="flow-node-sub">Semaphore(10) &middot; Flash</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(139,94,26,0.3);">
+            <div class="flow-node-title" style="color: var(--gold);">Narrative Curator</div>
+            <div class="flow-node-sub">gemini-2.0-pro Agent</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="deep-grid two-col anim-in anim-d4" style="margin-bottom: 32px;">
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon green">&#9638;</div>
+            <div class="deep-card-title">Document AI OCR</div>
+          </div>
+          <ul>
+            <li>Processes any format: PDF, images, scanned manuscripts</li>
+            <li>Supports Latin, Arabic, Cyrillic, CJK, Ottoman Turkish, dead scripts</li>
+            <li>Extracts layout structure (headings, paragraphs, tables)</li>
+            <li>Async client via <code style="color:var(--gold);">process_document</code></li>
+          </ul>
+        </div>
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon gold">&#9733;</div>
+            <div class="deep-card-title">Narrative Curator</div>
+          </div>
+          <ul>
+            <li>ADK Agent running gemini-2.0-pro via <code style="color:var(--gold);">run_async(ctx)</code></li>
+            <li>Produces 4&ndash;8 <strong style="color:var(--text);">SceneBriefs</strong>: title, era, location, cinematic hook</li>
+            <li>Generates <strong style="color:var(--text);">Visual Bible</strong>: Imagen 3 style guide for entire documentary</li>
+            <li>Writes <strong style="color:var(--text);">DocumentMap</strong>: structural overview for downstream agents</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase II Flow -->
+      <div class="section-break anim-in anim-d5"><span>Phase II &mdash; Field Research</span></div>
+
+      <div class="wide-flow anim-in anim-d5" style="margin-bottom: 20px;">
+        <div class="flow-row" style="margin-bottom: 16px;">
+          <div class="flow-node" style="border-color: rgba(139,94,26,0.3);">
+            <div class="flow-node-title">SceneBriefs</div>
+            <div class="flow-node-sub">from Phase I</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node">
+            <div class="flow-node-title">Inject Context</div>
+            <div class="flow-node-sub">per-scene state keys</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div style="display: flex; flex-direction: column; gap: 0; align-items: center;">
+            <div class="parallel-container" style="min-width: 360px;">
+              <div class="parallel-label">ParallelAgent</div>
+              <div class="parallel-agents" style="margin-top: 8px;">
+                <div class="parallel-agent">
+                  <div class="agent-name">researcher_0</div>
+                  <div class="agent-tool">google_search</div>
+                </div>
+                <div class="parallel-agent">
+                  <div class="agent-name">researcher_1</div>
+                  <div class="agent-tool">google_search</div>
+                </div>
+                <div class="parallel-agent">
+                  <div class="agent-name">researcher_2</div>
+                  <div class="agent-tool">google_search</div>
+                </div>
+                <div class="parallel-agent">
+                  <div class="agent-name">researcher_N</div>
+                  <div class="agent-tool">google_search</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(139,94,26,0.3);">
+            <div class="flow-node-title" style="color: var(--gold);">Aggregator</div>
+            <div class="flow-node-sub">merges all research</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="highlight-box anim-in anim-d6">
+        <p><strong>ADK Constraint:</strong> <code style="color:var(--teal);">google_search</code> tool cannot be combined with other tools in the same agent. Each researcher is a search-only Agent with its own <code style="color:var(--teal);">output_key</code>. The Aggregator reads all <code style="color:var(--gold);">{research_0}</code> &hellip; <code style="color:var(--gold);">{research_N}</code> state keys via ADK template substitution.</p>
+        <p style="margin-top: 8px;"><strong>3-Round Search Protocol:</strong> Core verification &rarr; visual references &rarr; secondary corroboration. Sources graded by trust tier: <span class="tag green" style="font-size: 8px;">.edu / .gov / jstor</span> <span class="tag gold" style="font-size: 8px;">Wikipedia</span> <span class="tag blue" style="font-size: 8px;">Blogs / news</span></p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 4 — PHASE III+VII: SCRIPT + FACT VALIDATION
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="4">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 4 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">Phase III &amp; VII</h1>
+        <p class="slide-subtitle anim-in anim-d2">Script Generation &amp; Hallucination Firewall</p>
+      </div>
+
+      <div class="wide-flow anim-in anim-d3" style="margin-bottom: 24px;">
+        <div class="flow-row">
+          <div class="flow-node" style="border-color: rgba(26,107,94,0.3);">
+            <div class="flow-node-title" style="color: var(--teal);">Scene Briefs</div>
+            <div class="flow-node-sub">Phase I output</div>
+          </div>
+          <div style="width: 8px;"></div>
+          <div style="font-size: 16px; color: var(--text-dim);">+</div>
+          <div style="width: 8px;"></div>
+          <div class="flow-node" style="border-color: rgba(26,107,94,0.3);">
+            <div class="flow-node-title" style="color: var(--teal);">Aggregated Research</div>
+            <div class="flow-node-sub">Phase II output</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(139,94,26,0.35); background: rgba(139,94,26,0.06);">
+            <div class="flow-node-title" style="color: var(--gold-bright);">Script Agent</div>
+            <div class="flow-node-sub">gemini-2.5-flash</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(168,52,42,0.35);">
+            <div class="flow-node-title" style="color: var(--red);">Fact Validator</div>
+            <div class="flow-node-sub">hallucination firewall</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(46,110,68,0.3);">
+            <div class="flow-node-title" style="color: var(--green);">Firestore</div>
+            <div class="flow-node-sub">segments collection</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="deep-grid two-col anim-in anim-d4">
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon gold">&#9998;</div>
+            <div class="deep-card-title">Script Generation (Phase III)</div>
+          </div>
+          <p style="margin-bottom: 8px;">Each segment becomes a <strong style="color:var(--text);">SegmentScript</strong>:</p>
+          <div class="code-block" style="font-size: 10px;">
+{
+  <span class="hl-gold">"id"</span>:                  <span class="hl-dim">"segment_0"</span>,
+  <span class="hl-gold">"title"</span>:               <span class="hl-dim">"The Fall of Constantinople"</span>,
+  <span class="hl-gold">"narration_script"</span>:    <span class="hl-dim">"On the morning of May 29..."</span>,
+  <span class="hl-gold">"visual_descriptions"</span>: <span class="hl-dim">["Wide: siege walls...", ...]</span>,
+  <span class="hl-gold">"veo2_scene"</span>:          <span class="hl-dim">"Cannon smoke rising..."</span>,
+  <span class="hl-gold">"mood"</span>:                <span class="hl-dim">"tension_crescendo"</span>,
+  <span class="hl-gold">"sources"</span>:             <span class="hl-dim">["jstor.org/...", ...]</span>
+}
+          </div>
+        </div>
+
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon red">&#9888;</div>
+            <div class="deep-card-title">Fact Validation (Phase VII)</div>
+          </div>
+          <p style="margin-bottom: 8px;">LLM-judge classifies every sentence:</p>
+          <ul>
+            <li><span class="tag green" style="font-size: 8px;">Supported</span> &mdash; keep exact, backed by research</li>
+            <li><span class="tag gold" style="font-size: 8px;">Unsupported Specific</span> &mdash; remove, write bridging sentence</li>
+            <li><span class="tag blue" style="font-size: 8px;">Unsupported Plausible</span> &mdash; soften with hedging language</li>
+            <li><span class="tag purple" style="font-size: 8px;">Non-Factual</span> &mdash; keep exact (atmospheric, rhetorical)</li>
+          </ul>
+          <p style="margin-top: 10px; font-size: 11px; color: var(--red);">Safety: only overwrites script if validated segment count matches original (prevents data loss)</p>
+        </div>
+      </div>
+
+      <div class="highlight-box anim-in anim-d5" style="margin-top: 20px;">
+        <p><strong>Per-Segment Streaming:</strong> Scene 0 runs through Phases III&ndash;XI first (fast path &lt;45s). Only after Scene 0 emits <code style="color:var(--green);">segment_update(complete)</code> do Scenes 1&ndash;N start in parallel with <code style="color:var(--teal);">asyncio.Semaphore(2)</code> to respect API rate limits.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 5 — PHASE IV+V+VI: INTERLEAVED MULTIMODAL
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="5">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 5 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">Phases IV, V &amp; VI</h1>
+        <p class="slide-subtitle anim-in anim-d2">Interleaved Multimodal Generation &mdash; Gemini TEXT+IMAGE</p>
+      </div>
+
+      <div class="highlight-box anim-in anim-d3" style="margin-bottom: 24px;">
+        <p>These three phases use Gemini's native <strong>interleaved TEXT+IMAGE output</strong> (<code style="color:var(--teal);">response_modalities=["TEXT","IMAGE"]</code>) &mdash; a single model call produces both narration text and illustrations simultaneously. This is the core Creative Storytellers innovation.</p>
+      </div>
+
+      <div class="deep-grid three-col anim-in anim-d4">
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon blue">&#127912;</div>
+            <div class="deep-card-title">IV: Creative Direction</div>
+          </div>
+          <p style="margin-bottom: 6px;">One Gemini call per scene:</p>
+          <ul>
+            <li>Input: narration + visual bible + scene brief</li>
+            <li>Output: creative direction <em>text</em> + storyboard <em>image</em></li>
+            <li>Image uploaded to GCS as storyboard PNG</li>
+            <li>Guides all downstream visual decisions</li>
+          </ul>
+          <div class="tag blue" style="margin-top: 10px;">gemini-2.5-flash-image</div>
+        </div>
+
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon blue">&#9835;</div>
+            <div class="deep-card-title">V: Beat Illustration</div>
+          </div>
+          <p style="margin-bottom: 6px;">Decomposes narration into 3&ndash;4 dramatic beats:</p>
+          <ul>
+            <li>Each beat: composition hint + TEXT+IMAGE call</li>
+            <li><strong style="color:var(--gold);">Beat 0 generated first</strong> (fast path)</li>
+            <li>Beats 1&ndash;N concurrent via asyncio.gather</li>
+            <li>Beat images are the <em>primary visual path</em> for the player</li>
+          </ul>
+          <div class="tag blue" style="margin-top: 10px;">gemini-2.5-flash-image</div>
+        </div>
+
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon purple">&#9679;</div>
+            <div class="deep-card-title">VI: Visual Interleave</div>
+          </div>
+          <p style="margin-bottom: 6px;">Assigns generation path per beat:</p>
+          <div class="vtype-row" style="justify-content: flex-start; gap: 8px; margin-top: 8px; flex-direction: column;">
+            <div class="vtype-badge" style="padding: 5px 10px;">
+              <div class="vdot" style="background: var(--blue);"></div>
+              <span><strong style="color:var(--blue);">illustration</strong> &mdash; keep Phase V image</span>
+            </div>
+            <div class="vtype-badge" style="padding: 5px 10px;">
+              <div class="vdot" style="background: var(--gold);"></div>
+              <span><strong style="color:var(--gold);">cinematic</strong> &mdash; Imagen 3 photorealistic</span>
+            </div>
+            <div class="vtype-badge" style="padding: 5px 10px;">
+              <div class="vdot" style="background: var(--purple);"></div>
+              <span><strong style="color:var(--purple);">video</strong> &mdash; Veo 2 short clip</span>
+            </div>
+          </div>
+          <p style="margin-top: 8px; font-size: 11px; color: var(--text-dim);">Constraint: if &ge;3 beats, must include at least 1 of each type</p>
+        </div>
+      </div>
+
+      <div class="wide-flow anim-in anim-d5" style="margin-top: 24px;">
+        <div class="flow-row">
+          <div class="flow-node" style="border-color: rgba(42,94,138,0.3);">
+            <div class="flow-node-title" style="color: var(--blue);">Script</div>
+            <div class="flow-node-sub">Phase III</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(42,94,138,0.35); background: rgba(42,94,138,0.06);">
+            <div class="flow-node-title" style="color: var(--blue);">Narrative Director</div>
+            <div class="flow-node-sub">storyboard</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(42,94,138,0.35); background: rgba(42,94,138,0.06);">
+            <div class="flow-node-title" style="color: var(--blue);">Beat Illustration</div>
+            <div class="flow-node-sub">3&ndash;4 beats &times; image</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(107,74,154,0.35); background: rgba(107,74,154,0.06);">
+            <div class="flow-node-title" style="color: var(--purple);">Visual Interleave</div>
+            <div class="flow-node-sub">assign types</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(139,94,26,0.3);">
+            <div class="flow-node-title" style="color: var(--gold);">Phase XI</div>
+            <div class="flow-node-sub">generation</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 6 — PHASE X+XI: VISUAL RESEARCH + GENERATION
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="6">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 6 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">Phases X &amp; XI</h1>
+        <p class="slide-subtitle anim-in anim-d2">Visual Research Micro-Pipeline &amp; Image/Video Generation</p>
+      </div>
+
+      <div class="section-break anim-in anim-d3"><span>Phase X &mdash; 6-Stage Visual Research</span></div>
+
+      <div class="wide-flow anim-in anim-d3" style="margin-bottom: 20px;">
+        <div class="flow-row" style="flex-wrap: wrap; gap: 4px;">
+          <div class="flow-node" style="min-width: 120px;">
+            <div class="flow-node-title" style="font-size: 12px;">Stage 0</div>
+            <div class="flow-node-sub">Query Generation</div>
+          </div>
+          <div class="flow-arrow-right" style="width: 16px;"></div>
+          <div class="flow-node" style="min-width: 120px; border-color: rgba(26,107,94,0.3);">
+            <div class="flow-node-title" style="font-size: 12px; color: var(--teal);">Stage 1</div>
+            <div class="flow-node-sub">Google Search</div>
+          </div>
+          <div class="flow-arrow-right" style="width: 16px;"></div>
+          <div class="flow-node" style="min-width: 120px;">
+            <div class="flow-node-title" style="font-size: 12px;">Stage 2</div>
+            <div class="flow-node-sub">Source Evaluation</div>
+          </div>
+          <div class="flow-arrow-right" style="width: 16px;"></div>
+          <div class="flow-node" style="min-width: 120px; border-color: rgba(42,94,138,0.3);">
+            <div class="flow-node-title" style="font-size: 12px; color: var(--blue);">Stage 3</div>
+            <div class="flow-node-sub">Content Fetch</div>
+          </div>
+          <div class="flow-arrow-right" style="width: 16px;"></div>
+          <div class="flow-node" style="min-width: 120px; border-color: rgba(139,94,26,0.3);">
+            <div class="flow-node-title" style="font-size: 12px; color: var(--gold);">Stage 4</div>
+            <div class="flow-node-sub">LLM Evaluation</div>
+          </div>
+          <div class="flow-arrow-right" style="width: 16px;"></div>
+          <div class="flow-node" style="min-width: 120px; border-color: rgba(46,110,68,0.3);">
+            <div class="flow-node-title" style="font-size: 12px; color: var(--green);">Stage 5</div>
+            <div class="flow-node-sub">Merge &amp; Output</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="deep-grid two-col anim-in anim-d4" style="margin-bottom: 24px;">
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon teal">&#128270;</div>
+            <div class="deep-card-title">Visual Research Strategy</div>
+          </div>
+          <ul>
+            <li><strong style="color:var(--gold);">Fast path (Scene 0):</strong> 3 sources, early exit at 2 accepted</li>
+            <li><strong style="color:var(--teal);">Deep path (Scene 1&ndash;N):</strong> 10 sources, full evaluation</li>
+            <li>Content fetch: webpage scrape (httpx + BeautifulSoup), Wikipedia REST API, PDF via Document AI, image via Gemini multimodal</li>
+            <li>Output: <code style="color:var(--gold);">VisualDetailManifest</code> with enriched prompts</li>
+          </ul>
+        </div>
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon gold">&#128247;</div>
+            <div class="deep-card-title">No ADK Sub-Agents</div>
+          </div>
+          <ul>
+            <li>All direct <code style="color:var(--teal);">client.aio.models.generate_content</code> calls</li>
+            <li>Bypasses ADK overhead for speed</li>
+            <li>Concurrent via <code style="color:var(--teal);">asyncio.gather</code></li>
+            <li>Uses <code style="color:var(--gold);">google_search</code> grounding for URL discovery</li>
+            <li>Evaluates source authority, detail density, relevance</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="section-break anim-in anim-d5"><span>Phase XI &mdash; Imagen 3 + Veo 2 Generation</span></div>
+
+      <div class="deep-grid two-col anim-in anim-d5">
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon gold">&#127748;</div>
+            <div class="deep-card-title">Imagen 3 (4 frames/segment)</div>
+          </div>
+          <ul>
+            <li><strong style="color:var(--text);">Frame modifiers:</strong> wide establishing, medium human, close-up detail, dramatic atmosphere</li>
+            <li>Prompt priority: enriched manifest &gt; script visual_descriptions &gt; generic fallback</li>
+            <li>Period-specific <code style="color:var(--red);">negative_prompt</code>: electricity, plastic, modern objects</li>
+            <li>4 frames generated concurrently via asyncio.gather</li>
+            <li>~5s per frame &rarr; uploaded to GCS immediately</li>
+          </ul>
+        </div>
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon purple">&#127909;</div>
+            <div class="deep-card-title">Veo 2 (optional video)</div>
+          </div>
+          <ul>
+            <li>Triggered for segments with <code style="color:var(--purple);">veo2_scene</code> description</li>
+            <li>Fire-and-forget: <code style="color:var(--teal);">generate_videos(output_gcs_uri=...)</code></li>
+            <li>Long-running operation &mdash; polled every 20s (max 10 min)</li>
+            <li><code style="color:var(--text-dim);">client.operations.get</code> is sync-only &rarr; <code style="color:var(--teal);">run_in_executor</code></li>
+            <li>On completion: updates Firestore <code style="color:var(--green);">videoUrl</code> + SSE event</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 7 — LIVE VOICE LAYER
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="7">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 7 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">Live Voice Layer</h1>
+        <p class="slide-subtitle anim-in anim-d2">WebSocket Relay, Interruption Handling &amp; Live Illustration</p>
+      </div>
+
+      <div class="ws-flow anim-in anim-d3">
+        <div class="ws-column">
+          <div class="ws-column-title">Browser</div>
+          <div class="ws-msg outgoing">
+            <strong style="color:var(--teal);">AudioWorkletNode</strong><br>
+            PCM 16kHz, 16-bit, mono<br>
+            1024-byte chunks &rarr; base64
+          </div>
+          <div class="ws-msg incoming">
+            <strong style="color:var(--gold);">AudioBufferSourceNode</strong><br>
+            PCM 24kHz playback queue<br>
+            AnalyserNode &rarr; Ken Burns
+          </div>
+          <div class="ws-msg event">
+            <strong style="color:var(--purple);">caption</strong> display<br>
+            Word-by-word blur reveal
+          </div>
+          <div class="ws-msg event">
+            <strong style="color:var(--purple);">interrupted</strong><br>
+            Stop audio queue + Ken Burns<br>
+            Switch to listening mode
+          </div>
+        </div>
+
+        <div class="ws-arrow-col">
+          <div class="ws-arrow-right"></div>
+          <div style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">PCM</div>
+          <div class="ws-arrow-left"></div>
+          <div style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">audio</div>
+          <div class="ws-arrow-left"></div>
+          <div style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">text</div>
+          <div class="ws-arrow-left"></div>
+        </div>
+
+        <div class="ws-column">
+          <div class="ws-column-title">live-relay (Node.js)</div>
+          <div class="ws-msg outgoing">
+            Fetch documentary context<br>
+            from Firestore (15m cache)
+          </div>
+          <div class="ws-msg outgoing">
+            Build system instruction:<br>
+            <strong style="color:var(--gold);">persona + all segments</strong><br>
+            + sources + visual bible
+          </div>
+          <div class="ws-msg event">
+            <strong style="color:var(--purple);">generate_illustration</strong><br>
+            Fire-and-forget (5&ndash;7s)<br>
+            FunctionResponse &lt; 10ms
+          </div>
+          <div class="ws-msg incoming">
+            <strong style="color:var(--gold);">resumption token</strong><br>
+            Saved to Firestore<br>
+            Valid 2 hours
+          </div>
+        </div>
+
+        <div class="ws-arrow-col">
+          <div class="ws-arrow-right"></div>
+          <div style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">WS</div>
+          <div class="ws-arrow-left"></div>
+          <div style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">WS</div>
+          <div class="ws-arrow-left"></div>
+        </div>
+
+        <div class="ws-column">
+          <div class="ws-column-title">Gemini Live API</div>
+          <div class="ws-msg incoming">
+            <strong style="color:var(--gold);">BidiGenerateContent</strong><br>
+            gemini-2.5-flash-native-audio
+          </div>
+          <div class="ws-msg incoming">
+            VAD detection &rarr;<br>
+            <strong style="color:var(--gold);">serverContent.interrupted</strong>
+          </div>
+          <div class="ws-msg incoming">
+            <strong style="color:var(--gold);">modelTurn</strong><br>
+            Interleaved text + audio parts
+          </div>
+          <div class="ws-msg event">
+            <strong style="color:var(--purple);">sessionResumptionUpdate</strong><br>
+            goAway handling
+          </div>
+        </div>
+      </div>
+
+      <div class="highlight-box anim-in anim-d5" style="margin-top: 24px;">
+        <p><strong>Interruption Flow (&lt;300ms):</strong> User speaks &rarr; VAD detects speech &rarr; Gemini sets <code style="color:var(--red);">interrupted=true</code> &rarr; relay forwards to browser &rarr; audio queue flushed &rarr; Ken Burns paused &rarr; waveform + caption mode. On <code style="color:var(--green);">turn_complete</code>, documentary resumes at next beat.</p>
+      </div>
+
+      <div class="deep-grid three-col anim-in anim-d6" style="margin-top: 20px;">
+        <div class="deep-card" style="text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 6px;">&#127908;</div>
+          <div class="deep-card-title" style="font-size: 14px;">Audio In</div>
+          <p>16kHz PCM, 16-bit mono<br>1024-byte chunks</p>
+        </div>
+        <div class="deep-card" style="text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 6px;">&#128266;</div>
+          <div class="deep-card-title" style="font-size: 14px;">Audio Out</div>
+          <p>24kHz PCM, 16-bit mono<br>Buffer queue playback</p>
+        </div>
+        <div class="deep-card" style="text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 6px;">&#127912;</div>
+          <div class="deep-card-title" style="font-size: 14px;">Live Illustration</div>
+          <p>Gemini calls function<br>mid-narration (fire &amp; forget)</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       SLIDE 8 — SSE + DATA FLOW + FRONTEND
+       ════════════════════════════════════════════════════════════ -->
+  <div class="slide" data-slide="8">
+    <div class="slide-scroll">
+      <div class="slide-header">
+        <div class="slide-number anim-in">Slide 8 of 8</div>
+        <h1 class="slide-title anim-in anim-d1">Real-Time Data Flow</h1>
+        <p class="slide-subtitle anim-in anim-d2">SSE Streaming, Firestore Schema &amp; Frontend State</p>
+      </div>
+
+      <div class="deep-grid two-col anim-in anim-d3">
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon gold">&#9889;</div>
+            <div class="deep-card-title">SSE Event Types</div>
+          </div>
+          <div class="code-block" style="font-size: 10px; line-height: 1.8;">
+<span class="hl-gold">pipeline_phase</span>   <span class="hl-dim">{ phase, label, message }</span>
+<span class="hl-teal">agent_status</span>     <span class="hl-dim">{ agentId, status, query, facts[] }</span>
+<span class="hl-green">segment_update</span>   <span class="hl-dim">{ segmentId, status, title, imageUrls[] }</span>
+<span class="hl-blue">stats_update</span>     <span class="hl-dim">{ sourcesFound, factsVerified }</span>
+<span class="hl-gold">narration_beat</span>   <span class="hl-dim">{ segmentId, beatIndex, imageUrl }</span>
+<span class="hl-green">geo_update</span>       <span class="hl-dim">{ segmentId, center, events, routes }</span>
+<span class="hl-teal">agent_source_eval</span> <span class="hl-dim">{ agentId, url, accepted, reason }</span>
+          </div>
+          <p style="margin-top: 10px; font-size: 11px; color: var(--text-dim);"><strong style="color: var(--gold-bright);">Drip buffer (150ms):</strong> Prevents UI overload from parallel agent bursts. Events queued in pendingRef, released at intervals.</p>
+        </div>
+
+        <div class="deep-card">
+          <div class="deep-card-header">
+            <div class="deep-card-icon green">&#128451;</div>
+            <div class="deep-card-title">Firestore Schema</div>
+          </div>
+          <div class="code-block" style="font-size: 10px; line-height: 1.7;">
+<span class="hl-gold">/sessions/{id}</span>
+  <span class="hl-dim">status, gcsPath, language, visualBible</span>
+
+<span class="hl-gold">/sessions/{id}/chunks/{chunkId}</span>
+  <span class="hl-dim">raw_text, summary, scene_ids[]</span>
+
+<span class="hl-gold">/sessions/{id}/segments/{segId}</span>
+  <span class="hl-dim">title, narration_script, mood</span>
+  <span class="hl-dim">imageUrls[4], videoUrl?, sources[]</span>
+
+<span class="hl-gold">/sessions/{id}/geos/{segId}</span>
+  <span class="hl-dim">center, zoom, events[], routes[]</span>
+
+<span class="hl-gold">/sessions/{id}/liveSession</span>
+  <span class="hl-dim">resumptionToken, persona, voiceState</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-break anim-in anim-d4"><span>Frontend State Architecture</span></div>
+
+      <div class="wide-flow anim-in anim-d5" style="margin-bottom: 16px;">
+        <div class="flow-row">
+          <div class="flow-node" style="border-color: rgba(139,94,26,0.3);">
+            <div class="flow-node-title">SSE Stream</div>
+            <div class="flow-node-sub">EventSource</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div class="flow-node" style="border-color: rgba(26,107,94,0.3);">
+            <div class="flow-node-title" style="color: var(--teal);">useSSE Hook</div>
+            <div class="flow-node-sub">150ms drip buffer</div>
+          </div>
+          <div class="flow-arrow-right"></div>
+          <div style="display: flex; gap: 8px;">
+            <div class="flow-node" style="min-width: 90px;">
+              <div class="flow-node-title" style="font-size: 11px;">sessionStore</div>
+            </div>
+            <div class="flow-node" style="min-width: 90px;">
+              <div class="flow-node-title" style="font-size: 11px;">researchStore</div>
+            </div>
+            <div class="flow-node" style="min-width: 90px;">
+              <div class="flow-node-title" style="font-size: 11px;">playerStore</div>
+            </div>
+            <div class="flow-node" style="min-width: 90px;">
+              <div class="flow-node-title" style="font-size: 11px;">voiceStore</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-grid anim-in anim-d6" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div class="feature-card" style="padding: 14px;">
+          <div class="big-icon" style="font-size: 20px;">&#128196;</div>
+          <h3 style="font-size: 13px;">Expedition Log</h3>
+          <p style="font-size: 11px;">Pipeline phases narrated as expedition journal entries</p>
+        </div>
+        <div class="feature-card" style="padding: 14px;">
+          <div class="big-icon" style="font-size: 20px;">&#128269;</div>
+          <h3 style="font-size: 13px;">Agent Cards</h3>
+          <p style="font-size: 11px;">5-state visual machine: queued &rarr; searching &rarr; done</p>
+        </div>
+        <div class="feature-card" style="padding: 14px;">
+          <div class="big-icon" style="font-size: 20px;">&#127916;</div>
+          <h3 style="font-size: 13px;">Ken Burns Player</h3>
+          <p style="font-size: 11px;">Audio-reactive pan/zoom driven by AnalyserNode</p>
+        </div>
+        <div class="feature-card" style="padding: 14px;">
+          <div class="big-icon" style="font-size: 20px;">&#127908;</div>
+          <h3 style="font-size: 13px;">Voice Button</h3>
+          <p style="font-size: 11px;">Canvas waveform, interruption, resumption</p>
+        </div>
+      </div>
+
+      <div class="highlight-box anim-in anim-d7" style="margin-top: 20px;">
+        <p><strong>Zustand 5</strong> signals-based subscriptions ensure components re-render only when their exact slice changes. Combined with the SSE drip buffer and Vite code-splitting (&lt;200KB gzipped), the frontend maintains <strong>60fps</strong> even during peak parallel agent activity.</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .deck -->
+
+
+<!-- ════════════════════════════════════════════════════════════
+     NAVIGATION BAR
+     ════════════════════════════════════════════════════════════ -->
+<div class="nav-bar">
+  <div class="nav-label" id="navLabel">0 / 8</div>
+  <div class="slide-dots" id="dots"></div>
+  <div class="nav-arrows">
+    <button class="nav-arrow" id="prevBtn" aria-label="Previous slide">&#8592;</button>
+    <button class="nav-arrow" id="nextBtn" aria-label="Next slide">&#8594;</button>
+  </div>
+</div>
+
+
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.getElementById('dots');
+  const navLabel = document.getElementById('navLabel');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  let current = 0;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'slide-dot' + (i === 0 ? ' active' : '');
+    dot.setAttribute('aria-label', `Go to slide ${i}`);
+    dot.addEventListener('click', () => goTo(i));
+    dots.appendChild(dot);
+  });
+
+  function goTo(n) {
+    if (n < 0 || n >= slides.length || n === current) return;
+    slides[current].classList.remove('active');
+    dots.children[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    dots.children[current].classList.add('active');
+    navLabel.textContent = `${current} / ${slides.length - 1}`;
+
+    // Re-trigger animations
+    const anims = slides[current].querySelectorAll('.anim-in');
+    anims.forEach(el => {
+      el.style.animation = 'none';
+      el.offsetHeight; // reflow
+      el.style.animation = '';
+    });
+  }
+
+  prevBtn.addEventListener('click', () => goTo(current - 1));
+  nextBtn.addEventListener('click', () => goTo(current + 1));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault();
+      goTo(current + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goTo(current - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      goTo(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      goTo(slides.length - 1);
+    }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    const diff = e.changedTouches[0].screenX - touchStartX;
+    if (Math.abs(diff) > 60) {
+      diff < 0 ? goTo(current + 1) : goTo(current - 1);
+    }
+  }, { passive: true });
+})();
+</script>
+
+</body>
+</html>
