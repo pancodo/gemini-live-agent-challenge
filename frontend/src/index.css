@@ -701,11 +701,11 @@ body {
 .player-root {
   /* Player tokens — dark by default (cinematic) */
   --player-bg:              #0d0b09;
-  --player-text:            rgba(255,255,255,0.95);
-  --player-text-secondary:  rgba(255,255,255,0.7);
-  --player-text-dim:        rgba(255,255,255,0.5);
-  --player-text-disabled:   rgba(255,255,255,0.3);
-  --player-overlay:         rgba(0,0,0,0.85);
+  --player-text:            rgba(255,255,255,0.88);
+  --player-text-secondary:  rgba(255,255,255,0.6);
+  --player-text-dim:        rgba(255,255,255,0.4);
+  --player-text-disabled:   rgba(255,255,255,0.25);
+  --player-overlay:         rgba(0,0,0,0.6);
   --player-surface:         rgba(20,20,20,0.95);
   --player-card:            rgba(255,255,255,0.06);
   --player-border:          rgba(255,255,255,0.15);
