@@ -60,13 +60,16 @@ export function CaptionTrack() {
         {visible.map((word, i) => {
           const globalIdx = windowStart + i;
           const isNew = globalIdx >= newStart;
+          // Stagger new words 60ms apart so bulk arrivals reveal one-by-one
+          const newWordOffset = isNew ? globalIdx - newStart : 0;
           return (
             <span
               key={globalIdx}
               className="inline-block mr-[0.3em]"
               style={{
                 opacity: isNew ? 0 : 1,
-                animation: isNew ? 'caption-fade-in 0.3s ease forwards' : undefined,
+                animation: isNew ? 'caption-fade-in 0.5s ease forwards' : undefined,
+                animationDelay: isNew ? `${newWordOffset * 0.06}s` : undefined,
               }}
             >
               {word}
