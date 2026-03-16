@@ -67,8 +67,7 @@ This is the first system to combine **live multilingual OCR, parallel AI researc
 
 ### Demo Video (4 min)
 
-<!-- Replace with actual YouTube link -->
-[![Watch the Demo](https://img.shields.io/badge/YouTube-Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](#)
+[![Watch the Demo](https://img.shields.io/badge/YouTube-Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=WafKFYcQpKc)
 
 > A 4-minute walkthrough showing: document upload, live expedition log with real-time agent progress, documentary playback with Ken Burns cinematic visuals, voice interruption mid-narration, question-driven narrative branching, and the interactive timeline map.
 
