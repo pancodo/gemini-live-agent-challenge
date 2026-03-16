@@ -241,8 +241,20 @@ export function TopNav() {
         )}
       </div>
 
-      {/* Right: Theme toggle + Settings + Status + elapsed time */}
+      {/* Right: Architecture + Theme toggle + Settings + Status + elapsed time */}
       <div className="flex items-center gap-3">
+        {/* Architecture diagram link */}
+        <a
+          href="/architecture.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1 rounded transition-colors duration-150"
+          style={{ background: 'var(--gold)', color: 'var(--bg)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          <span className="font-sans text-[11px] uppercase tracking-[0.15em] font-medium">Architecture</span>
+        </a>
         {/* Single-click theme toggle */}
         <button
           type="button"

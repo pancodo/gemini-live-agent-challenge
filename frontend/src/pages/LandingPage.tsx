@@ -201,6 +201,22 @@ function LandingNav() {
         >
           GitHub
         </a>
+        <a
+          href="/architecture.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden sm:block px-4 py-1.5 rounded text-[11px] uppercase tracking-[0.12em] transition-colors"
+          style={{
+            fontFamily: 'var(--font-sans)',
+            color: C.bg,
+            background: C.gold,
+            fontWeight: 500,
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = goldBrightConcrete)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = C.gold)}
+        >
+          Architecture
+        </a>
 
         {/* Theme toggle */}
         <button
