@@ -83,8 +83,21 @@
 
 /* ── Base html rule ─────────────────────────────────────── */
 html {
-  color-scheme: light dark;
+  color-scheme: light;
 }
+
+/* ── Scrollbar styling (parchment-themed) ────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg4, #D6CCBA) var(--bg2, #EBE4D8);
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: var(--bg2, #EBE4D8); }
+*::-webkit-scrollbar-thumb {
+  background: var(--bg4, #D6CCBA);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--muted, #8A7A62); }
 
 /* ── Runtime-only CSS Custom Properties (JS-driven, not in @theme) ─ */
 :root {
@@ -129,6 +142,7 @@ html {
   --shadow-warm: rgba(196, 149, 106, 0.2);
   --ambient-color: rgba(196, 149, 106, 0.08);
   color-scheme: dark;
+  scrollbar-color: #2f2519 #1a1510;
 }
 
 /* ── Dark Theme — Aurora Blob Overrides ───────────────── */
