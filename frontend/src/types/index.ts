@@ -110,6 +110,7 @@ export type SSEEventType =
   | 'segment_playable'
   | 'narration_beat'
   | 'beat_visual_assigned'
+  | 'session_label'
   | 'error';
 
 export interface AgentStatusEvent {
@@ -151,6 +152,11 @@ export interface AgentSourceEvaluationEvent {
   type: 'agent_source_evaluation';
   agentId: string;
   source: EvaluatedSource;
+}
+
+export interface SessionLabelEvent {
+  type: 'session_label';
+  label: string;
 }
 
 export interface ErrorEvent {
@@ -253,6 +259,7 @@ export type SSEEvent =
   | SegmentPlayableEvent
   | NarrationBeatEvent
   | BeatVisualAssignedEvent
+  | SessionLabelEvent
   | ErrorEvent;
 
 // ── Documentary Branching ─────────────────────────────────────
