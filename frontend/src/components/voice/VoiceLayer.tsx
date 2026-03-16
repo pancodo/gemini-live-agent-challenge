@@ -62,8 +62,8 @@ export function VoiceLayer() {
           const seg = Object.values(useResearchStore.getState().segments)
             .find(s => s.id === usePlayerStore.getState().currentSegmentId);
           const prefix = idx === 0
-            ? `You are narrating "${seg?.title ?? ''}". Deliver this naturally, no announcements. `
-            : 'Continue narrating the next moment: ';
+            ? `[NARRATION MODE] Read the following script aloud exactly as written. No commentary, no tools. Title: "${seg?.title ?? ''}". Script: `
+            : '[NARRATION MODE] Continue reading the next passage exactly as written. No commentary, no tools. Script: ';
           sendTextStableRef.current(prefix + beat.narrationText);
         }
         transition('historian_speaking');
