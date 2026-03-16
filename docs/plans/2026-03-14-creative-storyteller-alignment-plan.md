@@ -38,7 +38,7 @@ The Creative Storyteller category states:
 
 | Component | File | Status | Visible to Judges? |
 |---|---|---|---|
-| **Phase 3.1 — Narrative Director** | `narrative_director_agent.py` | COMPLETE | Workspace storyboard — yes |
+| **Phase IV — Narrative Director** | `narrative_director_agent.py` | COMPLETE | Workspace storyboard — yes |
 | **Beat Narration Endpoint** | `historian_api/routes/narrate.py` | COMPLETE | Documentary player — yes, but secondary |
 
 ### Frontend Beat Integration (All Complete)
@@ -89,7 +89,7 @@ The Creative Storyteller category states:
 ### Current Documentary Player Flow
 
 ```
-1. Pipeline runs → Phase V generates Imagen 3 images (4 per segment) → stored in Firestore
+1. Pipeline runs → Phase XI generates Imagen 3 images (4 per segment) → stored in Firestore
 2. Player opens segment → shows pre-gen Imagen 3 images IMMEDIATELY (Ken Burns animation)
 3. Player calls POST /narrate → beat decomposition + Gemini TEXT+IMAGE per beat
 4. Beats arrive 5-20s LATER → beat images cross-fade OVER pre-gen images
@@ -122,22 +122,22 @@ The Creative Storyteller category states:
 ### Before (Current)
 
 ```
-Pipeline: Script → Imagen 3 (Phase V, 4 frames/segment) → Firestore
+Pipeline: Script → Imagen 3 (Phase XI, 4 frames/segment) → Firestore
 Player opens → Shows Imagen 3 images FIRST → POST /narrate → Beats arrive LATER → Overlay
 ```
 
 ### After (Proposed)
 
 ```
-Pipeline: Script → Beat Illustration (Phase 3.2, Gemini TEXT+IMAGE) → Firestore
+Pipeline: Script → Beat Illustration (Phase V, Gemini TEXT+IMAGE) → Firestore
 Player opens → Shows beat images FIRST → Imagen 3 arrives LATER as enhancement
 ```
 
 ### What Changes (3 Things)
 
-#### Change 1: New Pipeline Agent — Beat Illustration (Phase 3.2)
+#### Change 1: New Pipeline Agent — Beat Illustration (Phase V)
 
-Move beat generation from the on-demand endpoint (`POST /narrate`) into the pipeline itself, as Phase 3.2 immediately after script generation.
+Move beat generation from the on-demand endpoint (`POST /narrate`) into the pipeline itself, as Phase V immediately after script generation.
 
 **New file:** `backend/agent_orchestrator/agents/beat_illustration_agent.py`
 
@@ -154,20 +154,20 @@ A `BaseAgent` subclass that:
 Phase I    — Document Analysis
 Phase II   — Parallel Research + Aggregation
 Phase III  — Script Generation
-Phase 3.1  — Narrative Director (workspace storyboard — TEXT+IMAGE) [KEEP]
-Phase 3.2  — Beat Illustration (per-beat TEXT+IMAGE for player) [NEW]
-Phase III.5 — Fact Validation
-Phase 3.8  — Geo Location
-Phase IV   — Visual Research
-Phase V    — Visual Director (Imagen 3 + Veo 2) [DEMOTED to enhancement]
+Phase IV   — Narrative Director (workspace storyboard — TEXT+IMAGE) [KEEP]
+Phase V    — Beat Illustration (per-beat TEXT+IMAGE for player) [NEW]
+Phase VII  — Fact Validation
+Phase VIII — Geo Location
+Phase X    — Visual Research
+Phase XI   — Visual Director (Imagen 3 + Veo 2) [DEMOTED to enhancement]
 ```
 
-**SSE events emitted by Phase 3.2:**
-- `pipeline_phase(phase=3.2, label="INTERLEAVED COMPOSITION")` — visible in Expedition Log
+**SSE events emitted by Phase V:**
+- `pipeline_phase(phase=5, label="INTERLEAVED COMPOSITION")` — visible in Expedition Log
 - `narration_beat` per beat (already handled by frontend)
 - `segment_update(status="beats_ready")` per segment
 
-**Why Phase 3.2 and not the existing on-demand endpoint:**
+**Why Phase V and not the existing on-demand endpoint:**
 - Beats are ready BEFORE the player opens — no 5-20s gap
 - Pipeline generates beats for all segments, not just the current one
 - Expedition Log shows "INTERLEAVED COMPOSITION" as a visible phase — judges see it
@@ -188,7 +188,7 @@ Phase V    — Visual Director (Imagen 3 + Veo 2) [DEMOTED to enhancement]
 **New behavior:**
 - Beat images are the PRIMARY visual source
 - Imagen 3 images are the FALLBACK (shown only if beat has no image)
-- When Imagen 3 images arrive later (Phase V), they become the Ken Burns background atmosphere
+- When Imagen 3 images arrive later (Phase XI), they become the Ken Burns background atmosphere
 
 **Image priority order (new):**
 ```
@@ -207,7 +207,7 @@ Phase V    — Visual Director (Imagen 3 + Veo 2) [DEMOTED to enhancement]
 
 **Current:** `DocumentaryPlayer.tsx` Effect 3 waits 10s, then sends the full script to historian if no beats arrived.
 
-**New:** Remove Effect 3 entirely. Beats are pre-generated in the pipeline (Phase 3.2) and arrive via SSE before the player opens. The `narrate.py` endpoint remains available but is not called automatically.
+**New:** Remove Effect 3 entirely. Beats are pre-generated in the pipeline (Phase V) and arrive via SSE before the player opens. The `narrate.py` endpoint remains available but is not called automatically.
 
 **Also simplify Effect 1:** Instead of calling `startNarration()`, check if beats are already in the store (they will be, from SSE during pipeline). If beats are present, skip the API call. Only call `startNarration()` as a fallback if the store has no beats for the current segment (e.g., pipeline was interrupted).
 
@@ -245,7 +245,7 @@ useEffect(() => {
 
 ```python
 class BeatIllustrationAgent(BaseAgent):
-    """Phase 3.2: Generate beat-by-beat interleaved TEXT+IMAGE for each segment."""
+    """Phase V: Generate beat-by-beat interleaved TEXT+IMAGE for each segment."""
 
     emitter: SSEEmitter
     gcp_project_id: str
@@ -256,7 +256,7 @@ class BeatIllustrationAgent(BaseAgent):
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator:
         # 1. Emit pipeline phase
         await self.emitter.emit("pipeline_phase", {
-            "phase": 3.2,
+            "phase": 5,
             "label": "INTERLEAVED COMPOSITION",
             "description": "Gemini composes narration beats with cinematic illustrations"
         })
@@ -322,14 +322,14 @@ def build_beat_illustration_agent(emitter: SSEEmitter) -> BeatIllustrationAgent:
 
 ### Step 2: Pipeline Integration (Backend) — ~1h
 
-**`pipeline.py` — Add Phase 3.2:**
+**`pipeline.py` — Add Phase V:**
 
 In `build_new_pipeline()`:
 ```python
 from .beat_illustration_agent import build_beat_illustration_agent
 
 beat_illust = build_beat_illustration_agent(emitter)
-# Insert after script_orch (Phase III), before fact_validator (Phase III.5)
+# Insert after script_orch (Phase III), before fact_validator (Phase VII)
 ```
 
 In the agent list:
@@ -339,13 +339,13 @@ sub_agents=[
     scene_research_orch,    # Phase II
     aggregator,             # Phase II.5
     script_orch,            # Phase III
-    narrative_director,     # Phase 3.1 (workspace storyboard)
-    beat_illust,            # Phase 3.2 (player beats) ← NEW
-    fact_validator,         # Phase III.5
-    geo_location,           # Phase 3.8
-    narrative_visual_planner,  # Phase 4.0
-    visual_research_orch,   # Phase IV
-    visual_director_orch,   # Phase V
+    narrative_director,     # Phase IV (workspace storyboard)
+    beat_illust,            # Phase V (player beats) ← NEW
+    fact_validator,         # Phase VII
+    geo_location,           # Phase VIII
+    narrative_visual_planner,  # Phase IX
+    visual_research_orch,   # Phase X
+    visual_director_orch,   # Phase XI
 ]
 ```
 
@@ -377,7 +377,7 @@ Also update `build_streaming_pipeline()` if it has a different agent list.
 ### Step 5: Expedition Log Update (Frontend) — ~30min
 
 - Register "INTERLEAVED COMPOSITION" as a known phase label in `ExpeditionLog.tsx`
-- When Phase 3.2 starts, show: "The historian composes each moment with text and illustration together"
+- When Phase V starts, show: "The historian composes each moment with text and illustration together"
 - Beat count in stats: "X BEATS COMPOSED" alongside existing "SOURCES FOUND" etc.
 
 ### Step 6: Verify & Test — ~2h
@@ -393,7 +393,7 @@ Also update `build_streaming_pipeline()` if it has a different agent list.
 
 ## 7. Agent Count Verification
 
-The competition says "use 6-7 agent teams." After adding Phase 3.2:
+The competition says "use 6-7 agent teams." After adding Phase V:
 
 | # | Agent | Type | Model | Purpose |
 |---|---|---|---|---|
@@ -474,5 +474,5 @@ Show the workspace storyboard streaming during the Expedition Log phase:
 | Beat generation timing | On-demand, 5-20s after player opens | Pre-generated in pipeline, ready before player |
 | Interleaved output visibility | Secondary overlay | Primary visual path |
 | Fallback | Full script to historian (no interleaving) | Imagen 3 images (still AI-generated, just not interleaved) |
-| Pipeline phases using interleaved | 1 (Phase 3.1, workspace only) | 2 (Phase 3.1 workspace + Phase 3.2 player) |
+| Pipeline phases using interleaved | 1 (Phase IV, workspace only) | 2 (Phase IV workspace + Phase V player) |
 | Judge perception | "Assembled multimodal pipeline" | "Interleaved-first creative storytelling engine" |

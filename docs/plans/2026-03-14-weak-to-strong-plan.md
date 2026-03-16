@@ -28,9 +28,9 @@
 | 3 | **`StreamingPipelineAgent` not wired as default** — `routes/pipeline.py` still calls `build_new_pipeline()` (batch sequential) | MODERATE | STRONG | Team 2 |
 | 4 | **`segment_playable` never emitted** — typed in frontend, never emitted by backend | MODERATE | STRONG | Team 2 |
 | 5 | **Visual Bible never written to Firestore** — `illustrate.py` and live relay always get empty string | WEAK | STRONG | Team 3 |
-| 6 | **Style incoherence** — Phase V uses 15-layer style stack; storyboard and live illustration use raw Visual Bible prose | WEAK | STRONG | Team 3 |
+| 6 | **Style incoherence** — Phase XI uses 15-layer style stack; storyboard and live illustration use raw Visual Bible prose | WEAK | STRONG | Team 3 |
 | 7 | **Storyboard images don't feed Imagen 3** — GCS URI embedded as text in prompt; Imagen can't see pixels | WEAK | STRONG | Team 4 |
-| 8 | **Frame count hardcoded** — `_NARRATIVE_FRAME_PLAN` overrides Phase 4.0's `frame_concepts` | MODERATE | STRONG | Team 4 |
+| 8 | **Frame count hardcoded** — `_NARRATIVE_FRAME_PLAN` overrides Phase IX's `frame_concepts` | MODERATE | STRONG | Team 4 |
 | 9 | **GCS `gs://` URLs stripped by frontend** — Veo 2 video and some image URLs never reach player | MODERATE | STRONG | Team 4 |
 | 10 | **Live relay lacks era context** — historian persona has no period/era awareness for visual guidance | MODERATE | STRONG | Team 5 |
 
@@ -265,7 +265,7 @@ One write. Immediately unblocks both `illustrate.py` and `live-relay` from recei
 
 ### Fix 3.2: Extract Shared Style Helpers
 
-**The problem:** Phase V's 15-layer style stack (`_detect_era_art_style`, `_detect_film_stock`, `_build_temporal_accuracy_prefix`, `_ERA_ART_STYLE_REFERENCES`, `HISTORICAL_PERIOD_PROFILES`, etc.) lives exclusively in `visual_director_orchestrator.py`. Neither the storyboard prompt nor the live illustration endpoint can access these functions.
+**The problem:** Phase XI's 15-layer style stack (`_detect_era_art_style`, `_detect_film_stock`, `_build_temporal_accuracy_prefix`, `_ERA_ART_STYLE_REFERENCES`, `HISTORICAL_PERIOD_PROFILES`, etc.) lives exclusively in `visual_director_orchestrator.py`. Neither the storyboard prompt nor the live illustration endpoint can access these functions.
 
 **The fix:** Create `backend/agent_orchestrator/agents/prompt_style_helpers.py` extracting:
 
@@ -325,7 +325,7 @@ style_block = build_style_block(
 # Inject style_block into ILLUSTRATION_PROMPT
 ```
 
-Now live illustrations use the same film stocks, era references, and temporal accuracy as Phase V Imagen 3 images.
+Now live illustrations use the same film stocks, era references, and temporal accuracy as Phase XI Imagen 3 images.
 
 ### Fix 3.4: Augment Storyboard Prompt with Style Terms
 
@@ -348,7 +348,7 @@ style_terms = build_style_block(
 prompt += f"\n\n{style_terms}\n\nMatch these style terms exactly in the illustration."
 ```
 
-Now Phase 3.1 storyboard illustrations and Phase V Imagen 3 images share the same visual vocabulary.
+Now Phase IV storyboard illustrations and Phase XI Imagen 3 images share the same visual vocabulary.
 
 ---
 
@@ -359,7 +359,7 @@ Now Phase 3.1 storyboard illustrations and Phase V Imagen 3 images share the sam
 
 ### Fix 4.1: Pass Storyboard Image as Imagen 3 Reference
 
-**The problem:** Phase 3.1 generates storyboard images and stores GCS URIs in `session.state["storyboard_images"]`. Phase V reads these URIs but only embeds them as text in the prompt — Imagen 3 cannot see the actual pixels.
+**The problem:** Phase IV generates storyboard images and stores GCS URIs in `session.state["storyboard_images"]`. Phase XI reads these URIs but only embeds them as text in the prompt — Imagen 3 cannot see the actual pixels.
 
 **The fix:** Use `GenerateImagesConfig.reference_images` to pass the storyboard image as a style reference:
 
@@ -403,7 +403,7 @@ Now Imagen 3 generates images that match the visual style of Gemini's own storyb
 
 ### Fix 4.2: AI-Driven Frame Count
 
-**The problem:** `_NARRATIVE_FRAME_PLAN` hardcodes frame counts per `narrative_role`. A `coda` scene gets 1 frame even if Phase 4.0 produced 4 distinct `frame_concepts`. A battle climax and a quiet conversation both get 3 frames.
+**The problem:** `_NARRATIVE_FRAME_PLAN` hardcodes frame counts per `narrative_role`. A `coda` scene gets 1 frame even if Phase IX produced 4 distinct `frame_concepts`. A battle climax and a quiet conversation both get 3 frames.
 
 **The fix:** When `frame_prompts` from the `VisualDetailManifest` are available, use their count as the frame budget. Fall back to `_NARRATIVE_FRAME_PLAN` only when no manifest exists.
 
@@ -432,7 +432,7 @@ Also update `_generate_segment_images` to use the new signature:
 frame_indices = self._frames_for_segment(segment, scene_brief, manifest)
 ```
 
-This means Phase 4.0's creative decisions (expressed as `frame_concepts`) directly control how many images are generated — the AI decides, not the code.
+This means Phase IX's creative decisions (expressed as `frame_concepts`) directly control how many images are generated — the AI decides, not the code.
 
 ### Fix 4.3: Sign URLs Before All SSE Emissions
 
@@ -578,7 +578,7 @@ Team 4 (Imagen 3 References)     — starts AFTER Team 3 creates prompt_style_he
 | Visual Bible propagation | Pipeline-only (in-memory) | Persisted to Firestore, available to all consumers |
 | Style coherence | 3 disconnected style systems | Shared `prompt_style_helpers` module, same vocabulary everywhere |
 | Storyboard → Imagen 3 | GCS URI as text (invisible) | Pixel-level style reference via `reference_images` API |
-| Frame count | Hardcoded per narrative_role | AI-driven from Phase 4.0 `frame_concepts` count |
+| Frame count | Hardcoded per narrative_role | AI-driven from Phase IX `frame_concepts` count |
 | GCS URLs in SSE | Stripped by frontend | Signed HTTPS URLs before emission |
 | Live relay era context | No era awareness | Period-specific visual guidance in persona |
 
