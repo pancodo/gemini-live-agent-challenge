@@ -85,8 +85,6 @@ export function DocumentaryPlayer() {
   const updateSettingRef = useRef(updateSetting);
   updateSettingRef.current = updateSetting;
   const [showPlayOverlay, setShowPlayOverlay] = useState(true);
-  const CAPTION_DELAY_MS = 900;
-  const ENERGY_THRESHOLD = 0.045;
   const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
@@ -143,29 +141,24 @@ export function DocumentaryPlayer() {
     ? segmentsRecord[currentSegmentId] ?? null
     : null;
 
-  // ── Caption bridge (voiceStore → playerStore) — energy-gated ─────
-  // Captions only appear when audio energy is above threshold,
-  // syncing text to actual audible speech instead of Gemini's early transcription.
+  // ── Caption bridge (voiceStore → playerStore) — direct pass-through ─────
+  // Show captions as Gemini delivers them. The slight ahead-of-audio
+  // matches YouTube/Netflix subtitle behavior (industry standard).
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
-  const analyserNode = useVoiceStore((s) => s.analyserNode);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
-  const captionPendingRef = useRef<string | null>(null);
-  const captionRafRef = useRef(0);
-  const captionDelayTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Buffer incoming captions + track WPS
   useEffect(() => {
     if (!voiceCaption) return;
-    // Filter Gemini control tokens from output transcription (e.g. <ctrl46>)
+    // Filter Gemini control tokens (e.g. <ctrl46>)
     const cleaned = voiceCaption.replace(/<ctrl\d+>/gi, '').trim();
     if (!cleaned) return;
-    captionPendingRef.current = cleaned;
 
+    // Track WPS for CaptionTrack animation timing
     const now = Date.now();
-    const wordCount = voiceCaption.trim().split(/\s+/).length;
+    const wordCount = cleaned.split(/\s+/).length;
     if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
       turnStartRef.current = now;
       turnWordCountRef.current = wordCount;
@@ -177,40 +170,8 @@ export function DocumentaryPlayer() {
       }
     }
 
-    // Fallback: no analyser yet — show captions immediately
-    if (!useVoiceStore.getState().analyserNode) {
-      setCaption(cleaned);
-      captionPendingRef.current = null;
-    }
+    setCaption(cleaned);
   }, [voiceCaption, setCaptionWps, setCaption]);
-
-  // rAF loop: only forward caption when audio energy detected
-  useEffect(() => {
-    if (!analyserNode) return;
-    const data = new Uint8Array(analyserNode.frequencyBinCount);
-
-    function checkEnergy() {
-      analyserNode!.getByteFrequencyData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) sum += data[i];
-      const energy = sum / data.length / 255;
-
-      if (energy > ENERGY_THRESHOLD && captionPendingRef.current) {
-        const textToShow = captionPendingRef.current;
-        captionPendingRef.current = null;
-        clearTimeout(captionDelayTimerRef.current);
-        captionDelayTimerRef.current = setTimeout(() => {
-          setCaption(textToShow);
-        }, CAPTION_DELAY_MS);
-      }
-      captionRafRef.current = requestAnimationFrame(checkEnergy);
-    }
-    captionRafRef.current = requestAnimationFrame(checkEnergy);
-    return () => {
-      cancelAnimationFrame(captionRafRef.current);
-      clearTimeout(captionDelayTimerRef.current);
-    };
-  }, [analyserNode, setCaption]);
 
   // ── Single-stream narration with pre-timed image changes ──────────
   const beats = usePlayerStore((s) => s.beats);
@@ -463,7 +424,6 @@ export function DocumentaryPlayer() {
   useEffect(() => {
     narrationStartedRef.current.clear();
     lastSentBeatRef.current = -1;
-    clearTimeout(captionDelayTimerRef.current);
     setShowEndCard(false);
     setShowInterstitial(false);
   }, [currentSegment?.id]);
