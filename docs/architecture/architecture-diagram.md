@@ -98,7 +98,7 @@ Restructured around the 4 sections judges explicitly look for:
 3. **The Logic** — backend hosted on Google Cloud
 4. **The Connections** — how pieces talk to each other
 
-Phases 3.1–3.3 use Gemini's native interleaved `TEXT+IMAGE` output — a single model
+Phases IV–VI use Gemini's native interleaved `TEXT+IMAGE` output — a single model
 call produces both narration text and illustration images simultaneously.
 
 ```mermaid
@@ -128,15 +128,15 @@ flowchart TD
         P1["I\nDocument\nAnalyzer"]
         P2["II\nScene\nResearch"]
         P3["III\nScript\nGenerator"]
-        P31["3.1\nNarrative\nDirector"]
-        P32["3.2\nBeat\nIllustrator"]
-        P33["3.3\nVisual\nInterleave"]
-        P35["III.5\nFact\nValidator"]
-        P38["3.8\nGeo\nMapping"]
-        P40["4.0\nVisual\nPlanner"]
-        P4["IV\nVisual\nResearch"]
-        P5["V\nVisual\nDirector"]
-        P1 --> P2 --> P3 --> P31 --> P32 --> P33 --> P35 --> P38 --> P40 --> P4 --> P5
+        P4["IV\nNarrative\nDirector"]
+        P5["V\nBeat\nIllustrator"]
+        P6["VI\nVisual\nInterleave"]
+        P7["VII\nFact\nValidator"]
+        P8["VIII\nGeo\nMapping"]
+        P9["IX\nVisual\nPlanner"]
+        P10["X\nVisual\nResearch"]
+        P11["XI\nVisual\nDirector"]
+        P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11
     end
 
     subgraph DATA["☁️ Google Cloud Services"]
@@ -154,18 +154,18 @@ flowchart TD
     %% Backend to Brain (GenAI SDK + ADK)
     API -->|"Triggers pipeline"| ORCH
     ORCH -->|"Google ADK\nSequentialAgent + ParallelAgent"| PIPELINE
-    P1 & P2 & P35 & P4 -->|"GenAI SDK"| FLASH
-    P3 & P40 -->|"GenAI SDK"| PRO
-    P31 & P32 & P33 -->|"GenAI SDK\nTEXT+IMAGE"| FLASH
-    P5 -->|"Vertex AI\nGenAI SDK"| IMAGEN
-    P5 -.->|"Vertex AI\nAsync generation"| VEO
+    P1 & P2 & P7 & P10 -->|"GenAI SDK"| FLASH
+    P3 & P9 -->|"GenAI SDK"| PRO
+    P4 & P5 & P6 -->|"GenAI SDK\nTEXT+IMAGE"| FLASH
+    P11 -->|"Vertex AI\nGenAI SDK"| IMAGEN
+    P11 -.->|"Vertex AI\nAsync generation"| VEO
     RELAY <-.->|"WebSocket\nBidiGenerateContent"| LIVE_API
 
     %% Backend to Data Layer
     ORCH <-->|"Checkpoint resume"| FS
     P1 --> DAI
-    P1 & P3 & P31 & P32 & P5 --> GCS
-    P3 & P4 & P5 --> FS
+    P1 & P3 & P4 & P5 & P11 --> GCS
+    P3 & P10 & P11 --> FS
     ORCH --> PS
     API --> SM
 ```
