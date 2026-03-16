@@ -149,6 +149,7 @@ export function DocumentaryPlayer() {
   const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
   const turnStartRef = useRef<number>(0);
   const turnWordCountRef = useRef<number>(0);
+  const captionTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     if (!voiceCaption) return;
@@ -170,7 +171,10 @@ export function DocumentaryPlayer() {
       }
     }
 
-    setCaption(cleaned);
+    // 300ms delay to match audio pre-buffer latency
+    clearTimeout(captionTimerRef.current);
+    captionTimerRef.current = setTimeout(() => setCaption(cleaned), 300);
+    return () => clearTimeout(captionTimerRef.current);
   }, [voiceCaption, setCaptionWps, setCaption]);
 
   // ── Single-stream narration with pre-timed image changes ──────────
@@ -284,10 +288,64 @@ export function DocumentaryPlayer() {
       sendBeatNarration(nextBeat);
       lastSentBeatRef.current = nextBeat;
     } else {
-      // All beats spoken — end narration
+      // All beats spoken — end narration and directly trigger auto-advance
       setIsNarrating(false);
+
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        const segs = readySegments;
+        const idx = segs.findIndex((s) => s.id === currentSegmentId);
+        const nextSeg = segs[idx + 1];
+
+        if (nextSeg) {
+          setInterstitialTitle(nextSeg.title || `Chapter ${idx + 2}`);
+          setShowInterstitial(true);
+          setTimeout(() => {
+            setShowInterstitial(false);
+            try {
+              if ('startViewTransition' in document) {
+                (document as Document & { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
+                  open(nextSeg.id);
+                });
+              } else {
+                open(nextSeg.id);
+              }
+            } catch {
+              open(nextSeg.id);
+            }
+            // Auto-start narration for next segment with retry
+            setTimeout(() => {
+              const checkAndSend = (retries = 0) => {
+                const nextBeats = usePlayerStore.getState().beats;
+                const send = useVoiceStore.getState().sendTextToHistorian;
+                if (send && nextBeats.length > 0) {
+                  lastSentBeatRef.current = 0;
+                  send(
+                    `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
+                    sanitize(nextBeats[0].narrationText)
+                  );
+                  setIsNarrating(true);
+                } else if (retries < 5) {
+                  setTimeout(() => checkAndSend(retries + 1), 500);
+                } else if (send) {
+                  const seg = useResearchStore.getState().segments[nextSeg.id];
+                  if (seg?.script) {
+                    lastSentBeatRef.current = 0;
+                    send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
+                      sanitize(seg.script).slice(0, 600));
+                    setIsNarrating(true);
+                  }
+                }
+              };
+              checkAndSend();
+            }, 1000);
+          }, 2500);
+        } else {
+          setShowEndCard(true);
+        }
+      }, 3000);
     }
-  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning]);
+  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize, setInterstitialTitle, setShowInterstitial, setShowEndCard]);
 
   // ── Safety timer: force-end narration if it runs too long without completing ──
   const narrationSafetyRef = useRef<ReturnType<typeof setTimeout>>(undefined);
