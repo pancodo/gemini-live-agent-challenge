@@ -1,41 +1,55 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
- * CaptionTrack — rolling word window synced to Gemini speech.
+ * CaptionTrack — Netflix-style subtitle blocks.
  *
- * Shows a rolling window of the historian's transcription directly
- * as Gemini delivers it. Words fade in one by one.
+ * Shows Gemini's accumulated transcript as a readable text chunk
+ * (like Netflix/YouTube subtitles). No per-word animation — just
+ * smooth fade transitions when significant new text arrives.
  */
-const MAX_VISIBLE_WORDS = 16;
+const MAX_VISIBLE_WORDS = 20;
 
 export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const prevLenRef = useRef(0);
+  const [displayText, setDisplayText] = useState('');
+  const [fading, setFading] = useState(false);
+  const prevWordCountRef = useRef(0);
 
-  const words = captionText.trim() ? captionText.trim().split(/\s+/) : [];
+  useEffect(() => {
+    if (!captionText.trim()) {
+      setDisplayText('');
+      prevWordCountRef.current = 0;
+      return;
+    }
 
-  // Reset tracking on new turn (caption gets shorter or empty)
-  if (words.length < prevLenRef.current) {
-    prevLenRef.current = 0;
-  }
+    const newWordCount = captionText.trim().split(/\s+/).length;
+    const delta = newWordCount - prevWordCountRef.current;
+    prevWordCountRef.current = newWordCount;
 
-  // How many words are new since last render
-  const newStart = prevLenRef.current;
-  prevLenRef.current = words.length;
+    // Fade-pulse on large text jump (>4 new words at once)
+    if (delta > 4) {
+      setFading(true);
+      setTimeout(() => {
+        setDisplayText(captionText);
+        setFading(false);
+      }, 120);
+    } else {
+      setDisplayText(captionText);
+    }
+  }, [captionText]);
 
-  // Rolling window
-  const windowStart = Math.max(0, words.length - MAX_VISIBLE_WORDS);
-  const visible = words.slice(windowStart);
+  if (!displayText.trim()) return null;
 
-  const isEmpty = visible.length === 0;
+  const words = displayText.trim().split(/\s+/);
+  const visible = words.slice(Math.max(0, words.length - MAX_VISIBLE_WORDS)).join(' ');
 
   return (
     <div
       className="flex flex-col items-center rounded-xl"
       style={{
-        opacity: isEmpty ? 0 : 1,
-        transition: 'opacity 0.3s ease',
+        opacity: fading ? 0.3 : 1,
+        transition: 'opacity 0.12s ease',
         background: 'var(--player-caption-bg)',
         backdropFilter: 'blur(12px)',
         maxWidth: 820,
@@ -51,31 +65,13 @@ export function CaptionTrack() {
           fontFamily: 'var(--font-serif)',
           fontWeight: 300,
           fontStyle: 'italic',
-          fontSize: 26,
+          fontSize: 24,
           letterSpacing: '0.02em',
           color: 'var(--player-caption-color)',
           textShadow: '0 1px 8px rgba(0,0,0,0.6)',
         }}
       >
-        {visible.map((word, i) => {
-          const globalIdx = windowStart + i;
-          const isNew = globalIdx >= newStart;
-          // Stagger new words 60ms apart so bulk arrivals reveal one-by-one
-          const newWordOffset = isNew ? globalIdx - newStart : 0;
-          return (
-            <span
-              key={globalIdx}
-              className="inline-block mr-[0.3em]"
-              style={{
-                opacity: isNew ? 0 : 1,
-                animation: isNew ? 'caption-fade-in 0.5s ease forwards' : undefined,
-                animationDelay: isNew ? `${newWordOffset * 0.06}s` : undefined,
-              }}
-            >
-              {word}
-            </span>
-          );
-        })}
+        {visible}
       </p>
     </div>
   );
