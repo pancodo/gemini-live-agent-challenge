@@ -71,14 +71,14 @@ export function VoiceLayer() {
     onTurnComplete: () => {
       const currentState = useVoiceStore.getState().state;
       if (currentState === 'historian_speaking') {
-        // During narration, stay connected for the next beat.
-        // Voice goes idle when isNarrating becomes false (separate effect).
-        if (!usePlayerStore.getState().isNarrating) {
+        // Read isNarrating ONCE to avoid race condition between two reads
+        const narrating = usePlayerStore.getState().isNarrating;
+        if (narrating) {
+          // Advance to next beat (Effect 2b in DocumentaryPlayer handles the rest)
+          usePlayerStore.getState().incrementBeatAdvanceSignal();
+        } else {
           transition('idle');
         }
-      }
-      if (usePlayerStore.getState().isNarrating) {
-        usePlayerStore.getState().incrementBeatAdvanceSignal();
       }
     },
     onCaption: (text: string) => {
