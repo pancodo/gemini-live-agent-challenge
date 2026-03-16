@@ -20,49 +20,6 @@ import type { MapViewMode } from '../../types';
 import { startNarration } from '../../services/api';
 import { useSettings } from '../../hooks/useSettings';
 
-/**
- * PipelinePhaseLabel — Shows the current (latest) pipeline phase name.
- */
-function PipelinePhaseLabel() {
-  const phases = useResearchStore((s) => s.phases);
-  const currentPhase = phases.length > 0 ? phases[phases.length - 1] : null;
-
-  if (!currentPhase) return null;
-
-  return (
-    <span
-      style={{
-        fontFamily: 'var(--font-serif)',
-        fontSize: 12,
-        color: 'rgba(196, 149, 106, 0.8)',
-        letterSpacing: '0.05em',
-      }}
-    >
-      {currentPhase.label}
-    </span>
-  );
-}
-
-/**
- * PipelineStats — Condensed sources / segments counts from the research store.
- */
-function PipelineStats() {
-  const stats = useResearchStore((s) => s.stats);
-  const agents = useResearchStore((s) => s.agents);
-  const activeAgentCount = Object.values(agents).filter(
-    (a) => a.status === 'searching' || a.status === 'evaluating',
-  ).length;
-
-  return (
-    <>
-      {stats.sourcesFound > 0 && <span>{stats.sourcesFound} sources</span>}
-      {stats.segmentsReady > 0 && <span>{stats.segmentsReady} segments</span>}
-      {activeAgentCount > 0 && (
-        <span>{activeAgentCount} agent{activeAgentCount !== 1 ? 's' : ''} active</span>
-      )}
-    </>
-  );
-}
 
 /**
  * DocumentaryPlayer — Full-screen cinematic player.
@@ -101,9 +58,7 @@ export function DocumentaryPlayer() {
   const isIdle = usePlayerStore((s) => s.isIdle);
   const setIdle = usePlayerStore((s) => s.setIdle);
   const open = usePlayerStore((s) => s.open);
-  const pipelineComplete = usePlayerStore((s) => s.pipelineComplete);
 
-  const [pipCollapsed, setPipCollapsed] = useState(false);
 
   const mapViewMode = usePlayerStore((s) => s.mapViewMode);
   const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
@@ -128,7 +83,7 @@ export function DocumentaryPlayer() {
   const segmentsRecord = useResearchStore((s) => s.segments);
 
   const segments: Segment[] = useMemo(
-    () => Object.values(segmentsRecord),
+    () => Object.values(segmentsRecord).filter((s) => !s.id.startsWith('test-')),
     [segmentsRecord],
   );
 
@@ -249,6 +204,7 @@ export function DocumentaryPlayer() {
       return;
     }
 
+    console.log(`[sendBeatNarration] beat=${beatIndex}, text="${text.slice(0, 60)}..."`);
     send(text);
   }, [currentSegmentId, sanitize]);
 
@@ -260,10 +216,16 @@ export function DocumentaryPlayer() {
     if (beatAdvanceSignal === prevSignalRef.current) return;
     prevSignalRef.current = beatAdvanceSignal;
 
-    if (!isNarrating) return;
+    // Use store directly instead of React subscription to avoid stale reads
+    const narrating = usePlayerStore.getState().isNarrating;
+    if (!narrating) {
+      console.log('[Effect2b] turn_complete but isNarrating=false, skipping');
+      return;
+    }
 
     const totalBeats = usePlayerStore.getState().beats.length || 1;
     const nextBeat = lastSentBeatRef.current + 1;
+    console.log(`[Effect2b] turn_complete: beat ${lastSentBeatRef.current} done, next=${nextBeat}/${totalBeats}`);
 
     if (nextBeat < totalBeats) {
       // Advance image to match the beat we're about to narrate
@@ -298,7 +260,8 @@ export function DocumentaryPlayer() {
             } catch {
               open(nextSeg.id);
             }
-            // Auto-start narration for next segment with retry
+            // Auto-start narration for next segment with retry.
+            // Always set isNarrating so safety timer can catch failures.
             setTimeout(() => {
               const checkAndSend = (retries = 0) => {
                 const nextBeats = usePlayerStore.getState().beats;
@@ -312,14 +275,16 @@ export function DocumentaryPlayer() {
                   setIsNarrating(true);
                 } else if (retries < 5) {
                   setTimeout(() => checkAndSend(retries + 1), 500);
-                } else if (send) {
+                } else {
+                  // Beats or send unavailable — try script fallback
                   const seg = useResearchStore.getState().segments[nextSeg.id];
-                  if (seg?.script) {
+                  if (send && seg?.script) {
                     lastSentBeatRef.current = 0;
                     send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
                       sanitize(seg.script).slice(0, 600));
-                    setIsNarrating(true);
                   }
+                  // Always set isNarrating so safety timer keeps the pipeline moving
+                  setIsNarrating(true);
                 }
               };
               checkAndSend();
@@ -330,9 +295,10 @@ export function DocumentaryPlayer() {
         }
       }, 3000);
     }
-  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize, setInterstitialTitle, setShowInterstitial, setShowEndCard]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- isNarrating read from store, not subscription
+  }, [beatAdvanceSignal, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize]);
 
-  // ── Safety timer: if no turn_complete arrives for 30s, force advance ──
+  // ── Safety timer: if no turn_complete arrives for 15s, force advance ──
   // Handles cases where Gemini closes (1008) or drops connection mid-beat.
   const narrationSafetyRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
@@ -340,6 +306,7 @@ export function DocumentaryPlayer() {
     if (isNarrating) {
       narrationSafetyRef.current = setTimeout(() => {
         if (!usePlayerStore.getState().isNarrating) return;
+        console.warn('[SafetyTimer] No turn_complete in 15s — forcing advance');
         // Force-end narration — Effect 2b won't fire, so trigger advance directly
         setIsNarrating(false);
         clearTimeout(autoAdvanceTimerRef.current);
@@ -353,21 +320,35 @@ export function DocumentaryPlayer() {
             setTimeout(() => {
               setShowInterstitial(false);
               open(nextSeg.id);
+              // Auto-start narration for next segment with retry
               setTimeout(() => {
-                const nextBeats = usePlayerStore.getState().beats;
-                const send = useVoiceStore.getState().sendTextToHistorian;
-                if (send && nextBeats.length > 0) {
-                  lastSentBeatRef.current = 0;
-                  send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` + sanitize(nextBeats[0].narrationText));
-                  setIsNarrating(true);
-                }
+                const checkAndSend = (retries = 0) => {
+                  const nextBeats = usePlayerStore.getState().beats;
+                  const send = useVoiceStore.getState().sendTextToHistorian;
+                  if (send && nextBeats.length > 0) {
+                    lastSentBeatRef.current = 0;
+                    send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` + sanitize(nextBeats[0].narrationText));
+                    setIsNarrating(true);
+                  } else if (retries < 5) {
+                    setTimeout(() => checkAndSend(retries + 1), 500);
+                  } else if (send) {
+                    // Beats not loaded — try script fallback
+                    const seg = useResearchStore.getState().segments[nextSeg.id];
+                    if (seg?.script) {
+                      lastSentBeatRef.current = 0;
+                      send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` + sanitize(seg.script).slice(0, 600));
+                      setIsNarrating(true);
+                    }
+                  }
+                };
+                checkAndSend();
               }, 1000);
             }, 2500);
           } else {
             setShowEndCard(true);
           }
         }, 2000);
-      }, 15_000); // 15 seconds — if no turn_complete, force advance
+      }, 15_000);
     }
     return () => clearTimeout(narrationSafetyRef.current);
   }, [isNarrating, setIsNarrating, readySegments, currentSegmentId, open, sanitize]);
@@ -1334,7 +1315,7 @@ export function DocumentaryPlayer() {
         }}
       >
         <div
-          className="flex items-center justify-between px-6 py-4"
+          className="relative flex items-center justify-between px-6 py-4"
           style={{
             background:
               'linear-gradient(to top, var(--player-overlay) 0%, transparent 100%)',
@@ -1344,7 +1325,7 @@ export function DocumentaryPlayer() {
           <button
             onClick={() => navigateSegment('prev')}
             disabled={!hasPrev}
-            className="flex items-center gap-2 transition-opacity duration-200"
+            className="relative z-10 flex items-center gap-2 transition-opacity duration-200"
             style={{
               fontFamily: 'var(--font-sans)',
               fontWeight: 400,
@@ -1372,9 +1353,9 @@ export function DocumentaryPlayer() {
             </svg>
           </button>
 
-          {/* Current segment title */}
+          {/* Current segment title — absolutely centered in the bar */}
           <span
-            className="text-center max-w-md truncate"
+            className="absolute left-0 right-0 text-center pointer-events-none max-w-md mx-auto truncate"
             style={{
               fontFamily: 'var(--font-serif)',
               fontWeight: 400,
@@ -1385,7 +1366,7 @@ export function DocumentaryPlayer() {
             {currentSegment?.title ?? ''}
           </span>
 
-          <div className="flex items-center gap-4">
+          <div className="relative z-10 flex items-center gap-4">
             {/* Next */}
             <button
               onClick={() => navigateSegment('next')}
@@ -1620,128 +1601,7 @@ export function DocumentaryPlayer() {
         </div>
       </div>
 
-      {/* Layer 4.5: Research PiP — visible while pipeline is still running */}
-      <AnimatePresence>
-        {!pipelineComplete && (
-          <motion.div
-            key="research-pip"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: isIdle ? 0 : 1, y: isIdle ? 20 : 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="fixed bottom-24 left-6"
-            style={{ zIndex: 15, pointerEvents: isIdle ? 'none' : 'auto' }}
-          >
-            <div
-              style={{
-                background: 'rgba(26, 21, 16, 0.85)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderRadius: 10,
-                border: '1px solid rgba(196, 149, 106, 0.12)',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Toggle header — always visible */}
-              <button
-                onClick={() => setPipCollapsed((c) => !c)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: pipCollapsed ? '8px 14px' : '10px 14px 6px',
-                  width: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'rgba(196, 149, 106, 0.7)',
-                }}
-                aria-label={pipCollapsed ? 'Expand research panel' : 'Collapse research panel'}
-              >
-                {/* Animated pulse dot */}
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--gold)',
-                    flexShrink: 0,
-                    animation: 'pulse 2s ease-in-out infinite',
-                  }}
-                />
-                <span
-                  style={{
-                    fontFamily: 'var(--font-sans)',
-                    fontWeight: 400,
-                    fontSize: 10,
-                    letterSpacing: '0.15em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Generating
-                </span>
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 10 10"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{
-                    marginLeft: 'auto',
-                    transform: pipCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.25s ease',
-                  }}
-                >
-                  <path d="M2 6.5L5 3.5L8 6.5" />
-                </svg>
-              </button>
-
-              {/* Expandable content */}
-              <AnimatePresence>
-                {!pipCollapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.25, ease: 'easeInOut' }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    <div
-                      style={{
-                        padding: '4px 14px 10px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 6,
-                      }}
-                    >
-                      {/* Current phase */}
-                      <PipelinePhaseLabel />
-
-                      {/* Stats row */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: 16,
-                          fontFamily: 'var(--font-sans)',
-                          fontSize: 10,
-                          letterSpacing: '0.1em',
-                          textTransform: 'uppercase',
-                          color: 'rgba(196, 149, 106, 0.5)',
-                        }}
-                      >
-                        <PipelineStats />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Layer 4.5: Research PiP removed — pipeline status not shown in player */}
 
       {/* Layer 5: Sidebar */}
       <PlayerSidebar

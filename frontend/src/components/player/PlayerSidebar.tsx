@@ -330,7 +330,7 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
 // ── PlayerSidebar ─────────────────────────────────────────────────────────────
 
 export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
-  const segments = useResearchStore(useShallow((s) => Object.values(s.segments)));
+  const segments = useResearchStore(useShallow((s) => Object.values(s.segments).filter((seg) => !seg.id.startsWith('test-'))));
   const currentSegmentId = usePlayerStore((s) => s.currentSegmentId);
   const openSegment = usePlayerStore((s) => s.open);
   const branchGraph = usePlayerStore((s) => s.branchGraph) ?? EMPTY_BRANCH;

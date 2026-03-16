@@ -46,7 +46,7 @@ export async function getUrlMeta(url: string, signal?: AbortSignal): Promise<Url
   return res.json() as Promise<UrlMeta>;
 }
 
-const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent';
 
 /**
  * Extract geographic locations and routes from a segment script using Gemini Flash.
@@ -93,23 +93,32 @@ Rules:
 - If no routes are mentioned, return an empty routes array
 - Include at least the primary location even if the script is vague`;
 
-  const res = await fetch(`${GEMINI_FLASH_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
-      : AbortSignal.timeout(15_000),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-      },
-    }),
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.1,
+    },
   });
 
-  if (!res.ok) {
-    throw new Error(`Gemini geo extraction failed: ${res.status}`);
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    res = await fetch(`${GEMINI_FLASH_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
+      body,
+    });
+    if (res.status !== 429) break;
+    // Exponential backoff: 5s, 15s, 30s — gives rate limit time to reset
+    const delay = [5_000, 15_000, 30_000][attempt] ?? 30_000;
+    await new Promise((r) => setTimeout(r, delay));
+  }
+
+  if (!res || !res.ok) {
+    throw new Error(`Gemini geo extraction failed: ${res?.status ?? 'no response'}`);
   }
 
   const data = await res.json() as {
