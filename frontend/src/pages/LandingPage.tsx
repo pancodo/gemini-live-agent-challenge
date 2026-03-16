@@ -426,16 +426,16 @@ function HeroSection() {
           className="mt-14 flex items-center gap-8 flex-wrap justify-center"
         >
           {[
-            { value: 11, suffix: '', label: 'AI pipeline phases' },
-            { value: 4, suffix: '', label: 'AI modalities' },
-            { value: 1, suffix: '', label: 'Document needed' },
+            { display: 'XI', label: 'AI pipeline phases' },
+            { display: 'IV', label: 'AI modalities' },
+            { display: 'I', label: 'Document needed' },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p
                 className="text-[22px] leading-none mb-1"
                 style={{ fontFamily: 'var(--font-serif)', color: C.goldBright, fontWeight: 300 }}
               >
-                <Counter to={stat.value} suffix={stat.suffix} />
+                {stat.display}
               </p>
               <p
                 className="text-[9px] uppercase tracking-[0.2em]"
@@ -1330,9 +1330,9 @@ function BeforeAfterSection() {
 // ─── Stats Row ───────────────────────────────────────────────────────────────
 function StatsSection() {
   const stats = [
-    { value: 11, suffix: '', label: 'AI pipeline phases' },
-    { value: 4, suffix: '', label: 'Output modalities' },
-    { value: 4, suffix: '×', label: 'Imagen frames per segment' },
+    { display: 'XI', label: 'AI pipeline phases' },
+    { display: 'IV', label: 'Output modalities' },
+    { display: 'IV×', label: 'Imagen frames per segment' },
   ];
 
   return (
@@ -1353,7 +1353,7 @@ function StatsSection() {
               className="text-[2.5rem] leading-none mb-2"
               style={{ fontFamily: 'var(--font-serif)', fontWeight: 300, color: C.goldBright }}
             >
-              {'<'}<Counter to={s.value} suffix={s.suffix} />
+              {s.display}
             </p>
             <p
               className="text-[10px] uppercase tracking-[0.18em]"
