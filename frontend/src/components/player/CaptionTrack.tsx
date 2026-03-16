@@ -2,54 +2,65 @@ import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
- * CaptionTrack — Netflix-style subtitle blocks.
+ * CaptionTrack — Rate-limited subtitle display.
  *
- * Shows Gemini's accumulated transcript as a readable text chunk
- * (like Netflix/YouTube subtitles). No per-word animation — just
- * smooth fade transitions when significant new text arrives.
+ * Gemini's output transcription arrives far ahead of audio (~3s for
+ * 30s of speech). This component buffers all received words and
+ * releases them at ~3 words/sec to match natural speech pace.
+ * Shows the last 20 released words as a Netflix-style subtitle block.
  */
 const MAX_VISIBLE_WORDS = 20;
+const WORDS_PER_SECOND = 2.8;
+const RELEASE_INTERVAL_MS = 1000 / WORDS_PER_SECOND; // ~357ms per word
 
 export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const [displayText, setDisplayText] = useState('');
-  const [fading, setFading] = useState(false);
-  const prevWordCountRef = useRef(0);
 
+  // All words received from Gemini (buffer)
+  const bufferRef = useRef<string[]>([]);
+  // How many words we've released to display so far
+  const releasedCountRef = useRef(0);
+  // The interval timer
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+
+  const [visibleText, setVisibleText] = useState('');
+
+  // Buffer incoming words from Gemini
   useEffect(() => {
     if (!captionText.trim()) {
-      setDisplayText('');
-      prevWordCountRef.current = 0;
+      // Turn reset — clear everything
+      bufferRef.current = [];
+      releasedCountRef.current = 0;
+      setVisibleText('');
       return;
     }
-
-    const newWordCount = captionText.trim().split(/\s+/).length;
-    const delta = newWordCount - prevWordCountRef.current;
-    prevWordCountRef.current = newWordCount;
-
-    // Fade-pulse on large text jump (>4 new words at once)
-    if (delta > 4) {
-      setFading(true);
-      setTimeout(() => {
-        setDisplayText(captionText);
-        setFading(false);
-      }, 120);
-    } else {
-      setDisplayText(captionText);
-    }
+    bufferRef.current = captionText.trim().split(/\s+/);
   }, [captionText]);
 
-  if (!displayText.trim()) return null;
+  // Release words at speech pace
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      const buffer = bufferRef.current;
+      const released = releasedCountRef.current;
 
-  const words = displayText.trim().split(/\s+/);
-  const visible = words.slice(Math.max(0, words.length - MAX_VISIBLE_WORDS)).join(' ');
+      if (released < buffer.length) {
+        // Release next word
+        releasedCountRef.current = released + 1;
+        const end = releasedCountRef.current;
+        const start = Math.max(0, end - MAX_VISIBLE_WORDS);
+        setVisibleText(buffer.slice(start, end).join(' '));
+      }
+    }, RELEASE_INTERVAL_MS);
+
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  if (!visibleText) return null;
 
   return (
     <div
       className="flex flex-col items-center rounded-xl"
       style={{
-        opacity: fading ? 0.3 : 1,
-        transition: 'opacity 0.12s ease',
         background: 'var(--player-caption-bg)',
         backdropFilter: 'blur(12px)',
         maxWidth: 820,
@@ -71,7 +82,7 @@ export function CaptionTrack() {
           textShadow: '0 1px 8px rgba(0,0,0,0.6)',
         }}
       >
-        {visible}
+        {visibleText}
       </p>
     </div>
   );
