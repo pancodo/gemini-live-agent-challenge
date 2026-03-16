@@ -34,12 +34,12 @@ This is the first system to combine **live multilingual OCR, parallel AI researc
 |:---|:---|
 | **Any Document, Any Language** | Upload PDFs, scanned manuscripts, or photographs. Document AI OCR extracts text from 200+ languages, including dead scripts. The historian works with whatever you give it. |
 | **11-Phase ADK Pipeline** | A `SequentialAgent` orchestrates 11 specialized phases -- from OCR to parallel research (with `google_search` grounding) to script generation to visual composition. Each phase emits real-time progress via SSE. |
-| **Interleaved TEXT+IMAGE Generation** | Phases 3.1, 3.2, and 3.3 use Gemini's native interleaved output (`response_modalities=["TEXT","IMAGE"]`) to produce narration and storyboard illustrations in single model calls -- not sequential text-then-image. |
+| **Interleaved TEXT+IMAGE Generation** | Phases IV, V, and VI use Gemini's native interleaved output (`response_modalities=["TEXT","IMAGE"]`) to produce narration and storyboard illustrations in single model calls -- not sequential text-then-image. |
 | **Cinematic Visual Generation** | Imagen 3 produces 4 cinematic frames per segment with era-accurate negative prompts. Veo 2 generates dramatic video clips asynchronously. Beat-aware routing decides which visual path each moment gets. |
 | **Always-On Voice Persona** | Gemini 2.5 Flash Native Audio powers the historian. Sub-300ms interruption handling. Session resumption tokens survive disconnects. The historian never leaves the conversation. |
-| **Grounded in Evidence** | Research agents use Google Search grounding. The fact validator (Phase III.5) cross-references every narration claim against retrieved evidence. Firestore vector search (768-dim embeddings) enables RAG over the original document. |
+| **Grounded in Evidence** | Research agents use Google Search grounding. The fact validator (Phase VII) cross-references every narration claim against retrieved evidence. Firestore vector search (768-dim embeddings) enables RAG over the original document. |
 | **Live Illustration** | When you ask a question, the historian can trigger on-the-fly Imagen 3 generation. The new image crossfades into the documentary player without breaking the viewing experience. |
-| **Timeline Map** | Phase 3.8 extracts geographic locations and geocodes them via Gemini + Google Maps grounding. An interactive antique-style MapLibre map shows animated pins, historical routes, and fly-to transitions. |
+| **Timeline Map** | Phase VIII extracts geographic locations and geocodes them via Gemini + Google Maps grounding. An interactive antique-style MapLibre map shows animated pins, historical routes, and fly-to transitions. |
 | **Historian Avatar** | An AI-generated oil painting portrait with canvas-based lip sync animation driven by `AnalyserNode` audio data. The historian has a face. |
 | **Adaptive Documentary** | User questions branch the narrative graph. The documentary restructures itself around your curiosity. Every session is unique. |
 
@@ -94,14 +94,14 @@ flowchart TD
         P1["I<br/>Document<br/>Analyzer"]
         P2["II<br/>Scene<br/>Research"]
         P3["III<br/>Script<br/>Generator"]
-        P31["3.1<br/>Narrative<br/>Director"]
-        P32["3.2<br/>Beat<br/>Illustrator"]
-        P33["3.3<br/>Visual<br/>Interleave"]
-        P35["III.5<br/>Fact<br/>Validator"]
-        P38["3.8<br/>Geo<br/>Mapping"]
-        P40["4.0<br/>Visual<br/>Planner"]
-        P4["IV<br/>Visual<br/>Research"]
-        P5["V<br/>Visual<br/>Director"]
+        P31["IV<br/>Narrative<br/>Director"]
+        P32["V<br/>Beat<br/>Illustrator"]
+        P33["VI<br/>Visual<br/>Interleave"]
+        P35["VII<br/>Fact<br/>Validator"]
+        P38["VIII<br/>Geo<br/>Mapping"]
+        P40["IX<br/>Visual<br/>Planner"]
+        P4["X<br/>Visual<br/>Research"]
+        P5["XI<br/>Visual<br/>Director"]
         P1 --> P2 --> P3 --> P31 --> P32 --> P33 --> P35 --> P38 --> P40 --> P4 --> P5
     end
 
@@ -123,6 +123,7 @@ flowchart TD
     P31 & P32 & P33 -->|"GenAI SDK<br/>TEXT+IMAGE"| FLASH
     P5 -->|"Vertex AI<br/>GenAI SDK"| IMAGEN
     P5 -.->|"Vertex AI<br/>Async generation"| VEO
+
     RELAY <-.->|"WebSocket<br/>BidiGenerateContent"| LIVE_API
 
     ORCH <-->|"Checkpoint resume"| FS
@@ -145,12 +146,12 @@ flowchart TD
 
 | Model | Pipeline Phase | Purpose | Access Method |
 |:---|:---|:---|:---|
-| `gemini-2.0-flash` | I, II, III.5, 3.1, 3.2, 3.3, 3.8, IV | Scan Agent, Research (xN parallel), Fact Validator, Interleaved TEXT+IMAGE (Narrative Director, Beat Illustrator, Visual Interleave), Geo Mapping, Visual Research | Google GenAI SDK via ADK |
-| `gemini-2.0-pro` | III, 4.0, Narrative Curator | Script Generation, Visual Story Planner, Document Curation | Google GenAI SDK via ADK |
+| `gemini-2.0-flash` | I, II, IV, V, VI, VII, VIII, X | Scan Agent, Research (xN parallel), Interleaved TEXT+IMAGE (Narrative Director, Beat Illustrator, Visual Interleave), Fact Validator, Geo Mapping, Visual Research | Google GenAI SDK via ADK |
+| `gemini-2.0-pro` | III, IX, Narrative Curator | Script Generation, Visual Story Planner, Document Curation | Google GenAI SDK via ADK |
 | `gemini-2.5-flash-native-audio-preview-12-2025` | Real-time voice | Historian persona -- always-on narration, interruption, conversation | Gemini Live API (WebSocket `BidiGenerateContent`) |
 | `gemini-embedding-2-preview` | RAG pipeline | 768-dim chunk embeddings + query embeddings for Firestore vector search | Google GenAI SDK |
-| `imagen-3.0-fast-generate-001` | V | 4 cinematic frames per segment with era-accurate negative prompts | Vertex AI via GenAI SDK |
-| `veo-2.0-generate-001` | V | Dramatic video clips (async long-running operations) | Vertex AI via GenAI SDK |
+| `imagen-3.0-fast-generate-001` | XI | 4 cinematic frames per segment with era-accurate negative prompts | Vertex AI via GenAI SDK |
+| `veo-2.0-generate-001` | XI | Dramatic video clips (async long-running operations) | Vertex AI via GenAI SDK |
 
 ### Google Cloud Services
 
@@ -190,7 +191,7 @@ All Gemini, Imagen 3, and Veo 2 calls use the official `google-genai` Python SDK
 - `client.aio.models.generate_images()` -- Imagen 3 with negative prompts and safety settings
 - `client.aio.models.generate_videos()` -- Veo 2 with async long-running operation polling
 - `client.aio.models.embed_content()` -- 768-dim embeddings for RAG
-- Interleaved `response_modalities=["TEXT","IMAGE"]` -- Phases 3.1, 3.2, 3.3
+- Interleaved `response_modalities=["TEXT","IMAGE"]` -- Phases IV, V, VI
 
 </details>
 
@@ -257,28 +258,28 @@ Phase II --- Scene Research (Parallel google_search agents + Aggregator)
 Phase III -- Script Generator (Per-scene narration + visual descriptions)
     |
     v
-Phase 3.1 -- Narrative Director (Interleaved TEXT+IMAGE storyboards)
+Phase IV -- Narrative Director (Interleaved TEXT+IMAGE storyboards)
     |
     v
-Phase 3.2 -- Beat Illustrator (Per-beat TEXT+IMAGE fast path)
+Phase V --- Beat Illustrator (Per-beat TEXT+IMAGE fast path)
     |
     v
-Phase 3.3 -- Visual Interleave (Assign illustration / cinematic / video)
+Phase VI -- Visual Interleave (Assign illustration / cinematic / video)
     |
     v
-Phase III.5  Fact Validator (Hallucination firewall)
+Phase VII - Fact Validator (Hallucination firewall)
     |
     v
-Phase 3.8 -- Geographic Mapping (Geocode + timeline map data)
+Phase VIII  Geographic Mapping (Geocode + timeline map data)
     |
     v
-Phase 4.0 -- Narrative Visual Planner (VisualStoryboard + anachronism guards)
+Phase IX -- Narrative Visual Planner (VisualStoryboard + anachronism guards)
     |
     v
-Phase IV --- Visual Research (6-stage micro-pipeline per scene)
+Phase X --- Visual Research (6-stage micro-pipeline per scene)
     |
     v
-Phase V ---- Visual Director (Imagen 3 + Veo 2 generation)
+Phase XI -- Visual Director (Imagen 3 + Veo 2 generation)
     |
     v
 Documentary Ready
@@ -347,7 +348,7 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 </details>
 
 <details>
-<summary><strong>Phase 3.1 -- Narrative Director (Interleaved TEXT+IMAGE)</strong></summary>
+<summary><strong>Phase IV -- Narrative Director (Interleaved TEXT+IMAGE)</strong></summary>
 
 **What it does:** Makes a single Gemini call per scene with `response_modalities=["TEXT","IMAGE"]` to produce both a creative direction note and a storyboard illustration in one pass. This is the primary implementation of Gemini's native interleaved output capability.
 
@@ -355,14 +356,14 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 
 **Key technical details:**
 - One API call produces two modalities simultaneously -- text and image interleaved in the response.
-- Generated storyboard images are uploaded to GCS and stored as `storyboard_images` for use as visual references in Phase V.
+- Generated storyboard images are uploaded to GCS and stored as `storyboard_images` for use as visual references in Phase XI.
 
 **Outputs:** `storyboard_images` (GCS URIs per scene)
 
 </details>
 
 <details>
-<summary><strong>Phase 3.2 -- Beat Illustrator (Interleaved TEXT+IMAGE)</strong></summary>
+<summary><strong>Phase V -- Beat Illustrator (Interleaved TEXT+IMAGE)</strong></summary>
 
 **What it does:** Pre-generates narration beats with TEXT+IMAGE during the pipeline. Each segment is split into 3-4 beats, and each beat receives both narration text and an illustration from a single Gemini call.
 
@@ -378,9 +379,9 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 </details>
 
 <details>
-<summary><strong>Phase 3.3 -- Visual Interleave Agent</strong></summary>
+<summary><strong>Phase VI -- Visual Interleave Agent</strong></summary>
 
-**What it does:** Assigns each beat a `visual_type` that determines which generation path Phase V uses, creating a mixed-modality playback sequence.
+**What it does:** Assigns each beat a `visual_type` that determines which generation path Phase XI uses, creating a mixed-modality playback sequence.
 
 **Model:** Gemini 2.0 Flash
 
@@ -388,16 +389,16 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 
 | visual_type | Source | Generation |
 |---|---|---|
-| `illustration` | Phase 3.2 image | Already generated, no additional work |
-| `cinematic` | Imagen 3 | Phase V generates a new cinematic frame |
-| `video` | Veo 2 | Phase V generates a video clip |
+| `illustration` | Phase V image | Already generated, no additional work |
+| `cinematic` | Imagen 3 | Phase XI generates a new cinematic frame |
+| `video` | Veo 2 | Phase XI generates a video clip |
 
 **Output:** `beat_visual_plan` (per-beat visual type assignments)
 
 </details>
 
 <details>
-<summary><strong>Phase III.5 -- Fact Validator (Hallucination Firewall)</strong></summary>
+<summary><strong>Phase VII -- Fact Validator (Hallucination Firewall)</strong></summary>
 
 **What it does:** An LLM-judge cross-references every narration claim in the script against the research evidence gathered in Phase II. Overwrites the script in place with no changes to downstream agents.
 
@@ -417,7 +418,7 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 </details>
 
 <details>
-<summary><strong>Phase 3.8 -- Geographic Mapping</strong></summary>
+<summary><strong>Phase VIII -- Geographic Mapping</strong></summary>
 
 **What it does:** Extracts geographic locations from narration scripts, geocodes them via Gemini with Google Maps grounding, and writes structured geo data to Firestore for the interactive timeline map.
 
@@ -432,7 +433,7 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 </details>
 
 <details>
-<summary><strong>Phase 4.0 -- Narrative Visual Planner</strong></summary>
+<summary><strong>Phase IX -- Narrative Visual Planner</strong></summary>
 
 **What it does:** A single Gemini 2.0 Pro call produces a `VisualStoryboard` that guides all downstream visual generation with per-scene subjects, anachronism guards, targeted image search queries, and frame composition concepts.
 
@@ -447,7 +448,7 @@ All phases run inside a `SequentialAgent`. Two pipeline executors are available:
 </details>
 
 <details>
-<summary><strong>Phase IV -- Visual Research Orchestrator</strong></summary>
+<summary><strong>Phase X -- Visual Research Orchestrator</strong></summary>
 
 **What it does:** Runs a 6-stage micro-pipeline per scene to transform each SceneBrief into a `VisualDetailManifest` -- a richly sourced, period-accurate Imagen 3 prompt grounded in real archival research. Uses **no ADK sub-agents**; all calls are direct `client.aio.models.generate_content` for full concurrency control.
 
@@ -474,9 +475,9 @@ Two concurrent tracks run via `asyncio.gather`:
 </details>
 
 <details>
-<summary><strong>Phase V -- Visual Director</strong></summary>
+<summary><strong>Phase XI -- Visual Director</strong></summary>
 
-**What it does:** Beat-aware visual generation that reads Phase 3.3's visual plan and dispatches each beat to the appropriate generator: keep existing illustration, generate an Imagen 3 cinematic frame, or generate a Veo 2 video clip.
+**What it does:** Beat-aware visual generation that reads Phase VI's visual plan and dispatches each beat to the appropriate generator: keep existing illustration, generate an Imagen 3 cinematic frame, or generate a Veo 2 video clip.
 
 **Models:** Imagen 3 (`imagen-3.0-fast-generate-001`), Veo 2 (`veo-2.0-generate-001`)
 
@@ -673,7 +674,7 @@ The frontend is a cinematic application layer built to maximize the Innovation a
 |:---|:---|
 | `gemini-2.5-flash-native-audio-preview-12-2025` | Historian persona -- Gemini Live API, real-time bidirectional voice |
 | `gemini-2.0-pro` | Script generation, Visual Planner, Narrative Curator |
-| `gemini-2.0-flash` | Scan Agent, Research Subagents, Fact Validator, Visual Research, Interleaved TEXT+IMAGE (Phases 3.1, 3.2, 3.3), Geo Mapping |
+| `gemini-2.0-flash` | Scan Agent, Research Subagents, Fact Validator, Visual Research, Interleaved TEXT+IMAGE (Phases IV, V, VI), Geo Mapping |
 | `gemini-embedding-2-preview` | Chunk summary embeddings (768 dims) + RAG query embedding |
 | `imagen-3.0-fast-generate-001` | Scene images -- 4 frames per segment, ~5s each |
 | `veo-2.0-generate-001` | Dramatic video clips -- async generation, 1--2 min each |
@@ -871,6 +872,67 @@ The backend `start.sh` script starts both `historian-api` and `agent-orchestrato
 
 ---
 
+## Reproducible Testing
+
+Once the application is running (either deployed on Cloud Run or locally), follow these steps to verify every major feature.
+
+### Quick Test (< 5 minutes)
+
+The app ships with **5 sample historical documents** — no need to find your own PDF.
+
+1. **Open the app** at `http://localhost:5173` (local) or the deployed Cloud Run URL
+2. **Select a sample document** — click any of the pre-loaded documents on the upload page (e.g., "Tutankhamun" or "Fall of Constantinople")
+3. **Watch the Expedition Log** — the 11-phase pipeline begins immediately. You will see:
+   - Phase markers appearing in sequence (I through XI)
+   - Typewriter-animated log entries from each agent
+   - Stats counters incrementing (sources found, facts verified, segments ready)
+   - Agent cards transitioning through states: queued → searching → evaluating → done
+4. **Enter the Documentary Player** — once segments are ready, click "Watch Documentary" to enter the cinematic player:
+   - Ken Burns pan/zoom animation on AI-generated images
+   - Word-by-word caption reveal synced to narration
+   - Iris reveal transition (radial mask opening)
+   - Auto-hiding player controls after 3 seconds of inactivity
+5. **Test voice interaction** — click the voice button (bottom center) and speak:
+   - Ask a question about the document (e.g., "How was the tomb discovered?")
+   - The historian stops mid-narration within ~300ms
+   - Responds with grounded evidence, then resumes the documentary
+6. **Check the Timeline Map** — in the player sidebar, the map shows geocoded locations from the document with animated pins and historical routes
+
+### What to Verify
+
+| Feature | Where to Look | Expected Behavior |
+|:---|:---|:---|
+| Document upload | Upload page | Drag-and-drop or click sample → redirect to workspace |
+| Real-time pipeline progress | Workspace → Expedition Log | Agent phases stream in via SSE, log entries typewrite |
+| Agent detail inspection | Click any agent card | Modal opens with timestamped logs, source evaluations |
+| Segment generation | Workspace → segment cards | Skeleton shimmer → title appears → images load |
+| Cinematic playback | Player page | Ken Burns visuals, captions, audio narration |
+| Voice interruption | Player → voice button | Historian stops, answers, resumes in < 2 seconds |
+| Timeline map | Player sidebar → map tab | Antique-style map with pins at document locations |
+| Living portrait | Player → historian avatar | Canvas-rendered portrait with lip sync during speech |
+| Narrative branching | Ask a question during playback | New segment generated based on your question |
+
+### Sample Documents Included
+
+| Document | Topic | Pages | Good For Testing |
+|:---|:---|:---|:---|
+| `sample-tutankhamun.pdf` | Egyptian pharaoh, golden mask, tomb discovery | 29 | Rich visual scenes, geographic locations |
+| `sample-fall-of-constantinople.pdf` | 1453 Ottoman siege, end of Byzantium | 28 | Military history, multiple locations |
+| `sample-machu-picchu.pdf` | Inca citadel, Andes mountains | 26 | Architecture, geography, timeline map |
+| `sample-colosseum.pdf` | Roman amphitheater, gladiators | 22 | Fastest pipeline run (fewer pages) |
+| `sample-pompeii.pdf` | Volcanic destruction, archaeological finds | — | Dramatic visuals, scientific research |
+
+> **Tip:** For the fastest end-to-end test, use "Colosseum" (fewest pages → fastest pipeline). For the most visually dramatic result, use "Tutankhamun" or "Pompeii."
+
+### Upload Your Own Document
+
+You can also upload any PDF. The system handles:
+- Documents in **200+ languages** including historical scripts (Ottoman, Ancient Greek, Hieroglyphic)
+- Scanned manuscripts and photographs (Document AI OCR)
+- Multi-page documents (automatically chunked and curated)
+
+---
+
 ## Project Structure
 
 ```
@@ -914,14 +976,14 @@ The backend `start.sh` script starts both `historian-api` and `agent-orchestrato
 │   │       ├── document_analyzer.py         Phase I -- OCR + chunking + curation
 │   │       ├── scene_research_agent.py      Phase II -- parallel google_search research
 │   │       ├── script_agent_orchestrator.py Phase III -- script generation
-│   │       ├── narrative_director_agent.py  Phase 3.1 -- TEXT+IMAGE storyboard
-│   │       ├── beat_illustration_agent.py   Phase 3.2 -- TEXT+IMAGE beat visuals
-│   │       ├── visual_interleave_agent.py   Phase 3.3 -- visual type assignment
-│   │       ├── fact_validator_agent.py      Phase III.5 -- hallucination firewall
-│   │       ├── geo_location_agent.py        Phase 3.8 -- geographic mapping
-│   │       ├── narrative_visual_planner.py  Phase 4.0 -- visual storyboard planning
-│   │       ├── visual_research_orchestrator.py  Phase IV -- 6-stage visual detail pipeline
-│   │       └── visual_director_orchestrator.py  Phase V -- Imagen 3 + Veo 2 generation
+│   │       ├── narrative_director_agent.py  Phase IV -- TEXT+IMAGE storyboard
+│   │       ├── beat_illustration_agent.py   Phase V -- TEXT+IMAGE beat visuals
+│   │       ├── visual_interleave_agent.py   Phase VI -- visual type assignment
+│   │       ├── fact_validator_agent.py      Phase VII -- hallucination firewall
+│   │       ├── geo_location_agent.py        Phase VIII -- geographic mapping
+│   │       ├── narrative_visual_planner.py  Phase IX -- visual storyboard planning
+│   │       ├── visual_research_orchestrator.py  Phase X -- 6-stage visual detail pipeline
+│   │       └── visual_director_orchestrator.py  Phase XI -- Imagen 3 + Veo 2 generation
 │   │
 │   └── live_relay/                          Node.js WebSocket proxy + RAG injection
 │
