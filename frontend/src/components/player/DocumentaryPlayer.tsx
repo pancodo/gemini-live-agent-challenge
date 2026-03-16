@@ -253,8 +253,16 @@ export function DocumentaryPlayer() {
   }, [currentSegment, sessionId, loadBeatsForSegment]);
 
   // ── Sanitize narration text for Gemini Live API ─────
+  // Strip smart quotes, em/en dashes, and other non-ASCII that cause <ctrl> token leaks.
   const sanitize = useCallback((text: string) =>
-    text.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim()
+    text
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")  // smart single quotes → '
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')  // smart double quotes → "
+      .replace(/[\u2013\u2014]/g, '-')               // en/em dash → -
+      .replace(/[\u2026]/g, '...')                   // ellipsis → ...
+      .replace(/[^\x20-\x7E]/g, ' ')                // strip ALL remaining non-ASCII
+      .replace(/\s+/g, ' ')
+      .trim()
   , []);
 
   // ── Send one beat at a time (falls back to script if beats not loaded) ─────
@@ -269,13 +277,13 @@ export function DocumentaryPlayer() {
     let text: string;
     if (beat) {
       const prefix = beatIndex === 0
-        ? `You are narrating "${seg.title}". Deliver this naturally — no announcements. `
+        ? `You are narrating "${seg.title}". Deliver this naturally, no announcements. `
         : 'Continue narrating the next moment: ';
       text = prefix + sanitize(beat.narrationText);
     } else if (beatIndex === 0 && seg.script) {
-      // Beats not loaded yet — send first ~600 chars of script as fallback
+      // Beats not loaded yet - send first ~600 chars of script as fallback
       const snippet = sanitize(seg.script).slice(0, 600);
-      text = `You are narrating "${seg.title}". Deliver this naturally — no announcements. ${snippet}`;
+      text = `You are narrating "${seg.title}". Deliver this naturally, no announcements. ${snippet}`;
     } else {
       console.warn('[DocumentaryPlayer] sendBeatNarration: no beat or script for index', beatIndex);
       return;
@@ -422,7 +430,7 @@ export function DocumentaryPlayer() {
             if (send && nextBeats.length > 0) {
               const beat = nextBeats[0];
               send(
-                `You are narrating "${nextSeg.title}". Deliver this naturally — no announcements. ` +
+                `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
                 sanitize(beat.narrationText)
               );
               setIsNarrating(true);
