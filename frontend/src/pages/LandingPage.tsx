@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   motion,
@@ -8,7 +8,6 @@ import {
   useSpring,
   useInView,
   useReducedMotion,
-  useMotionTemplate,
   animate,
 } from 'motion/react';
 import { useTextScramble } from '../hooks/useTextScramble';
@@ -1135,20 +1134,28 @@ function FeatureBentoSection() {
 
 // ─── Before / After ──────────────────────────────────────────────────────────
 function BeforeAfterSection() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ['start 0.8', 'start 0.2'],
-  });
-  const wipeVal = useTransform(scrollYProgress, [0, 1], ['100%', '0%']);
-  const wipeClip = useMotionTemplate`inset(0 ${wipeVal} 0 0)`;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [splitPos, setSplitPos] = useState(50); // percentage 0-100
+  const isDragging = useRef(false);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    isDragging.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    setSplitPos(Math.max(5, Math.min(95, x)));
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    isDragging.current = false;
+  }, []);
 
   return (
-    <section
-      ref={sectionRef}
-      className="py-24 px-6"
-      style={{ background: C.surface }}
-    >
+    <section className="py-24 px-6" style={{ background: C.surface }}>
       <div className="max-w-4xl mx-auto">
         <motion.div
           initial="hidden"
@@ -1177,33 +1184,28 @@ function BeforeAfterSection() {
           </motion.h2>
         </motion.div>
 
-        {/* Split comparison */}
+        {/* Drag-to-compare slider */}
         <div
-          className="relative rounded-2xl overflow-hidden aspect-video"
-          style={{ border: `1px solid ${C.border}` }}
+          ref={containerRef}
+          className="relative rounded-2xl overflow-hidden aspect-video select-none"
+          style={{ border: `1px solid ${C.border}`, cursor: 'col-resize' }}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
         >
-          {/* BEFORE — actual PDF document page */}
+          {/* BEFORE — PDF document (full width, always visible) */}
           <div className="absolute inset-0">
             <img
               src="/samples/showcase/pdf-pompeii-page1.jpg"
               alt="Original PDF document"
               className="w-full h-full object-cover"
             />
-            {/* Label overlay */}
-            <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-              <div
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] uppercase tracking-[0.2em]"
-                style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(6px)', color: '#3d2a10', fontFamily: 'var(--font-sans)' }}
-              >
-                PDF · Original Document · Unprocessed
-              </div>
-            </div>
           </div>
 
-          {/* AFTER — documentary frame (scroll-wipe reveal) */}
-          <motion.div
+          {/* AFTER — documentary frame (clipped by slider position) */}
+          <div
             className="absolute inset-0"
-            style={{ clipPath: wipeClip }}
+            style={{ clipPath: `inset(0 0 0 ${splitPos}%)` }}
           >
             <img
               src="/samples/showcase/cinematic-pompeii-02.jpg"
@@ -1232,7 +1234,7 @@ function BeforeAfterSection() {
                   textShadow: '0 1px 8px rgba(0,0,0,0.7)',
                 }}
               >
-                In the shadow of Suleiman's empire, a decree reshaped the fate of three provinces...
+                Beneath the volcanic ash, an entire civilization waited to be rediscovered...
               </p>
               <div className="flex items-center gap-4">
                 <div
@@ -1254,26 +1256,48 @@ function BeforeAfterSection() {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          {/* Divider line */}
+          {/* Draggable divider */}
           <div
-            className="absolute inset-y-0 left-1/2 w-px"
-            style={{ background: `linear-gradient(to bottom, transparent, ${GOLD_DARK}, transparent)`, opacity: 0.4 }}
-          />
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-[10px]"
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.gold, fontFamily: 'var(--font-sans)' }}
+            className="absolute inset-y-0 z-10"
+            style={{ left: `${splitPos}%`, width: 3, transform: 'translateX(-50%)' }}
           >
-            ⇔
+            {/* Line */}
+            <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.8)', boxShadow: '0 0 8px rgba(0,0,0,0.5)' }} />
+            {/* Handle */}
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center"
+              style={{
+                background: 'rgba(255,255,255,0.95)',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+                cursor: 'col-resize',
+              }}
+              onPointerDown={handlePointerDown}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#333" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M5 3L2 8L5 13" />
+                <path d="M11 3L14 8L11 13" />
+              </svg>
+            </div>
           </div>
 
           {/* Labels */}
-          <div className="absolute top-4 left-4">
-            <span className="text-[9px] uppercase tracking-[0.2em]" style={{ color: '#8a6a3a', fontFamily: 'var(--font-sans)' }}>Before</span>
+          <div className="absolute top-4 left-4 z-10">
+            <span
+              className="text-[9px] uppercase tracking-[0.2em] px-2 py-1 rounded"
+              style={{ color: '#3d2a10', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(4px)', fontFamily: 'var(--font-sans)' }}
+            >
+              Before
+            </span>
           </div>
-          <div className="absolute top-4 right-4">
-            <span className="text-[9px] uppercase tracking-[0.2em]" style={{ color: C.gold, fontFamily: 'var(--font-sans)' }}>After</span>
+          <div className="absolute top-4 right-4 z-10">
+            <span
+              className="text-[9px] uppercase tracking-[0.2em] px-2 py-1 rounded"
+              style={{ color: 'rgba(255,255,255,0.9)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', fontFamily: 'var(--font-sans)' }}
+            >
+              After
+            </span>
           </div>
         </div>
 
@@ -1281,7 +1305,7 @@ function BeforeAfterSection() {
           className="text-center mt-4 text-[11px]"
           style={{ color: C.muted, fontFamily: 'var(--font-sans)' }}
         >
-          ↑ Scroll through to reveal the transformation
+          Drag the slider to compare
         </p>
       </div>
     </section>
