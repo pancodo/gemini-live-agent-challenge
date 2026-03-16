@@ -565,21 +565,24 @@ function ProductPreviewCard() {
           </span>
         </div>
 
-        {/* Caption */}
-        <div className="absolute bottom-0 left-0 right-0 p-5">
+        {/* Caption — white on dark pill for readability on any image */}
+        <div className="absolute bottom-0 left-0 right-0 p-5 flex justify-center">
           <motion.p
             key={captionIdx}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.5 }}
-            className="text-center italic leading-relaxed"
+            className="text-center italic leading-relaxed rounded-lg"
             style={{
               fontFamily: 'var(--font-serif)',
               fontWeight: 300,
               fontSize: 15,
-              color: C.text,
-              textShadow: '0 2px 28px rgba(0,0,0,0.9), 0 0 60px rgba(0,0,0,0.5)',
+              color: 'rgba(255,255,255,0.95)',
+              background: 'rgba(0,0,0,0.65)',
+              backdropFilter: 'blur(8px)',
+              padding: '8px 16px',
+              textShadow: '0 1px 6px rgba(0,0,0,0.7)',
             }}
           >
             {captions[captionIdx]}
