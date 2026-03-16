@@ -380,7 +380,7 @@ function HeroSection() {
           style={{ color: C.text2, fontFamily: 'var(--font-sans)', fontSize: 15 }}
         >
           Upload any historical document — PDF, image, or ancient manuscript.
-          Eleven AI pipeline phases research, fact-check, and illustrate it in parallel while a live voice historian narrates a cinematic documentary.
+          AI pipeline phases research, fact-check, and illustrate it in parallel while a live voice historian narrates a cinematic documentary.
         </motion.p>
 
         {/* CTAs */}
@@ -426,17 +426,16 @@ function HeroSection() {
           className="mt-14 flex items-center gap-8 flex-wrap justify-center"
         >
           {[
-            { value: 45, suffix: 's', label: 'First segment' },
-            { value: 200, suffix: '+', label: 'Languages' },
-            { value: 300, suffix: 'ms', label: 'Voice latency' },
             { value: 11, suffix: '', label: 'AI pipeline phases' },
+            { value: 4, suffix: '', label: 'AI modalities' },
+            { value: 1, suffix: '', label: 'Document needed' },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p
                 className="text-[22px] leading-none mb-1"
                 style={{ fontFamily: 'var(--font-serif)', color: C.goldBright, fontWeight: 300 }}
               >
-                {'<'}<Counter to={stat.value} suffix={stat.suffix} />
+                <Counter to={stat.value} suffix={stat.suffix} />
               </p>
               <p
                 className="text-[9px] uppercase tracking-[0.2em]"
@@ -699,20 +698,20 @@ function HowItWorksSection() {
     {
       n: '01',
       title: 'Upload',
-      desc: 'Drop any historical document — PDF, scanned image, or manuscript. Supports 200+ languages including Latin, Ottoman Turkish, Ancient Greek, and hieroglyphics.',
+      desc: 'Drop any historical document — PDF, scanned image, or manuscript. Supports any language including Latin, Ottoman Turkish, Ancient Greek, and hieroglyphics.',
       detail: 'Document AI OCR · Multilingual · Any format',
     },
     {
       n: '02',
       title: 'AI Researches',
-      desc: 'Eleven pipeline phases fire in parallel — scene research with Google Search grounding, fact validation against sources, geographic mapping, visual storyboarding, and cinematic image generation.',
-      detail: '11 phases · Fact-checked · Geo-mapped · Streaming',
+      desc: 'Multiple pipeline phases fire in parallel — scene research with Google Search grounding, fact validation against sources, geographic mapping, visual storyboarding, and cinematic image generation.',
+      detail: 'Multi-phase · Fact-checked · Geo-mapped · Streaming',
     },
     {
       n: '03',
       title: 'Watch & Converse',
       desc: 'A cinematic documentary streams segment by segment as each finishes. Interrupt the historian mid-sentence with your voice. Ask anything. The narrative branches and adapts in real time.',
-      detail: 'Gemini Live · < 300ms latency · Streaming delivery',
+      detail: 'Gemini Live · Real-time · Streaming delivery',
     },
   ];
 
@@ -1010,7 +1009,7 @@ function FeatureBentoSection() {
       span: 'md:col-span-2 md:row-span-2',
       label: 'The transformation',
       title: 'A document becomes cinema.',
-      desc: 'Upload any historical document. An 11-phase pipeline researches, fact-checks, geo-maps, storyboards, and illustrates it — streaming each segment the moment it\'s ready. A live historian narrates while you converse.',
+      desc: 'Upload any historical document. A multi-phase pipeline researches, fact-checks, geo-maps, storyboards, and illustrates it — streaming each segment the moment it\'s ready. A live historian narrates while you converse.',
       accent: true,
       icon: '◈',
     },
@@ -1019,7 +1018,7 @@ function FeatureBentoSection() {
       span: '',
       label: 'Multilingual OCR',
       title: 'Any script. Any era.',
-      desc: '200+ languages including dead scripts. Document AI extracts text from Ottoman, Latin, Ancient Greek, hieroglyphics.',
+      desc: 'Any language including dead scripts. Document AI extracts text from Ottoman, Latin, Ancient Greek, hieroglyphics.',
       icon: '⊞',
     },
     {
@@ -1027,7 +1026,7 @@ function FeatureBentoSection() {
       span: '',
       label: 'Live voice persona',
       title: 'Interrupt mid-sentence.',
-      desc: 'Gemini 2.5 Flash Native Audio. The historian stops, answers, resumes. Under 300ms latency.',
+      desc: 'Gemini 2.5 Flash Native Audio. The historian stops, answers, resumes — in real time.',
       icon: '◉',
     },
     {
@@ -1331,10 +1330,8 @@ function BeforeAfterSection() {
 // ─── Stats Row ───────────────────────────────────────────────────────────────
 function StatsSection() {
   const stats = [
-    { value: 45, suffix: 's', label: 'Time to first segment' },
-    { value: 300, suffix: 'ms', label: 'Voice interruption latency' },
-    { value: 200, suffix: '+', label: 'Languages supported' },
     { value: 11, suffix: '', label: 'AI pipeline phases' },
+    { value: 4, suffix: '', label: 'Output modalities' },
     { value: 4, suffix: '×', label: 'Imagen frames per segment' },
   ];
 
