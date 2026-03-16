@@ -183,8 +183,8 @@ function Lightbox({ images, initialIndex, segmentTitle, onClose }: LightboxProps
               fontSize: 11,
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
-              color: 'var(--gold)',
-              background: 'rgba(139,94,26,0.15)',
+              color: 'var(--glow-primary)',
+              background: 'color-mix(in srgb, var(--glow-primary) 15%, transparent)',
               border: '1px solid var(--player-border)',
               borderRadius: 4,
               padding: '6px 14px',
@@ -240,11 +240,16 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
         style={{ paddingLeft: 22 /* align under title, past the index number */ }}
       >
         {visible.map((url, i) => (
-          <button
+          <div
             key={url}
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               setLightboxIndex(i);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setLightboxIndex(i); }
             }}
             aria-label={`View frame ${i + 1} of ${segmentTitle}`}
             className="shrink-0 overflow-hidden rounded-sm transition-opacity duration-150"
@@ -258,12 +263,12 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
               opacity: 0.75,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.opacity = '1';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--glow-primary)';
+              (e.currentTarget as HTMLElement).style.opacity = '1';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--glow-primary)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.opacity = '0.75';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--player-border)';
+              (e.currentTarget as HTMLElement).style.opacity = '0.75';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--player-border)';
             }}
           >
             <img
@@ -274,15 +279,20 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
               loading="lazy"
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
-          </button>
+          </div>
         ))}
 
         {/* "+N more" badge when there are more than 2 images */}
         {imageUrls.length > 2 && (
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               setLightboxIndex(2);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setLightboxIndex(2); }
             }}
             className="shrink-0 rounded-sm flex items-center justify-center transition-colors duration-150"
             style={{
@@ -293,12 +303,12 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
               fontFamily: 'var(--font-sans)',
               fontSize: 9,
               letterSpacing: '0.05em',
-              color: 'var(--gold)',
+              color: 'var(--glow-primary)',
               cursor: 'pointer',
             }}
           >
             +{imageUrls.length - 2}
-          </button>
+          </div>
         )}
       </div>
 
@@ -360,7 +370,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                 fontSize: 10,
                 letterSpacing: '0.4em',
                 textTransform: 'uppercase',
-                color: 'var(--gold)',
+                color: 'var(--glow-primary)',
               }}
             >
               Documentary Segments
@@ -399,10 +409,10 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                   className="w-full text-left rounded-md mb-1 px-3 py-3 transition-colors duration-200"
                   style={{
                     background: isActive
-                      ? 'rgba(139,94,26,0.12)'
+                      ? 'color-mix(in srgb, var(--glow-primary) 12%, transparent)'
                       : 'transparent',
                     borderLeft: isActive
-                      ? '2px solid var(--gold)'
+                      ? '2px solid var(--glow-primary)'
                       : '2px solid transparent',
                     cursor: isGenerating ? 'default' : 'pointer',
                   }}
@@ -417,7 +427,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
                         fontSize: 11,
                         letterSpacing: '0.1em',
                         color: isActive
-                          ? 'var(--gold)'
+                          ? 'var(--glow-primary)'
                           : 'var(--player-text-dim)',
                       }}
                     >
@@ -480,7 +490,7 @@ export function PlayerSidebar({ isOpen, onClose }: PlayerSidebarProps) {
           {branchGraph.length > 0 && (
             <div className="shrink-0 px-3 pb-3">
               {/* BranchTree component will be imported when available */}
-              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 10, letterSpacing: '0.4em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 10, letterSpacing: '0.4em', textTransform: 'uppercase', color: 'var(--glow-primary)', marginBottom: 8 }}>
                 Documentary Branches
               </p>
               {branchGraph.map((node) => (
