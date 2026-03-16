@@ -367,7 +367,7 @@ export function DocumentaryPlayer() {
             setShowEndCard(true);
           }
         }, 2000);
-      }, 30_000); // 30 seconds — generous but not 2 minutes
+      }, 15_000); // 15 seconds — if no turn_complete, force advance
     }
     return () => clearTimeout(narrationSafetyRef.current);
   }, [isNarrating, setIsNarrating, readySegments, currentSegmentId, open, sanitize]);
