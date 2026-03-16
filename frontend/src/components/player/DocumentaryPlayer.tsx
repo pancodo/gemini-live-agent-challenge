@@ -306,15 +306,16 @@ export function DocumentaryPlayer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- isNarrating read from store, not subscription
   }, [beatAdvanceSignal, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize]);
 
-  // ── Safety timer: if no turn_complete arrives for 15s, force advance ──
+  // ── Safety timer: if no turn_complete arrives for 60s, force advance ──
   // Handles cases where Gemini closes (1008) or drops connection mid-beat.
+  // 60s allows for long narration beats (full scripts can take 30-45s to speak).
   const narrationSafetyRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     clearTimeout(narrationSafetyRef.current);
     if (isNarrating) {
       narrationSafetyRef.current = setTimeout(() => {
         if (!usePlayerStore.getState().isNarrating) return;
-        console.warn('[SafetyTimer] No turn_complete in 15s — forcing advance');
+        console.warn('[SafetyTimer] No turn_complete in 60s — forcing advance');
         // Force-end narration — Effect 2b won't fire, so trigger advance directly
         setIsNarrating(false);
         clearTimeout(autoAdvanceTimerRef.current);
@@ -359,7 +360,7 @@ export function DocumentaryPlayer() {
             usePlayerStore.getState().setCaption('');
           }
         }, 2000);
-      }, 15_000);
+      }, 60_000);
     }
     return () => clearTimeout(narrationSafetyRef.current);
   }, [isNarrating, setIsNarrating, readySegments, currentSegmentId, open, sanitize]);
