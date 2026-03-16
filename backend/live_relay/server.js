@@ -378,6 +378,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
   /** Accumulates incremental input transcription fragments into full sentences. */
   let pendingTranscript = '';
 
+  /** Accumulates output transcription (historian speech) into running caption text. */
+  let pendingOutputTranscript = '';
+
   /** Build a BidiGenerateContentSetup message, optionally with a resumption token. */
   function buildSetupMessage(token) {
     const msg = {
@@ -535,6 +538,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         // Turn complete — historian finished speaking
         if (msg.serverContent.turnComplete) {
           pendingTranscript = '';
+          pendingOutputTranscript = '';
           clientWs.send(JSON.stringify({ type: 'turn_complete' }));
         }
 
@@ -565,13 +569,19 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         }
 
         // Output transcript (historian's own speech -> text captions)
+        // Gemini sends incremental fragments; accumulate into a running sentence.
         if (msg.serverContent?.outputTranscription?.text) {
-          clientWs.send(
-            JSON.stringify({
-              type: 'caption',
-              text: msg.serverContent.outputTranscription.text,
-            })
-          );
+          const fragment = msg.serverContent.outputTranscription.text;
+          pendingOutputTranscript += fragment;
+          const caption = pendingOutputTranscript.trim();
+          if (caption) {
+            clientWs.send(
+              JSON.stringify({
+                type: 'caption',
+                text: caption,
+              })
+            );
+          }
         }
 
         // Input transcript (user speech -> text)
