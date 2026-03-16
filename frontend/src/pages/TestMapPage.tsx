@@ -8,7 +8,7 @@ import type { MapViewMode, SegmentGeo, Segment } from '../types';
 const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
   {
     segment: {
-      id: 'seg-1',
+      id: 'test-map-seg-1',
       title: 'The Fall of Constantinople',
       status: 'ready',
       imageUrls: [],
@@ -18,7 +18,7 @@ const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
       graphEdges: [],
     },
     geo: {
-      segmentId: 'seg-1',
+      segmentId: 'test-map-seg-1',
       center: [41.0, 29.0],
       zoom: 5,
       events: [
@@ -44,7 +44,7 @@ const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
   },
   {
     segment: {
-      id: 'seg-2',
+      id: 'test-map-seg-2',
       title: 'The Silk Road',
       status: 'ready',
       imageUrls: [],
@@ -54,7 +54,7 @@ const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
       graphEdges: [],
     },
     geo: {
-      segmentId: 'seg-2',
+      segmentId: 'test-map-seg-2',
       center: [38.0, 65.0],
       zoom: 3,
       events: [
@@ -74,7 +74,7 @@ const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
   },
   {
     segment: {
-      id: 'seg-3',
+      id: 'test-map-seg-3',
       title: 'The Age of Exploration',
       status: 'ready',
       imageUrls: [],
@@ -84,7 +84,7 @@ const MOCK_SEGMENTS: { segment: Segment; geo: SegmentGeo }[] = [
       graphEdges: [],
     },
     geo: {
-      segmentId: 'seg-3',
+      segmentId: 'test-map-seg-3',
       center: [25.0, 10.0],
       zoom: 1.8,
       events: [
@@ -122,13 +122,30 @@ export function TestMapPage() {
   const setMapViewMode = usePlayerStore((s) => s.setMapViewMode);
   const [lastPinClicked, setLastPinClicked] = useState<string | null>(null);
 
-  // Seed all mock data on mount
+  // Seed mock data on mount, clean up on unmount so test segments
+  // don't leak into the real player via sessionStorage persistence.
   useEffect(() => {
     for (const { segment, geo } of MOCK_SEGMENTS) {
       setSegment(segment.id, segment);
       setSegmentGeo(segment.id, geo);
     }
     open(MOCK_SEGMENTS[0].segment.id);
+
+    return () => {
+      // Remove mock segments from researchStore
+      const mockIds = new Set(MOCK_SEGMENTS.map((m) => m.segment.id));
+      useResearchStore.setState((s) => {
+        const segments = { ...s.segments };
+        for (const id of mockIds) delete segments[id];
+        return { segments };
+      });
+      // Remove mock geo from playerStore
+      usePlayerStore.setState((s) => {
+        const segmentGeo = { ...s.segmentGeo };
+        for (const id of mockIds) delete segmentGeo[id];
+        return { segmentGeo };
+      });
+    };
   }, [setSegment, setSegmentGeo, open]);
 
   // Current segment index
