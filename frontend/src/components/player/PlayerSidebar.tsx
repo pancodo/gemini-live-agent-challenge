@@ -240,11 +240,16 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
         style={{ paddingLeft: 22 /* align under title, past the index number */ }}
       >
         {visible.map((url, i) => (
-          <button
+          <div
             key={url}
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               setLightboxIndex(i);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setLightboxIndex(i); }
             }}
             aria-label={`View frame ${i + 1} of ${segmentTitle}`}
             className="shrink-0 overflow-hidden rounded-sm transition-opacity duration-150"
@@ -258,12 +263,12 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
               opacity: 0.75,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.opacity = '1';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--glow-primary)';
+              (e.currentTarget as HTMLElement).style.opacity = '1';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--glow-primary)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.opacity = '0.75';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--player-border)';
+              (e.currentTarget as HTMLElement).style.opacity = '0.75';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--player-border)';
             }}
           >
             <img
@@ -274,15 +279,20 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
               loading="lazy"
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
-          </button>
+          </div>
         ))}
 
         {/* "+N more" badge when there are more than 2 images */}
         {imageUrls.length > 2 && (
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               setLightboxIndex(2);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setLightboxIndex(2); }
             }}
             className="shrink-0 rounded-sm flex items-center justify-center transition-colors duration-150"
             style={{
@@ -298,7 +308,7 @@ function ThumbnailStrip({ imageUrls, segmentTitle }: ThumbnailStripProps) {
             }}
           >
             +{imageUrls.length - 2}
-          </button>
+          </div>
         )}
       </div>
 
