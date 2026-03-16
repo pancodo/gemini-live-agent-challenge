@@ -39,11 +39,15 @@ export function VoiceLayer() {
   // Pending text to send once the WebSocket setup completes (replaces fragile setTimeout)
   const pendingGreetingRef = useRef<string | null>(null);
   const sendTextStableRef = useRef((_t: string) => {});
+  const connectRetryRef = useRef(0);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { sendPCM, sendText, connect, disconnect, reconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
     onReady: () => {
+      clearTimeout(connectTimeoutRef.current);
+      connectRetryRef.current = 0;
       const text = pendingGreetingRef.current;
       if (text) {
         pendingGreetingRef.current = null;
@@ -132,6 +136,7 @@ export function VoiceLayer() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearTimeout(connectTimeoutRef.current);
       capture.stop();
       disconnect();
       playback.destroy();
@@ -195,14 +200,34 @@ export function VoiceLayer() {
   };
 
   // Stable ref for sendTextToHistorian — same pattern as beginConsultation.
+  // Includes 5s connection timeout with up to 2 retries.
   const sendTextRef = useRef((_text: string) => {});
   sendTextRef.current = (text: string) => {
     const currentState = useVoiceStore.getState().state;
     if (currentState === 'idle') {
-      // Queue text — sent reliably when onReady fires
       pendingGreetingRef.current = text;
       connect();
       transition('historian_speaking');
+
+      // Timeout: if onReady doesn't fire in 5s, retry connection
+      clearTimeout(connectTimeoutRef.current);
+      const armTimeout = () => {
+        connectTimeoutRef.current = setTimeout(() => {
+          if (!pendingGreetingRef.current) return; // text was sent, all good
+          disconnect();
+          if (connectRetryRef.current < 2) {
+            connectRetryRef.current++;
+            connect();
+            armTimeout(); // re-arm for next attempt
+          } else {
+            pendingGreetingRef.current = null;
+            connectRetryRef.current = 0;
+            transition('idle');
+            toast.error('Could not connect to historian. Try again.');
+          }
+        }, 5000);
+      };
+      armTimeout();
     } else {
       sendTextStableRef.current(text);
     }
