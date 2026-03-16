@@ -6,15 +6,19 @@ import { typewriteEntry } from '../../hooks/useTypewriter';
 import { AgentModal } from './AgentModal';
 import type { AgentState, AgentStatus } from '../../types';
 
-// ── Phase number → Roman numeral ────────────────────────
-const ROMAN: Record<number, string> = {
-  1: 'I',
-  2: 'II',
-  3: 'III',
-  3.8: 'III.VIII',
-  4: 'IV',
-  5: 'V',
-  6: 'VI',
+// ── Phase label → sequential Roman numeral ──────────────
+const PHASE_ROMAN: Record<string, string> = {
+  'TRANSLATION & SCAN': 'I',
+  'FIELD RESEARCH': 'II',
+  'SYNTHESIS': 'III',
+  'CREATIVE DIRECTION': 'IV',
+  'INTERLEAVED COMPOSITION': 'V',
+  'VISUAL INTERLEAVE': 'VI',
+  'FACT VALIDATION': 'VII',
+  'GEOGRAPHIC MAPPING': 'VIII',
+  'VISUAL STORYBOARD': 'IX',
+  'VISUAL COMPOSITION': 'X',
+  'GENERATION': 'XI',
 };
 
 // ── Motion Variants ─────────────────────────────────────
@@ -186,8 +190,8 @@ function PhaseBlock({
     [reduced, typewrittenRef],
   );
 
-  const headerLabel = entry.phase in ROMAN
-    ? `Phase ${ROMAN[entry.phase]} — ${entry.label}`
+  const headerLabel = entry.label in PHASE_ROMAN
+    ? `Phase ${PHASE_ROMAN[entry.label]} — ${entry.label}`
     : `Phase — ${entry.label}`;
 
   return (
