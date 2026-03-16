@@ -218,8 +218,8 @@ export function DocumentaryPlayer() {
   const prevSignalRef = useRef(0);
   // Track which segment's image timers have been started
   const imageTimersStartedRef = useRef<string | null>(null);
-  // Count turn_complete signals — end narration when all beats spoken
-  const turnCompleteCountRef = useRef(0);
+  // Track which beat index was last sent to historian
+  const lastSentBeatRef = useRef(-1);
   // Interstitial title card state
   const [showInterstitial, setShowInterstitial] = useState(false);
   const [interstitialTitle, setInterstitialTitle] = useState('');
@@ -293,7 +293,8 @@ export function DocumentaryPlayer() {
     send(text);
   }, [currentSegmentId, sanitize]);
 
-  // ── startImageTimers: pre-calculate image + narration changes based on word count ──
+  // ── startImageTimers: pre-calculate image changes only (no text sending) ──
+  // Text is sent on turn_complete in Effect 2b to avoid interrupting Gemini.
   const startImageTimers = useCallback(() => {
     imageTimersRef.current.forEach(clearTimeout);
     imageTimersRef.current = [];
@@ -304,19 +305,16 @@ export function DocumentaryPlayer() {
     let cumulativeMs = 0;
 
     for (let i = 1; i < currentBeats.length; i++) {
-      const beatIdx = i;
       const prevWords = currentBeats[i - 1].narrationText.trim().split(/\s+/).length;
       cumulativeMs += prevWords * MS_PER_WORD;
       const timer = setTimeout(() => {
         setBeatTransitioning(true);
         setTimeout(() => setBeatTransitioning(false), 300);
         advanceBeat();
-        // Send next beat's narration text to historian
-        sendBeatNarration(beatIdx);
       }, cumulativeMs);
       imageTimersRef.current.push(timer);
     }
-  }, [advanceBeat, setBeatTransitioning, sendBeatNarration]);
+  }, [advanceBeat, setBeatTransitioning]);
 
   // ── Effect 2: Start image timers when narrating and beats are ready ──
   useEffect(() => {
@@ -326,25 +324,32 @@ export function DocumentaryPlayer() {
     startImageTimers();
   }, [isNarrating, beats, currentSegmentId, startImageTimers]);
 
-  // ── Effect 2b: Count turn_completes — end narration when all beats spoken ──
+  // ── Effect 2b: On turn_complete, send next beat or end narration ──
+  // Gemini finishes speaking one beat → send the next. This avoids interrupting
+  // the current beat (which happens if we send text while Gemini is speaking).
   useEffect(() => {
     if (beatAdvanceSignal === 0) return;
     if (beatAdvanceSignal === prevSignalRef.current) return;
     prevSignalRef.current = beatAdvanceSignal;
 
-    turnCompleteCountRef.current++;
+    if (!isNarrating) return;
+
     const totalBeats = usePlayerStore.getState().beats.length || 1;
+    const nextBeat = lastSentBeatRef.current + 1;
 
-    console.log(`[DocumentaryPlayer] turn_complete ${turnCompleteCountRef.current}/${totalBeats}`);
+    console.log(`[DocumentaryPlayer] turn_complete: beat ${lastSentBeatRef.current} done, ${nextBeat < totalBeats ? `sending beat ${nextBeat}` : 'narration complete'}`);
 
-    if (turnCompleteCountRef.current >= totalBeats) {
-      // All beats have been spoken — end narration
+    if (nextBeat < totalBeats) {
+      // Send next beat text — Gemini will speak it immediately
+      sendBeatNarration(nextBeat);
+      lastSentBeatRef.current = nextBeat;
+    } else {
+      // All beats spoken — end narration
       imageTimersRef.current.forEach(clearTimeout);
       imageTimersRef.current = [];
       setIsNarrating(false);
-      turnCompleteCountRef.current = 0;
     }
-  }, [beatAdvanceSignal, setIsNarrating]);
+  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration]);
 
   // ── Effect 3: Fallback — if no beats arrive in 30s, create synthetic beats ──
   useEffect(() => {
@@ -429,6 +434,7 @@ export function DocumentaryPlayer() {
             const send = useVoiceStore.getState().sendTextToHistorian;
             if (send && nextBeats.length > 0) {
               const beat = nextBeats[0];
+              lastSentBeatRef.current = 0;
               send(
                 `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
                 sanitize(beat.narrationText)
@@ -452,7 +458,7 @@ export function DocumentaryPlayer() {
     imageTimersStartedRef.current = null;
     imageTimersRef.current.forEach(clearTimeout);
     imageTimersRef.current = [];
-    turnCompleteCountRef.current = 0;
+    lastSentBeatRef.current = -1;
     setShowEndCard(false);
     setShowInterstitial(false);
   }, [currentSegment?.id]);
@@ -497,6 +503,7 @@ export function DocumentaryPlayer() {
   // ── Play overlay handler — starts beat-by-beat narration ─────
   const handlePlay = useCallback(() => {
     setShowPlayOverlay(false);
+    lastSentBeatRef.current = 0;
     sendBeatNarration(0);
     setIsNarrating(true);
     beatWasSpokenRef.current = true;
@@ -656,6 +663,7 @@ export function DocumentaryPlayer() {
           // Beat-by-beat narration — send first beat
           const currentBeats = usePlayerStore.getState().beats;
           if (currentBeats.length > 0) {
+            lastSentBeatRef.current = 0;
             sendBeatNarration(0);
             setIsNarrating(true);
             beatWasSpokenRef.current = true;
