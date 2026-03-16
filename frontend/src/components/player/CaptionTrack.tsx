@@ -1,46 +1,71 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
- * CaptionTrack — rolling word window synced to Gemini speech.
+ * CaptionTrack — Rate-limited subtitle display with chunked refresh.
  *
- * Shows a rolling window of the historian's transcription directly
- * as Gemini delivers it. Words fade in one by one.
+ * Words release at ~2.2/sec matching speech pace. Instead of shifting
+ * on every word (hard to track), text displays in stable chunks of
+ * ~12 words that refresh when the chunk is full — like TV subtitles.
  */
-const MAX_VISIBLE_WORDS = 16;
+const CHUNK_SIZE = 12; // words per subtitle chunk
+const WORDS_PER_SECOND = 2.2;
+const RELEASE_INTERVAL_MS = 1000 / WORDS_PER_SECOND; // ~455ms per word
 
 export function CaptionTrack() {
   const captionText = usePlayerStore((s) => s.captionText);
-  const prevLenRef = useRef(0);
 
-  const words = captionText.trim() ? captionText.trim().split(/\s+/) : [];
+  // All words received from Gemini (buffer)
+  const bufferRef = useRef<string[]>([]);
+  // How many words we've released so far
+  const releasedCountRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
-  // Reset tracking on new turn (caption gets shorter or empty)
-  if (words.length < prevLenRef.current) {
-    prevLenRef.current = 0;
-  }
+  // Current visible chunk and the growing line within it
+  const [chunk, setChunk] = useState('');
 
-  // How many words are new since last render
-  const newStart = prevLenRef.current;
-  prevLenRef.current = words.length;
+  // Buffer incoming words from Gemini
+  useEffect(() => {
+    if (!captionText.trim()) {
+      bufferRef.current = [];
+      releasedCountRef.current = 0;
+      setChunk('');
+      return;
+    }
+    bufferRef.current = captionText.trim().split(/\s+/);
+  }, [captionText]);
 
-  // Rolling window
-  const windowStart = Math.max(0, words.length - MAX_VISIBLE_WORDS);
-  const visible = words.slice(windowStart);
+  // Release words at speech pace, refresh in chunks
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      const buffer = bufferRef.current;
+      const released = releasedCountRef.current;
 
-  const isEmpty = visible.length === 0;
+      if (released < buffer.length) {
+        releasedCountRef.current = released + 1;
+        const count = releasedCountRef.current;
+
+        // Which chunk are we in? Show words from chunk start to current position
+        const chunkStart = Math.floor((count - 1) / CHUNK_SIZE) * CHUNK_SIZE;
+        const chunkEnd = count;
+        setChunk(buffer.slice(chunkStart, chunkEnd).join(' '));
+      }
+    }, RELEASE_INTERVAL_MS);
+
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  if (!chunk) return null;
 
   return (
     <div
       className="flex flex-col items-center rounded-xl"
       style={{
-        opacity: isEmpty ? 0 : 1,
-        transition: 'opacity 0.3s ease',
         background: 'var(--player-caption-bg)',
         backdropFilter: 'blur(12px)',
         maxWidth: 820,
         margin: '0 auto',
-        padding: '12px 24px',
+        padding: '14px 28px',
         boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
       }}
     >
@@ -51,31 +76,13 @@ export function CaptionTrack() {
           fontFamily: 'var(--font-serif)',
           fontWeight: 300,
           fontStyle: 'italic',
-          fontSize: 26,
+          fontSize: 24,
           letterSpacing: '0.02em',
           color: 'var(--player-caption-color)',
           textShadow: '0 1px 8px rgba(0,0,0,0.6)',
         }}
       >
-        {visible.map((word, i) => {
-          const globalIdx = windowStart + i;
-          const isNew = globalIdx >= newStart;
-          // Stagger new words 60ms apart so bulk arrivals reveal one-by-one
-          const newWordOffset = isNew ? globalIdx - newStart : 0;
-          return (
-            <span
-              key={globalIdx}
-              className="inline-block mr-[0.3em]"
-              style={{
-                opacity: isNew ? 0 : 1,
-                animation: isNew ? 'caption-fade-in 0.5s ease forwards' : undefined,
-                animationDelay: isNew ? `${newWordOffset * 0.06}s` : undefined,
-              }}
-            >
-              {word}
-            </span>
-          );
-        })}
+        {chunk}
       </p>
     </div>
   );
