@@ -578,8 +578,8 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes caption-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; filter: blur(2px); }
+  to   { opacity: 1; filter: blur(0); }
 }
 
 @keyframes blink {
@@ -701,19 +701,21 @@ body {
 .player-root {
   /* Player tokens — dark by default (cinematic) */
   --player-bg:              #0d0b09;
-  --player-text:            rgba(232,221,208,0.9);
-  --player-text-secondary:  rgba(232,221,208,0.6);
-  --player-text-dim:        rgba(232,221,208,0.4);
-  --player-text-disabled:   rgba(232,221,208,0.2);
-  --player-overlay:         rgba(13,11,9,0.7);
-  --player-surface:         rgba(26,21,16,0.95);
-  --player-card:            rgba(232,221,208,0.06);
-  --player-border:          rgba(196,149,106,0.3);
+  --player-text:            rgba(255,255,255,0.95);
+  --player-text-secondary:  rgba(255,255,255,0.7);
+  --player-text-dim:        rgba(255,255,255,0.5);
+  --player-text-disabled:   rgba(255,255,255,0.3);
+  --player-overlay:         rgba(0,0,0,0.85);
+  --player-surface:         rgba(20,20,20,0.95);
+  --player-card:            rgba(255,255,255,0.06);
+  --player-border:          rgba(255,255,255,0.15);
   --player-caption-shadow:  0 2px 28px rgba(0,0,0,0.9), 0 0 80px rgba(0,0,0,0.5);
+  --player-caption-color:   rgba(255, 255, 255, 0.95);
+  --player-caption-bg:      rgba(0, 0, 0, 0.72);
   --player-vignette:        rgba(0,0,0,0.85);
   --player-illustration-shadow: 0 1px 12px rgba(0,0,0,0.7);
   --player-tooltip-shadow:  0 4px 20px rgba(0,0,0,0.5);
-  --player-ctrl-filter:     invert(0.7) sepia(0.3);
+  --player-ctrl-filter:     none;
   --player-pin-stroke:      rgba(255,255,255,0.3);
 
   background: var(--player-bg);
@@ -922,9 +924,9 @@ body {
 
 /* Compact variant — translucent for player overlay */
 .visual-source-pill--compact {
-  padding: 3px 10px;
-  font-size: 8px;
-  letter-spacing: 0.18em;
+  padding: 4px 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
