@@ -1159,12 +1159,12 @@
         <div class="stat-label">Cloud Run Services</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value">&lt;45s</div>
-        <div class="stat-label">First Segment</div>
+        <div class="stat-value">4</div>
+        <div class="stat-label">Output Modalities</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value">&lt;300ms</div>
-        <div class="stat-label">Interruption Latency</div>
+        <div class="stat-value">11</div>
+        <div class="stat-label">Pipeline Phases</div>
       </div>
     </div>
 
@@ -1631,7 +1631,7 @@
       </div>
 
       <div class="highlight-box anim-in anim-d5" style="margin-top: 20px;">
-        <p><strong>Per-Segment Streaming:</strong> Scene 0 runs through Phases III&ndash;XI first (fast path &lt;45s). Only after Scene 0 emits <code style="color:var(--green);">segment_update(complete)</code> do Scenes 1&ndash;N start in parallel with <code style="color:var(--teal);">asyncio.Semaphore(2)</code> to respect API rate limits.</p>
+        <p><strong>Per-Segment Streaming:</strong> Scene 0 runs through Phases III&ndash;XI first (fast path). Only after Scene 0 emits <code style="color:var(--green);">segment_update(complete)</code> do Scenes 1&ndash;N start in parallel with <code style="color:var(--teal);">asyncio.Semaphore(2)</code> to respect API rate limits.</p>
       </div>
     </div>
   </div>
@@ -1946,7 +1946,7 @@
       </div>
 
       <div class="highlight-box anim-in anim-d5" style="margin-top: 24px;">
-        <p><strong>Interruption Flow (&lt;300ms):</strong> User speaks &rarr; VAD detects speech &rarr; Gemini sets <code style="color:var(--red);">interrupted=true</code> &rarr; relay forwards to browser &rarr; audio queue flushed &rarr; Ken Burns paused &rarr; waveform + caption mode. On <code style="color:var(--green);">turn_complete</code>, documentary resumes at next beat.</p>
+        <p><strong>Interruption Flow:</strong> User speaks &rarr; VAD detects speech &rarr; Gemini sets <code style="color:var(--red);">interrupted=true</code> &rarr; relay forwards to browser &rarr; audio queue flushed &rarr; Ken Burns paused &rarr; waveform + caption mode. On <code style="color:var(--green);">turn_complete</code>, documentary resumes at next beat.</p>
       </div>
 
       <div class="deep-grid three-col anim-in anim-d6" style="margin-top: 20px;">
