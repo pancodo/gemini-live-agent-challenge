@@ -146,36 +146,14 @@ export function DocumentaryPlayer() {
   // matches YouTube/Netflix subtitle behavior (industry standard).
   const voiceCaption = useVoiceStore((s) => s.caption);
   const setCaption = usePlayerStore((s) => s.setCaption);
-  const setCaptionWps = usePlayerStore((s) => s.setCaptionWps);
-  const turnStartRef = useRef<number>(0);
-  const turnWordCountRef = useRef<number>(0);
-  const captionTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     if (!voiceCaption) return;
     // Filter Gemini control tokens (e.g. <ctrl46>)
     const cleaned = voiceCaption.replace(/<ctrl\d+>/gi, '').trim();
     if (!cleaned) return;
-
-    // Track WPS for CaptionTrack animation timing
-    const now = Date.now();
-    const wordCount = cleaned.split(/\s+/).length;
-    if (turnWordCountRef.current === 0 || wordCount < turnWordCountRef.current) {
-      turnStartRef.current = now;
-      turnWordCountRef.current = wordCount;
-    } else {
-      turnWordCountRef.current = wordCount;
-      const elapsed = (now - turnStartRef.current) / 1000;
-      if (elapsed > 0.5 && wordCount > 3) {
-        setCaptionWps(wordCount / elapsed);
-      }
-    }
-
-    // 300ms delay to match audio pre-buffer latency
-    clearTimeout(captionTimerRef.current);
-    captionTimerRef.current = setTimeout(() => setCaption(cleaned), 300);
-    return () => clearTimeout(captionTimerRef.current);
-  }, [voiceCaption, setCaptionWps, setCaption]);
+    setCaption(cleaned);
+  }, [voiceCaption, setCaption]);
 
   // ── Single-stream narration with pre-timed image changes ──────────
   const beats = usePlayerStore((s) => s.beats);
@@ -227,6 +205,13 @@ export function DocumentaryPlayer() {
 
     return () => controller.abort();
   }, [currentSegment, sessionId, loadBeatsForSegment]);
+
+  // ── Preconnect voice WebSocket so Play click sends text instantly ──
+  useEffect(() => {
+    if (!currentSegment) return;
+    const preconnect = useVoiceStore.getState().preconnect;
+    if (preconnect) preconnect();
+  }, [currentSegment?.id]);
 
   // ── Sanitize narration text for Gemini Live API ─────
   // Strip smart quotes, em/en dashes, and other non-ASCII that cause <ctrl> token leaks.
@@ -397,91 +382,11 @@ export function DocumentaryPlayer() {
 
   // ── Effect 4: Auto-advance between segments ──
   // When narration finishes (isNarrating false after beats played), auto-advance.
-  const wasNarratingRef = useRef(false);
-
-  // Track if at least one script was actually sent to historian
-  const beatWasSpokenRef = useRef(false);
-
-  useEffect(() => {
-    if (isNarrating) {
-      wasNarratingRef.current = true;
-      setShowEndCard(false);
-      return;
-    }
-    // Only auto-advance if narration actually happened (a beat was sent)
-    if (!wasNarratingRef.current || !beatWasSpokenRef.current) return;
-    wasNarratingRef.current = false;
-    beatWasSpokenRef.current = false;
-    if (beats.length === 0) return;
-
-    // Narration just finished — auto-advance after cinematic pause
-    clearTimeout(autoAdvanceTimerRef.current);
-    autoAdvanceTimerRef.current = setTimeout(() => {
-      const idx = readySegments.findIndex((s) => s.id === currentSegmentId);
-      const nextSeg = readySegments[idx + 1];
-
-      if (nextSeg) {
-        // Show interstitial title card, then advance + auto-narrate
-        setInterstitialTitle(nextSeg.title || `Chapter ${idx + 2}`);
-        setShowInterstitial(true);
-        setTimeout(() => {
-          setShowInterstitial(false);
-          try {
-            if ('startViewTransition' in document) {
-              (document as Document & { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
-                open(nextSeg.id);
-              });
-            } else {
-              open(nextSeg.id);
-            }
-          } catch {
-            open(nextSeg.id);
-          }
-          // Auto-start narration for next segment (beat 0)
-          // Use retry pattern — beats may take time to load
-          setTimeout(() => {
-            const checkAndSend = (retries = 0) => {
-              const nextBeats = usePlayerStore.getState().beats;
-              const send = useVoiceStore.getState().sendTextToHistorian;
-              if (send && nextBeats.length > 0) {
-                const beat = nextBeats[0];
-                lastSentBeatRef.current = 0;
-                send(
-                  `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
-                  sanitize(beat.narrationText)
-                );
-                setIsNarrating(true);
-                beatWasSpokenRef.current = true;
-              } else if (retries < 5) {
-                setTimeout(() => checkAndSend(retries + 1), 500);
-              } else if (send) {
-                // Ultimate fallback: use script text
-                const seg = useResearchStore.getState().segments[nextSeg.id];
-                if (seg?.script) {
-                  lastSentBeatRef.current = 0;
-                  send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
-                    sanitize(seg.script).slice(0, 600));
-                  setIsNarrating(true);
-                  beatWasSpokenRef.current = true;
-                }
-              }
-            };
-            checkAndSend();
-          }, 1000);
-        }, 2500);
-      } else {
-        // Last segment — show end card
-        setShowEndCard(true);
-      }
-    }, 3000);
-
-    return () => clearTimeout(autoAdvanceTimerRef.current);
-  }, [isNarrating, beats.length, readySegments, currentSegmentId, open]);
-
   // Reset state when segment changes
   useEffect(() => {
     narrationStartedRef.current.clear();
     lastSentBeatRef.current = -1;
+    prevSignalRef.current = 0;
     setShowEndCard(false);
     setShowInterstitial(false);
   }, [currentSegment?.id]);
@@ -529,7 +434,6 @@ export function DocumentaryPlayer() {
     lastSentBeatRef.current = 0;
     sendBeatNarration(0);
     setIsNarrating(true);
-    beatWasSpokenRef.current = true;
   }, [sendBeatNarration, setIsNarrating]);
 
   // ── Auto-show keyboard shortcuts on first visit ────────────────
@@ -689,7 +593,6 @@ export function DocumentaryPlayer() {
             lastSentBeatRef.current = 0;
             sendBeatNarration(0);
             setIsNarrating(true);
-            beatWasSpokenRef.current = true;
             setShowPlayOverlay(false);
           } else {
             const begin = useVoiceStore.getState().beginConsultation;
