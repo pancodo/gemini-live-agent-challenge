@@ -16,6 +16,12 @@
 
 </div>
 
+<div align="center">
+
+[**Interactive Architecture Diagram**](https://historia.efeecllk.com/architecture.html) · [Source](frontend/public/architecture.html)
+
+</div>
+
 ---
 
 ## What Is AI Historian?
