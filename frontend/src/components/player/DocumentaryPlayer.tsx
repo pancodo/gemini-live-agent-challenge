@@ -298,6 +298,10 @@ export function DocumentaryPlayer() {
           }, 2500);
         } else {
           setShowEndCard(true);
+          // Stop voice and clear captions — documentary is complete
+          useVoiceStore.getState().setState('idle');
+          useVoiceStore.getState().setCaption('');
+          usePlayerStore.getState().setCaption('');
         }
       }, 3000);
     }
@@ -352,6 +356,9 @@ export function DocumentaryPlayer() {
             }, 2500);
           } else {
             setShowEndCard(true);
+            useVoiceStore.getState().setState('idle');
+            useVoiceStore.getState().setCaption('');
+            usePlayerStore.getState().setCaption('');
           }
         }, 2000);
       }, 15_000);
