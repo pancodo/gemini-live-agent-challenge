@@ -193,13 +193,12 @@ export function DocumentaryPlayer() {
     let text: string;
     if (beat) {
       const prefix = beatIndex === 0
-        ? `You are narrating "${seg.title}". Deliver this naturally, no announcements. `
-        : 'Continue narrating the next moment: ';
+        ? `[NARRATION MODE] Read the following script aloud exactly as written. Do NOT add commentary, do NOT describe images, do NOT use any tools, do NOT say "imagine" or "picture this". Just narrate the text naturally as a documentary narrator. Title: "${seg.title}". Script: `
+        : '[NARRATION MODE] Continue reading the next passage exactly as written. No commentary, no tools. Script: ';
       text = prefix + sanitize(beat.narrationText);
     } else if (beatIndex === 0 && seg.script) {
-      // Beats not loaded yet - send first ~600 chars of script as fallback
       const snippet = sanitize(seg.script).slice(0, 600);
-      text = `You are narrating "${seg.title}". Deliver this naturally, no announcements. ${snippet}`;
+      text = `[NARRATION MODE] Read the following script aloud exactly as written. Do NOT add commentary, do NOT use any tools. Title: "${seg.title}". Script: ${snippet}`;
     } else {
       return;
     }
@@ -274,7 +273,7 @@ export function DocumentaryPlayer() {
                 if (send && nextBeats.length > 0) {
                   lastSentBeatRef.current = 0;
                   send(
-                    `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
+                    `[NARRATION MODE] Read the following script aloud exactly as written. No commentary, no tools. Title: "${nextSeg.title}". Script: ` +
                     sanitize(nextBeats[0].narrationText)
                   );
                   setIsNarrating(true);
@@ -285,7 +284,7 @@ export function DocumentaryPlayer() {
                   const seg = useResearchStore.getState().segments[nextSeg.id];
                   if (send && seg?.script) {
                     lastSentBeatRef.current = 0;
-                    send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
+                    send(`[NARRATION MODE] Read the following script aloud exactly as written. No commentary, no tools. Title: "${nextSeg.title}". Script: ` +
                       sanitize(seg.script).slice(0, 600));
                   }
                   // Always set isNarrating so safety timer keeps the pipeline moving
@@ -336,7 +335,7 @@ export function DocumentaryPlayer() {
                   const send = useVoiceStore.getState().sendTextToHistorian;
                   if (send && nextBeats.length > 0) {
                     lastSentBeatRef.current = 0;
-                    send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` + sanitize(nextBeats[0].narrationText));
+                    send(`[NARRATION MODE] Read the following script aloud exactly as written. No commentary, no tools. Title: "${nextSeg.title}". Script: ` + sanitize(nextBeats[0].narrationText));
                     setIsNarrating(true);
                   } else if (retries < 5) {
                     setTimeout(() => checkAndSend(retries + 1), 500);
@@ -345,7 +344,7 @@ export function DocumentaryPlayer() {
                     const seg = useResearchStore.getState().segments[nextSeg.id];
                     if (seg?.script) {
                       lastSentBeatRef.current = 0;
-                      send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` + sanitize(seg.script).slice(0, 600));
+                      send(`[NARRATION MODE] Read the following script aloud exactly as written. No commentary, no tools. Title: "${nextSeg.title}". Script: ` + sanitize(seg.script).slice(0, 600));
                       setIsNarrating(true);
                     }
                   }
