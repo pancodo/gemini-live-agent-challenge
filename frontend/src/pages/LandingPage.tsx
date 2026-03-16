@@ -1345,7 +1345,7 @@ function StatsSection() {
         whileInView="visible"
         viewport={{ once: true, amount: 0.5 }}
         variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-        className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8"
+        className="max-w-3xl mx-auto flex flex-wrap justify-center gap-12"
       >
         {stats.map((s) => (
           <motion.div key={s.label} variants={fadeUp} className="text-center">
