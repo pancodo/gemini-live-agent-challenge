@@ -8,7 +8,6 @@ import {
   useSpring,
   useInView,
   useReducedMotion,
-  animate,
 } from 'motion/react';
 import { useTextScramble } from '../hooks/useTextScramble';
 import { useTheme } from '../hooks/useTheme';
@@ -51,28 +50,6 @@ const stagger = (delay = 0) => ({
   hidden: {},
   visible: { transition: { staggerChildren: 0.1, delayChildren: delay } },
 });
-
-// ─── Animated counter ────────────────────────────────────────────────────────
-function Counter({ to, suffix = '' }: { to: number; suffix?: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, amount: 0.8 });
-  const val = useMotionValue(0);
-  const [display, setDisplay] = useState('0');
-  const reduced = useReducedMotion();
-
-  useEffect(() => {
-    if (!inView) return;
-    if (reduced) { setDisplay(`${to}${suffix}`); return; }
-    const controls = animate(val, to, {
-      duration: 1.8,
-      ease: EASE,
-      onUpdate: (v) => setDisplay(`${Math.round(v)}${suffix}`),
-    });
-    return () => controls.stop();
-  }, [inView, to, suffix, val, reduced]);
-
-  return <span ref={ref}>{display}</span>;
-}
 
 // ─── Word-by-word reveal ─────────────────────────────────────────────────────
 function WordReveal({ text, className = '' }: { text: string; className?: string }) {
