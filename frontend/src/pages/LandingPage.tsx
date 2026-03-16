@@ -467,16 +467,29 @@ function HeroSection() {
 // ─── Product preview card ─────────────────────────────────────────────────────
 // Uses CSS variables so it responds to light/dark theme.
 
+const SHOWCASE_IMAGES = [
+  '/samples/showcase/beat-pompeii-01.jpg',
+  '/samples/showcase/cinematic-pompeii-01.jpg',
+  '/samples/showcase/beat-ancient-01.jpg',
+  '/samples/showcase/frame-pompeii-01.jpg',
+  '/samples/showcase/beat-pompeii-02.jpg',
+  '/samples/showcase/beat-ancient-02.jpg',
+];
+
 function ProductPreviewCard() {
   const [captionIdx, setCaptionIdx] = useState(0);
+  const [imageIdx, setImageIdx] = useState(0);
   const captions = [
-    'In the shadow of the Hagia Sophia, a decree changed the fate of three provinces…',
-    'The Grand Vizier\'s hand moved across the parchment with practiced certainty…',
-    'Edirne, 1572. The Ottoman court at its most powerful, its most fragile…',
+    'In the shadow of the Hagia Sophia, a decree changed the fate of three provinces...',
+    'The Grand Vizier\'s hand moved across the parchment with practiced certainty...',
+    'Beneath the volcanic ash, an entire civilization waited to be rediscovered...',
   ];
 
   useEffect(() => {
-    const t = setInterval(() => setCaptionIdx((i) => (i + 1) % captions.length), 3800);
+    const t = setInterval(() => {
+      setCaptionIdx((i) => (i + 1) % captions.length);
+      setImageIdx((i) => (i + 1) % SHOWCASE_IMAGES.length);
+    }, 3800);
     return () => clearInterval(t);
   }, []);
 
@@ -515,33 +528,20 @@ function ProductPreviewCard() {
         </div>
       </div>
 
-      {/* Cinematic frame (CSS gradient "scene") */}
-      <div className="relative aspect-video overflow-hidden">
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse 100% 100% at 30% 40%, rgba(139,94,26,0.12) 0%, transparent 60%),
-              radial-gradient(ellipse 80% 80% at 75% 60%, rgba(30,60,80,0.1) 0%, transparent 55%),
-              var(--bg3)
-            `,
-          }}
-        />
-        {/* Ken Burns pan simulation */}
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{
-            background: `
-              repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 40px,
-                rgba(196,149,106,0.03) 40px,
-                rgba(196,149,106,0.03) 41px
-              )
-            `,
-          }}
-        />
+      {/* Cinematic frame with real generated images */}
+      <div className="relative aspect-video overflow-hidden" style={{ background: '#0d0b09' }}>
+        {SHOWCASE_IMAGES.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
+            style={{
+              opacity: i === imageIdx ? 1 : 0,
+              animation: i === imageIdx ? 'ken-burns-0 20s ease-in-out infinite alternate' : undefined,
+            }}
+          />
+        ))}
         {/* Vignette */}
         <div
           className="absolute inset-0"
@@ -1225,15 +1225,11 @@ function BeforeAfterSection() {
             }}
           >
             <motion.div style={{ clipPath: `inset(0 ${wipe} 0 0)` }} className="absolute inset-0">
-              <div
-                className="absolute inset-0"
-                style={{
-                  background: `
-                    radial-gradient(ellipse 90% 70% at 35% 45%, rgba(139,94,26,0.25) 0%, transparent 55%),
-                    radial-gradient(ellipse 70% 60% at 70% 60%, rgba(20,50,70,0.3) 0%, transparent 50%),
-                    linear-gradient(140deg, #1a1208 0%, #0a0e14 50%, #0d0b09 100%)
-                  `,
-                }}
+              <img
+                src="/samples/showcase/cinematic-pompeii-02.jpg"
+                alt="AI-generated documentary frame"
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ animation: 'ken-burns-1 25s ease-in-out infinite alternate' }}
               />
               <div
                 className="absolute inset-0"
