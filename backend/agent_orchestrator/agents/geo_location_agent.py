@@ -80,10 +80,12 @@ Rules:
 - Use accurate historical coordinates (where the ancient site actually was/is)
 - Center should be the geographic midpoint of all mentioned locations
 - Zoom should frame all locations (2=world, 5=region, 8=city)
-- If no routes are mentioned, return an empty routes array
 - Include at least the primary location from the scene brief
 - For ancient cities, use the coordinates of their modern site or archaeological ruins
-- Mark battle sites as type "battle", trade routes as style "trade", military campaigns as "military"
+- Mark battle sites as type "battle", trade hubs as type "city", regions as type "region"
+- If the narration describes movement between locations (armies marching, traders traveling, peoples migrating, journeys, expeditions), create a route connecting those locations even if a specific route name is not given
+- Route styles: "trade" for commerce/trade routes, "military" for campaigns/invasions/army movements, "migration" for population movements/pilgrimages/voyages
+- Always try to generate at least one route if multiple locations are mentioned — connect them in the narrative order of events
 """
 
 _GEOCODE_PROMPT: str = """\

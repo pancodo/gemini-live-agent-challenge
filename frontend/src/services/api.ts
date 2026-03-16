@@ -90,8 +90,10 @@ Rules:
 - Use accurate historical coordinates
 - Center should be the geographic midpoint of all mentioned locations
 - Zoom should frame all locations (2=world, 5=region, 8=city)
-- If no routes are mentioned, return an empty routes array
-- Include at least the primary location even if the script is vague`;
+- Include at least the primary location even if the script is vague
+- If the narration describes movement between locations (armies, traders, migrants, journeys), create a route connecting them
+- Route styles: "trade" for commerce, "military" for campaigns/invasions, "migration" for population movements/voyages
+- Always try to generate at least one route if multiple locations are mentioned`;
 
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
