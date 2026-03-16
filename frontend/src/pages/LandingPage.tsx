@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   motion,
@@ -467,16 +467,29 @@ function HeroSection() {
 // ─── Product preview card ─────────────────────────────────────────────────────
 // Uses CSS variables so it responds to light/dark theme.
 
+const SHOWCASE_IMAGES = [
+  '/samples/showcase/beat-pompeii-01.jpg',
+  '/samples/showcase/cinematic-pompeii-01.jpg',
+  '/samples/showcase/beat-ancient-01.jpg',
+  '/samples/showcase/frame-pompeii-01.jpg',
+  '/samples/showcase/beat-pompeii-02.jpg',
+  '/samples/showcase/beat-ancient-02.jpg',
+];
+
 function ProductPreviewCard() {
   const [captionIdx, setCaptionIdx] = useState(0);
+  const [imageIdx, setImageIdx] = useState(0);
   const captions = [
-    'In the shadow of the Hagia Sophia, a decree changed the fate of three provinces…',
-    'The Grand Vizier\'s hand moved across the parchment with practiced certainty…',
-    'Edirne, 1572. The Ottoman court at its most powerful, its most fragile…',
+    'In the shadow of the Hagia Sophia, a decree changed the fate of three provinces...',
+    'The Grand Vizier\'s hand moved across the parchment with practiced certainty...',
+    'Beneath the volcanic ash, an entire civilization waited to be rediscovered...',
   ];
 
   useEffect(() => {
-    const t = setInterval(() => setCaptionIdx((i) => (i + 1) % captions.length), 3800);
+    const t = setInterval(() => {
+      setCaptionIdx((i) => (i + 1) % captions.length);
+      setImageIdx((i) => (i + 1) % SHOWCASE_IMAGES.length);
+    }, 3800);
     return () => clearInterval(t);
   }, []);
 
@@ -515,33 +528,20 @@ function ProductPreviewCard() {
         </div>
       </div>
 
-      {/* Cinematic frame (CSS gradient "scene") */}
-      <div className="relative aspect-video overflow-hidden">
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse 100% 100% at 30% 40%, rgba(139,94,26,0.12) 0%, transparent 60%),
-              radial-gradient(ellipse 80% 80% at 75% 60%, rgba(30,60,80,0.1) 0%, transparent 55%),
-              var(--bg3)
-            `,
-          }}
-        />
-        {/* Ken Burns pan simulation */}
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{
-            background: `
-              repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 40px,
-                rgba(196,149,106,0.03) 40px,
-                rgba(196,149,106,0.03) 41px
-              )
-            `,
-          }}
-        />
+      {/* Cinematic frame with real generated images */}
+      <div className="relative aspect-video overflow-hidden" style={{ background: '#0d0b09' }}>
+        {SHOWCASE_IMAGES.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
+            style={{
+              opacity: i === imageIdx ? 1 : 0,
+              animation: i === imageIdx ? 'ken-burns-0 20s ease-in-out infinite alternate' : undefined,
+            }}
+          />
+        ))}
         {/* Vignette */}
         <div
           className="absolute inset-0"
@@ -565,21 +565,24 @@ function ProductPreviewCard() {
           </span>
         </div>
 
-        {/* Caption */}
-        <div className="absolute bottom-0 left-0 right-0 p-5">
+        {/* Caption — white on dark pill for readability on any image */}
+        <div className="absolute bottom-0 left-0 right-0 p-5 flex justify-center">
           <motion.p
             key={captionIdx}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.5 }}
-            className="text-center italic leading-relaxed"
+            className="text-center italic leading-relaxed rounded-lg"
             style={{
               fontFamily: 'var(--font-serif)',
               fontWeight: 300,
               fontSize: 15,
-              color: C.text,
-              textShadow: '0 2px 28px rgba(0,0,0,0.9), 0 0 60px rgba(0,0,0,0.5)',
+              color: 'rgba(255,255,255,0.95)',
+              background: 'rgba(0,0,0,0.65)',
+              backdropFilter: 'blur(8px)',
+              padding: '8px 16px',
+              textShadow: '0 1px 6px rgba(0,0,0,0.7)',
             }}
           >
             {captions[captionIdx]}
@@ -1131,19 +1134,28 @@ function FeatureBentoSection() {
 
 // ─── Before / After ──────────────────────────────────────────────────────────
 function BeforeAfterSection() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ['start 0.8', 'start 0.2'],
-  });
-  const wipe = useTransform(scrollYProgress, [0, 1], ['100%', '0%']);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [splitPos, setSplitPos] = useState(50); // percentage 0-100
+  const isDragging = useRef(false);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    isDragging.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    setSplitPos(Math.max(5, Math.min(95, x)));
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    isDragging.current = false;
+  }, []);
 
   return (
-    <section
-      ref={sectionRef}
-      className="py-24 px-6"
-      style={{ background: C.surface }}
-    >
+    <section className="py-24 px-6" style={{ background: C.surface }}>
       <div className="max-w-4xl mx-auto">
         <motion.div
           initial="hidden"
@@ -1172,129 +1184,120 @@ function BeforeAfterSection() {
           </motion.h2>
         </motion.div>
 
-        {/* Split comparison */}
+        {/* Drag-to-compare slider */}
         <div
-          className="relative rounded-2xl overflow-hidden aspect-video"
-          style={{ border: `1px solid ${C.border}` }}
+          ref={containerRef}
+          className="relative rounded-2xl overflow-hidden aspect-video select-none"
+          style={{ border: `1px solid ${C.border}`, cursor: 'col-resize' }}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
         >
-          {/* BEFORE — parchment document */}
+          {/* BEFORE — PDF document (full width, always visible) */}
+          <div className="absolute inset-0">
+            <img
+              src="/samples/showcase/pdf-pompeii-page1.jpg"
+              alt="Original PDF document"
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* AFTER — documentary frame (clipped by slider position) */}
           <div
-            className="absolute inset-0 flex items-center justify-center p-10"
-            style={{
-              background: `
-                radial-gradient(ellipse 80% 70% at 50% 40%, #e8d8b8 0%, #c8b08a 40%, #a08060 100%)
-              `,
-            }}
+            className="absolute inset-0"
+            style={{ clipPath: `inset(0 0 0 ${splitPos}%)` }}
           >
-            <div className="text-center opacity-80">
-              <div
-                className="text-[9px] uppercase tracking-[0.3em] mb-4"
-                style={{ color: '#5c3d0e', fontFamily: 'var(--font-sans)' }}
+            <img
+              src="/samples/showcase/cinematic-pompeii-02.jpg"
+              alt="AI-generated documentary frame"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ animation: 'ken-burns-1 25s ease-in-out infinite alternate' }}
+            />
+            {/* Vignette */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 25%, rgba(13,11,9,0.4) 60%, rgba(13,11,9,0.85) 100%)',
+              }}
+            />
+            <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 px-8">
+              <p
+                className="text-center italic mb-3 rounded-lg"
+                style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontWeight: 300,
+                  fontSize: 'clamp(13px, 2vw, 16px)',
+                  color: 'rgba(255,255,255,0.95)',
+                  background: 'rgba(0,0,0,0.55)',
+                  backdropFilter: 'blur(6px)',
+                  padding: '6px 14px',
+                  textShadow: '0 1px 8px rgba(0,0,0,0.7)',
+                }}
               >
-                Original document
-              </div>
-              <div
-                className="leading-[2.2] text-[11px] max-w-xs mx-auto"
-                style={{ fontFamily: 'var(--font-serif)', color: '#3d2a10', fontStyle: 'italic' }}
-              >
-                بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ<br />
-                Hükm-ü şerîf oldur ki...<br />
-                <span className="opacity-60 not-italic text-[10px]">
-                  Imperial Decree · Ottoman Turkish · c. 1572
-                </span>
-              </div>
-              <div
-                className="mt-6 inline-flex items-center gap-2 px-3 py-1 rounded text-[9px] uppercase tracking-[0.2em]"
-                style={{ background: 'rgba(92,61,14,0.1)', color: '#5c3d0e', border: '1px solid rgba(92,61,14,0.2)', fontFamily: 'var(--font-sans)' }}
-              >
-                <span>PDF · 28 pages · Unprocessed</span>
+                Beneath the volcanic ash, an entire civilization waited to be rediscovered...
+              </p>
+              <div className="flex items-center gap-4">
+                <div
+                  className="text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
+                  style={{ color: 'rgba(255,255,255,0.8)', background: 'rgba(13,11,9,0.6)', border: '1px solid rgba(255,255,255,0.15)', fontFamily: 'var(--font-sans)' }}
+                >
+                  Segment 1 · 42s
+                </div>
+                <div className="flex items-end gap-[2px] h-3">
+                  {[0.5, 0.8, 0.6, 1, 0.7].map((h, i) => (
+                    <motion.div
+                      key={i}
+                      className="w-[3px] rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.7)' }}
+                      animate={{ scaleY: [h, h * 0.3, h] }}
+                      transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.08 }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* AFTER — documentary frame (scroll-wipe reveal) */}
-          <motion.div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{
-              clipPath: wipe.get() ? `inset(0 ${wipe.get()} 0 0)` : undefined,
-              background: `
-                radial-gradient(ellipse 90% 70% at 35% 45%, rgba(139,94,26,0.25) 0%, transparent 55%),
-                radial-gradient(ellipse 70% 60% at 70% 60%, rgba(20,50,70,0.3) 0%, transparent 50%),
-                linear-gradient(140deg, #1a1208 0%, #0a0e14 50%, #0d0b09 100%)
-              `,
-            }}
-          >
-            <motion.div style={{ clipPath: `inset(0 ${wipe} 0 0)` }} className="absolute inset-0">
-              <div
-                className="absolute inset-0"
-                style={{
-                  background: `
-                    radial-gradient(ellipse 90% 70% at 35% 45%, rgba(139,94,26,0.25) 0%, transparent 55%),
-                    radial-gradient(ellipse 70% 60% at 70% 60%, rgba(20,50,70,0.3) 0%, transparent 50%),
-                    linear-gradient(140deg, #1a1208 0%, #0a0e14 50%, #0d0b09 100%)
-                  `,
-                }}
-              />
-              <div
-                className="absolute inset-0"
-                style={{
-                  background: 'radial-gradient(ellipse 85% 85% at 50% 50%, transparent 25%, rgba(13,11,9,0.4) 60%, rgba(13,11,9,0.85) 100%)',
-                }}
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 px-8">
-                <p
-                  className="text-center italic mb-3"
-                  style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontWeight: 300,
-                    fontSize: 'clamp(13px, 2vw, 16px)',
-                    color: C.text,
-                    textShadow: '0 2px 24px rgba(0,0,0,0.9)',
-                  }}
-                >
-                  In the shadow of Suleiman's empire, a decree reshaped the fate of three provinces and the men who governed them…
-                </p>
-                <div className="flex items-center gap-4">
-                  <div
-                    className="text-[9px] uppercase tracking-[0.2em] px-2 py-0.5 rounded"
-                    style={{ color: C.gold, background: 'rgba(13,11,9,0.6)', border: `1px solid ${C.border}`, fontFamily: 'var(--font-sans)' }}
-                  >
-                    Segment 1 · 42s
-                  </div>
-                  <div className="flex items-end gap-[2px] h-3">
-                    {[0.5, 0.8, 0.6, 1, 0.7].map((h, i) => (
-                      <motion.div
-                        key={i}
-                        className="w-[3px] rounded-full"
-                        style={{ background: C.gold }}
-                        animate={{ scaleY: [h, h * 0.3, h] }}
-                        transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.08 }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-
-          {/* Divider line */}
+          {/* Draggable divider */}
           <div
-            className="absolute inset-y-0 left-1/2 w-px"
-            style={{ background: `linear-gradient(to bottom, transparent, ${GOLD_DARK}, transparent)`, opacity: 0.4 }}
-          />
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-[10px]"
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.gold, fontFamily: 'var(--font-sans)' }}
+            className="absolute inset-y-0 z-10"
+            style={{ left: `${splitPos}%`, width: 3, transform: 'translateX(-50%)' }}
           >
-            ⇔
+            {/* Line */}
+            <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.8)', boxShadow: '0 0 8px rgba(0,0,0,0.5)' }} />
+            {/* Handle */}
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center"
+              style={{
+                background: 'rgba(255,255,255,0.95)',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+                cursor: 'col-resize',
+              }}
+              onPointerDown={handlePointerDown}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#333" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M5 3L2 8L5 13" />
+                <path d="M11 3L14 8L11 13" />
+              </svg>
+            </div>
           </div>
 
           {/* Labels */}
-          <div className="absolute top-4 left-4">
-            <span className="text-[9px] uppercase tracking-[0.2em]" style={{ color: '#8a6a3a', fontFamily: 'var(--font-sans)' }}>Before</span>
+          <div className="absolute top-4 left-4 z-10">
+            <span
+              className="text-[9px] uppercase tracking-[0.2em] px-2 py-1 rounded"
+              style={{ color: '#3d2a10', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(4px)', fontFamily: 'var(--font-sans)' }}
+            >
+              Before
+            </span>
           </div>
-          <div className="absolute top-4 right-4">
-            <span className="text-[9px] uppercase tracking-[0.2em]" style={{ color: C.gold, fontFamily: 'var(--font-sans)' }}>After</span>
+          <div className="absolute top-4 right-4 z-10">
+            <span
+              className="text-[9px] uppercase tracking-[0.2em] px-2 py-1 rounded"
+              style={{ color: 'rgba(255,255,255,0.9)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', fontFamily: 'var(--font-sans)' }}
+            >
+              After
+            </span>
           </div>
         </div>
 
@@ -1302,7 +1305,7 @@ function BeforeAfterSection() {
           className="text-center mt-4 text-[11px]"
           style={{ color: C.muted, fontFamily: 'var(--font-sans)' }}
         >
-          ↑ Scroll through to reveal the transformation
+          Drag the slider to compare
         </p>
       </div>
     </section>
