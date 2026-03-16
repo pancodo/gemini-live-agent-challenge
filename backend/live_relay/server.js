@@ -537,6 +537,7 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
 
         // Turn complete — historian finished speaking
         if (msg.serverContent.turnComplete) {
+          console.log(`[live-relay] turn_complete received for session=${sessionId}`);
           pendingTranscript = '';
           pendingOutputTranscript = '';
           clientWs.send(JSON.stringify({ type: 'turn_complete' }));
@@ -556,6 +557,9 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
             }
 
             // NON_BLOCKING function call — Gemini wants to generate an illustration
+            if (part.functionCall) {
+              console.log(`[live-relay] Function call received: ${part.functionCall.name} session=${sessionId}`);
+            }
             if (part.functionCall && part.functionCall.name === 'generate_illustration') {
               const { subject, mood, composition } = part.functionCall.args || {};
               const callId = part.functionCall.id;
@@ -635,11 +639,12 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
         `[live-relay] Gemini WS closed session=${sessionId} code=${event.code} reason=${event.reason}`
       );
       if (clientWs.readyState === WebSocket.OPEN) {
-        // Don't send error for normal closure or token-expired retry
         if (event.code !== 1000) {
+          // Notify client of the error, then close the client WS so it can reconnect.
           clientWs.send(
             JSON.stringify({ type: 'error', message: `Gemini connection closed (${event.code})` })
           );
+          clientWs.close(event.code, `Gemini closed: ${event.reason || event.code}`);
         }
       }
     });
