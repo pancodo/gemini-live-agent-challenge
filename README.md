@@ -18,7 +18,7 @@
 
 <div align="center">
 
-[**Interactive Architecture Diagram**](https://historia.efeecllk.com/architecture.html) · [Source](frontend/public/architecture.html)
+[**Interactive Architecture Diagram**](https://historia.efeecllk.com/architecture.html) · [Source](frontend/public/architecture.html) · [**Overview Diagram**](docs/architecture/architecture-diagram.png)
 
 </div>
 
