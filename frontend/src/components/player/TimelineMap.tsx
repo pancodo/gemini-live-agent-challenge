@@ -32,26 +32,53 @@ const ALL_PIN_LAYERS = [
   PIN_GLOW_DIAMOND, PIN_GLOW_CIRCLE,
 ];
 
-/** Build a GeoJSON FeatureCollection from geo events */
+/** Build a GeoJSON FeatureCollection from geo events (excludes 'route' type — those are waypoints, not pins) */
 function eventsToGeoJSON(events: GeoEvent[]): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: events.map((e, i) => ({
-      type: 'Feature' as const,
-      properties: {
-        name: e.name,
-        era: e.era ?? '',
-        description: e.description ?? '',
-        type: e.type,
-        index: i,
-        isBattle: e.type === 'battle' ? 1 : 0,
-      },
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [e.lng, e.lat],
-      },
-    })),
+    features: events
+      .filter((e) => e.type !== 'route')
+      .map((e, i) => ({
+        type: 'Feature' as const,
+        properties: {
+          name: e.name,
+          era: e.era ?? '',
+          description: e.description ?? '',
+          type: e.type,
+          index: i,
+          isBattle: e.type === 'battle' ? 1 : 0,
+        },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [e.lng, e.lat],
+        },
+      })),
   };
+}
+
+/** Create a diamond-shaped SDF image for battle pins */
+function createDiamondImage(map: maplibregl.Map, id: string, size: number, color: string) {
+  if (map.hasImage(id)) return;
+  const canvas = document.createElement('canvas');
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = size * ratio;
+  canvas.height = size * ratio;
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(ratio, ratio);
+  const half = size / 2;
+  ctx.beginPath();
+  ctx.moveTo(half, 1);
+  ctx.lineTo(size - 1, half);
+  ctx.lineTo(half, size - 1);
+  ctx.lineTo(1, half);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  map.addImage(id, data, { pixelRatio: ratio });
 }
 
 function TimelineMapInner({
@@ -371,7 +398,8 @@ function TimelineMapInner({
       pulseRafRef.current = requestAnimationFrame(animatePulse);
     }
 
-    // ── Main pin layers (solid circles on top) ──
+    // ── Main pin layers ──
+    // City/region: solid circles
     map.addLayer({
       id: PIN_CIRCLE_LAYER,
       type: 'circle',
@@ -385,16 +413,17 @@ function TimelineMapInner({
       },
     });
 
+    // Battle: diamond symbols
+    createDiamondImage(map, 'diamond-pin', 18, '#c0392b');
     map.addLayer({
       id: PIN_DIAMOND_LAYER,
-      type: 'circle',
+      type: 'symbol',
       source: PIN_SOURCE,
       filter: ['==', ['get', 'isBattle'], 1],
-      paint: {
-        'circle-radius': 7,
-        'circle-color': '#c0392b',
-        'circle-stroke-color': pinStroke,
-        'circle-stroke-width': 2,
+      layout: {
+        'icon-image': 'diamond-pin',
+        'icon-size': 1,
+        'icon-allow-overlap': true,
       },
     });
 
@@ -440,13 +469,16 @@ function TimelineMapInner({
     });
 
     const colorMap: Record<string, string> = {
-      trade: '#d4a574',
+      trade: '#2E6E44',
       military: '#c0392b',
-      migration: '#1E5E5E',
+      migration: '#2980b9',
     };
 
     const lineColor = colorMap[route.style] ?? '#d4a574';
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
+    // Insert routes below pin labels so lines don't obscure names
+    const beforeLayer = map.getLayer(PIN_LABELS) ? PIN_LABELS : undefined;
 
     map.addLayer({
       id: layerId,
@@ -458,9 +490,9 @@ function TimelineMapInner({
         'line-opacity': 0.8,
         'line-dasharray': [3, 2],
       },
-    });
+    }, beforeLayer);
 
-    // Route name label along the line
+    // Route name label along the line (below pin labels)
     map.addLayer({
       id: `${layerId}-label`,
       type: 'symbol',
@@ -478,7 +510,7 @@ function TimelineMapInner({
         'text-halo-color': isLight ? 'rgba(242,237,227,0.8)' : 'rgba(13,11,9,0.8)',
         'text-halo-width': 1.5,
       },
-    });
+    }, beforeLayer);
   }, []);
 
   // Keep restoreGeoRef in sync with latest callbacks
@@ -585,11 +617,11 @@ function TimelineMapInner({
           <span>City / Region</span>
         </div>
         <div className="timeline-map-legend-row">
-          <span className="timeline-map-legend-dot" style={{ background: '#c0392b' }} />
+          <span className="timeline-map-legend-diamond" style={{ background: '#c0392b' }} />
           <span>Battle</span>
         </div>
         <div className="timeline-map-legend-row">
-          <span className="timeline-map-legend-line" style={{ borderColor: '#d4a574' }} />
+          <span className="timeline-map-legend-line" style={{ borderColor: '#2E6E44' }} />
           <span>Trade route</span>
         </div>
         <div className="timeline-map-legend-row">
@@ -597,7 +629,7 @@ function TimelineMapInner({
           <span>Military</span>
         </div>
         <div className="timeline-map-legend-row">
-          <span className="timeline-map-legend-line" style={{ borderColor: '#1E5E5E' }} />
+          <span className="timeline-map-legend-line" style={{ borderColor: '#2980b9' }} />
           <span>Migration</span>
         </div>
       </div>
