@@ -19,6 +19,7 @@ import { useGeminiLive } from '../../hooks/useGeminiLive';
 import { useAudioCapture } from '../../hooks/useAudioCapture';
 import { useAudioVisualSync } from '../../hooks/useAudioVisualSync';
 import { usePlayerStore } from '../../store/playerStore';
+import { useResearchStore } from '../../store/researchStore';
 
 export function VoiceLayer() {
   const sessionId = useSessionStore((s) => s.sessionId);
@@ -39,15 +40,33 @@ export function VoiceLayer() {
   // Pending text to send once the WebSocket setup completes (replaces fragile setTimeout)
   const pendingGreetingRef = useRef<string | null>(null);
   const sendTextStableRef = useRef((_t: string) => {});
+  const connectRetryRef = useRef(0);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { sendPCM, sendText, connect, disconnect, reconnect, isConnected } = useGeminiLive({
     sessionId,
     resumptionToken,
     onReady: () => {
+      clearTimeout(connectTimeoutRef.current);
+      connectRetryRef.current = 0;
       const text = pendingGreetingRef.current;
       if (text) {
         pendingGreetingRef.current = null;
         sendTextStableRef.current(text);
+      } else if (usePlayerStore.getState().isNarrating) {
+        // Reconnected during narration — re-send current beat
+        const beats = usePlayerStore.getState().beats;
+        const idx = usePlayerStore.getState().currentBeatIndex;
+        const beat = beats[idx];
+        if (beat) {
+          const seg = Object.values(useResearchStore.getState().segments)
+            .find(s => s.id === usePlayerStore.getState().currentSegmentId);
+          const prefix = idx === 0
+            ? `You are narrating "${seg?.title ?? ''}". Deliver this naturally, no announcements. `
+            : 'Continue narrating the next moment: ';
+          sendTextStableRef.current(prefix + beat.narrationText);
+        }
+        transition('historian_speaking');
       }
     },
     onAudioChunk: (pcm: ArrayBuffer) => {
@@ -124,7 +143,9 @@ export function VoiceLayer() {
     prevConnectedRef.current = isConnected;
 
     if (wasConnected && !isConnected && useVoiceStore.getState().state !== 'idle') {
-      // Soft reset: return to idle but keep the resumption token for reconnection
+      // During narration, don't go idle — let auto-reconnect handle it.
+      // The reconnect handler will transition to 'reconnecting'.
+      if (usePlayerStore.getState().isNarrating) return;
       transition('idle');
     }
   }, [isConnected, transition]);
@@ -132,6 +153,7 @@ export function VoiceLayer() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearTimeout(connectTimeoutRef.current);
       capture.stop();
       disconnect();
       playback.destroy();
@@ -195,14 +217,34 @@ export function VoiceLayer() {
   };
 
   // Stable ref for sendTextToHistorian — same pattern as beginConsultation.
+  // Includes 5s connection timeout with up to 2 retries.
   const sendTextRef = useRef((_text: string) => {});
   sendTextRef.current = (text: string) => {
     const currentState = useVoiceStore.getState().state;
     if (currentState === 'idle') {
-      // Queue text — sent reliably when onReady fires
       pendingGreetingRef.current = text;
       connect();
       transition('historian_speaking');
+
+      // Timeout: if onReady doesn't fire in 5s, retry connection
+      clearTimeout(connectTimeoutRef.current);
+      const armTimeout = () => {
+        connectTimeoutRef.current = setTimeout(() => {
+          if (!pendingGreetingRef.current) return; // text was sent, all good
+          disconnect();
+          if (connectRetryRef.current < 2) {
+            connectRetryRef.current++;
+            connect();
+            armTimeout(); // re-arm for next attempt
+          } else {
+            pendingGreetingRef.current = null;
+            connectRetryRef.current = 0;
+            transition('idle');
+            toast.error('Could not connect to historian. Try again.');
+          }
+        }, 5000);
+      };
+      armTimeout();
     } else {
       sendTextStableRef.current(text);
     }

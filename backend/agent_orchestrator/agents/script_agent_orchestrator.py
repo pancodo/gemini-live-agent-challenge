@@ -260,8 +260,29 @@ def _parse_single_segment(raw: str) -> SegmentScript | None:
     try:
         return SegmentScript(**parsed)
     except Exception as exc:
-        logger.warning("Failed to validate per-scene segment: %s", exc)
-        return None
+        logger.warning("Strict validation failed: %s -- trying lenient fallback", exc)
+        try:
+            return SegmentScript(
+                id=parsed.get("id", f"segment_{hash(str(parsed)) % 10000}"),
+                scene_id=parsed.get("scene_id", "unknown"),
+                title=parsed.get("title", "Untitled"),
+                narration_script=(
+                    parsed.get("narration_script")
+                    or parsed.get("script")
+                    or parsed.get("narration")
+                    or ""
+                ),
+                visual_descriptions=(
+                    parsed.get("visual_descriptions")
+                    or parsed.get("visuals")
+                    or parsed.get("image_descriptions")
+                    or ["A historical scene"]
+                ),
+                mood=parsed.get("mood", "cinematic"),
+                sources=parsed.get("sources", []),
+            )
+        except Exception:
+            return None
 
 
 # ---------------------------------------------------------------------------
