@@ -18,7 +18,17 @@
 
 <div align="center">
 
-[**Interactive Architecture Diagram**](https://historia.efeecllk.com/architecture.html) · [Source](frontend/public/architecture.html) · [**Overview Diagram**](docs/architecture/architecture-diagram.png)
+<br/>
+
+> ### :globe_with_meridians: Explore the Full System Architecture
+>
+> **[:arrow_right: Interactive Architecture Diagram :arrow_left:](https://historia.efeecllk.com/architecture.html)** · [**Overview Diagram**](docs/architecture/architecture-diagram.png)
+>
+> _Click to explore all 11 pipeline phases, service connections, and data flows in a live interactive view._
+>
+> [:page_facing_up: View Source](frontend/public/architecture.html)
+
+<br/>
 
 </div>
 
