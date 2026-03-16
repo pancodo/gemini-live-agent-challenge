@@ -8,6 +8,7 @@ import {
   useSpring,
   useInView,
   useReducedMotion,
+  useMotionTemplate,
   animate,
 } from 'motion/react';
 import { useTextScramble } from '../hooks/useTextScramble';
@@ -1139,7 +1140,8 @@ function BeforeAfterSection() {
     target: sectionRef,
     offset: ['start 0.8', 'start 0.2'],
   });
-  const wipe = useTransform(scrollYProgress, [0, 1], ['100%', '0%']);
+  const wipeVal = useTransform(scrollYProgress, [0, 1], ['100%', '0%']);
+  const wipeClip = useMotionTemplate`inset(0 ${wipeVal} 0 0)`;
 
   return (
     <section
@@ -1201,7 +1203,7 @@ function BeforeAfterSection() {
           {/* AFTER — documentary frame (scroll-wipe reveal) */}
           <motion.div
             className="absolute inset-0"
-            style={{ clipPath: `inset(0 ${wipe} 0 0)` }}
+            style={{ clipPath: wipeClip }}
           >
             <img
               src="/samples/showcase/cinematic-pompeii-02.jpg"
