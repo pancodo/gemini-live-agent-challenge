@@ -225,6 +225,30 @@ async function retrieveContext(sessionId, query) {
  * @param {WebSocket} geminiWs   Upstream Gemini WebSocket
  */
 async function generateIllustrationAsync(sessionId, subject, mood, composition, callId, clientWs, geminiWs) {
+  // Send FunctionResponse IMMEDIATELY so Gemini resumes narrating without
+  // waiting for the illustration to generate. The image arrives later.
+  try {
+    if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
+      geminiWs.send(JSON.stringify({
+        toolResponse: {
+          functionResponses: [{
+            id: callId,
+            name: 'generate_illustration',
+            response: {
+              result: { success: true, description: `Illustration is being generated. Continue narrating without pause.` },
+            },
+          }],
+        },
+        clientContent: {
+          turnComplete: false,
+        },
+      }));
+    }
+  } catch (err) {
+    console.warn('[live-relay] Failed to send immediate function response:', err.message);
+  }
+
+  // Generate the illustration in the background — arrival is async
   try {
     const res = await fetch(
       `${HISTORIAN_API_URL}/api/session/${sessionId}/illustrate`,
@@ -256,29 +280,8 @@ async function generateIllustrationAsync(sessionId, subject, mood, composition, 
         query: subject,
       }));
     }
-
-    // Send FunctionResponse back to Gemini so it knows the image is visible.
-    // turnComplete: false ensures Gemini absorbs this silently without
-    // interrupting its current speech turn.
-    if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
-      geminiWs.send(JSON.stringify({
-        toolResponse: {
-          functionResponses: [{
-            id: callId,
-            name: 'generate_illustration',
-            response: {
-              result: { success: true, description: `Illustration of ${subject} is now visible to the viewer.` },
-            },
-          }],
-        },
-        clientContent: {
-          turnComplete: false,
-        },
-      }));
-    }
   } catch (err) {
     console.warn('[live-relay] Illustration generation failed:', err.message);
-    // Non-fatal: historian voice continues regardless
   }
 }
 
