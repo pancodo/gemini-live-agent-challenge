@@ -84,6 +84,13 @@
   flex-shrink: 0;
 }
 
+.timeline-map-legend-diamond {
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
 .timeline-map-legend-line {
   width: 14px;
   height: 0;
