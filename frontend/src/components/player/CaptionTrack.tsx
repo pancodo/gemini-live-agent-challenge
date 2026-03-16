@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import { motion } from 'motion/react';
 import { usePlayerStore } from '../../store/playerStore';
 
 /**
@@ -33,41 +32,29 @@ export function CaptionTrack() {
 
   return (
     <div
-      className="flex flex-col items-center px-8 py-4 rounded-lg"
+      className="flex flex-col items-center rounded-xl"
       style={{
         opacity: isEmpty ? 0 : 1,
         transition: 'opacity 0.3s ease',
-        background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.2) 80%, transparent 100%)',
-        backdropFilter: 'blur(4px)',
-        maxWidth: 900,
+        background: 'var(--player-caption-bg)',
+        backdropFilter: 'blur(12px)',
+        maxWidth: 820,
         margin: '0 auto',
+        padding: '12px 24px',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
       }}
     >
-      {/* Gold horizontal rule — narration indicator */}
-      <motion.div
-        style={{
-          width: '35%',
-          height: 1,
-          background: 'var(--glow-primary)',
-          opacity: 0.4,
-          marginBottom: 16,
-        }}
-        initial={{ scaleX: 0 }}
-        animate={{ scaleX: isEmpty ? 0 : 1 }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
-      />
-
       <p
         className="text-center leading-relaxed"
         style={{
-          maxWidth: 800,
+          maxWidth: 780,
           fontFamily: 'var(--font-serif)',
           fontWeight: 300,
           fontStyle: 'italic',
           fontSize: 26,
           letterSpacing: '0.02em',
-          color: 'var(--player-text)',
-          textShadow: 'var(--player-caption-shadow)',
+          color: 'var(--player-caption-color)',
+          textShadow: '0 1px 8px rgba(0,0,0,0.6)',
         }}
       >
         {visible.map((word, i) => {
