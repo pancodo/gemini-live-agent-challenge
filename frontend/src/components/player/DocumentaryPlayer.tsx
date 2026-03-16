@@ -249,6 +249,7 @@ export function DocumentaryPlayer() {
       return;
     }
 
+    console.log(`[sendBeatNarration] beat=${beatIndex}, text="${text.slice(0, 60)}..."`);
     send(text);
   }, [currentSegmentId, sanitize]);
 
@@ -260,10 +261,16 @@ export function DocumentaryPlayer() {
     if (beatAdvanceSignal === prevSignalRef.current) return;
     prevSignalRef.current = beatAdvanceSignal;
 
-    if (!isNarrating) return;
+    // Use store directly instead of React subscription to avoid stale reads
+    const narrating = usePlayerStore.getState().isNarrating;
+    if (!narrating) {
+      console.log('[Effect2b] turn_complete but isNarrating=false, skipping');
+      return;
+    }
 
     const totalBeats = usePlayerStore.getState().beats.length || 1;
     const nextBeat = lastSentBeatRef.current + 1;
+    console.log(`[Effect2b] turn_complete: beat ${lastSentBeatRef.current} done, next=${nextBeat}/${totalBeats}`);
 
     if (nextBeat < totalBeats) {
       // Advance image to match the beat we're about to narrate
@@ -330,7 +337,8 @@ export function DocumentaryPlayer() {
         }
       }, 3000);
     }
-  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize, setInterstitialTitle, setShowInterstitial, setShowEndCard]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- isNarrating read from store, not subscription
+  }, [beatAdvanceSignal, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning, readySegments, currentSegmentId, open, sanitize]);
 
   // ── Safety timer: if no turn_complete arrives for 30s, force advance ──
   // Handles cases where Gemini closes (1008) or drops connection mid-beat.
