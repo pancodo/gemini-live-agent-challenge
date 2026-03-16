@@ -641,9 +641,16 @@ wss.on('connection', async (clientWs, _req, sessionId, params) => {
       console.log(
         `[live-relay] Gemini WS closed session=${sessionId} code=${event.code} reason=${event.reason}`
       );
+
+      // If Gemini rejected a stale resumption token, retry without it
+      if (event.code === 1008 && !setupComplete && resumptionToken) {
+        clearTimeout(setupTimeoutId);
+        retryWithoutToken();
+        return;
+      }
+
       if (clientWs.readyState === WebSocket.OPEN) {
         if (event.code !== 1000) {
-          // Notify client of the error, then close the client WS so it can reconnect.
           clientWs.send(
             JSON.stringify({ type: 'error', message: `Gemini connection closed (${event.code})` })
           );
