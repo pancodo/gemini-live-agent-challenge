@@ -34,7 +34,13 @@ export function PlayerPage() {
 
     const controller = new AbortController();
     getSegments(sessionId, controller.signal)
-      .then((segs) => { for (const seg of segs) setSegment(seg.id, seg); })
+      .then((segs) => {
+        const { setSegmentGeo } = usePlayerStore.getState();
+        for (const seg of segs) {
+          setSegment(seg.id, seg);
+          if (seg.geo) setSegmentGeo(seg.id, seg.geo);
+        }
+      })
       .catch((err) => { if (err instanceof Error && err.name !== 'AbortError') console.warn(err); });
 
     return () => controller.abort();

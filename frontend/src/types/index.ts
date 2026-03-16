@@ -84,6 +84,7 @@ export interface Segment {
   sources: string[];
   graphEdges: string[];
   era?: PortraitEra;
+  geo?: SegmentGeo | null;
 }
 
 // ── Voice ────────────────────────────────────────────────────

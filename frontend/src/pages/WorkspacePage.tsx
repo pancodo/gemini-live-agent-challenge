@@ -121,8 +121,10 @@ export function WorkspacePage() {
   useEffect(() => {
     if ((status === 'ready' || status === 'playing') && sessionId) {
       getSegments(sessionId).then((segs) => {
+        const { setSegmentGeo } = usePlayerStore.getState();
         for (const seg of segs) {
           setSegment(seg.id, seg);
+          if (seg.geo) setSegmentGeo(seg.id, seg.geo);
         }
       }).catch(() => {/* non-fatal */});
     }

@@ -55,6 +55,7 @@ class SegmentResponse(BaseModel):
     videoUrl: str | None = None
     sources: list[str] = []
     graphEdges: list[str] = []
+    geo: dict | None = None
 
 
 class SegmentsResponse(BaseModel):
