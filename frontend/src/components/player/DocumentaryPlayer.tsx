@@ -85,6 +85,8 @@ export function DocumentaryPlayer() {
   const updateSettingRef = useRef(updateSetting);
   updateSettingRef.current = updateSetting;
   const [showPlayOverlay, setShowPlayOverlay] = useState(true);
+  const CAPTION_DELAY_MS = 900;
+  const ENERGY_THRESHOLD = 0.045;
   const [isSavingAll, startSaveAllTransition] = useTransition();
   const shortcutsRef = useRef<HTMLDivElement>(null);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
@@ -152,6 +154,7 @@ export function DocumentaryPlayer() {
   const turnWordCountRef = useRef<number>(0);
   const captionPendingRef = useRef<string | null>(null);
   const captionRafRef = useRef(0);
+  const captionDelayTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Buffer incoming captions + track WPS
   useEffect(() => {
@@ -189,18 +192,27 @@ export function DocumentaryPlayer() {
       for (let i = 0; i < data.length; i++) sum += data[i];
       const energy = sum / data.length / 255;
 
-      if (energy > 0.02 && captionPendingRef.current) {
-        setCaption(captionPendingRef.current);
+      if (energy > ENERGY_THRESHOLD && captionPendingRef.current) {
+        const textToShow = captionPendingRef.current;
         captionPendingRef.current = null;
+        clearTimeout(captionDelayTimerRef.current);
+        captionDelayTimerRef.current = setTimeout(() => {
+          setCaption(textToShow);
+        }, CAPTION_DELAY_MS);
       }
       captionRafRef.current = requestAnimationFrame(checkEnergy);
     }
     captionRafRef.current = requestAnimationFrame(checkEnergy);
-    return () => cancelAnimationFrame(captionRafRef.current);
+    return () => {
+      cancelAnimationFrame(captionRafRef.current);
+      clearTimeout(captionDelayTimerRef.current);
+    };
   }, [analyserNode, setCaption]);
 
   // ── Single-stream narration with pre-timed image changes ──────────
   const beats = usePlayerStore((s) => s.beats);
+  const currentBeatIndex = usePlayerStore((s) => s.currentBeatIndex);
+  const currentBeat = beats[currentBeatIndex] ?? null;
   const advanceBeat = usePlayerStore((s) => s.advanceBeat);
   const setIsNarrating = usePlayerStore((s) => s.setIsNarrating);
   const isNarrating = usePlayerStore((s) => s.isNarrating);
@@ -212,12 +224,8 @@ export function DocumentaryPlayer() {
   const narrationStartedRef = useRef<Set<string>>(new Set());
   // Auto-advance timer between segments
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  // Pre-calculated image change timers (one per beat boundary)
-  const imageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Track previous beatAdvanceSignal for turn_complete detection
   const prevSignalRef = useRef(0);
-  // Track which segment's image timers have been started
-  const imageTimersStartedRef = useRef<string | null>(null);
   // Track which beat index was last sent to historian
   const lastSentBeatRef = useRef(-1);
   // Interstitial title card state
@@ -285,44 +293,11 @@ export function DocumentaryPlayer() {
       const snippet = sanitize(seg.script).slice(0, 600);
       text = `You are narrating "${seg.title}". Deliver this naturally, no announcements. ${snippet}`;
     } else {
-      console.warn('[DocumentaryPlayer] sendBeatNarration: no beat or script for index', beatIndex);
       return;
     }
 
-    console.log(`[DocumentaryPlayer] sendBeatNarration(${beatIndex}): ${text.slice(0, 80)}...`);
     send(text);
   }, [currentSegmentId, sanitize]);
-
-  // ── startImageTimers: pre-calculate image changes only (no text sending) ──
-  // Text is sent on turn_complete in Effect 2b to avoid interrupting Gemini.
-  const startImageTimers = useCallback(() => {
-    imageTimersRef.current.forEach(clearTimeout);
-    imageTimersRef.current = [];
-    const currentBeats = usePlayerStore.getState().beats;
-    if (currentBeats.length <= 1) return;
-
-    const MS_PER_WORD = 360; // ~2.8 words/sec narration pace
-    let cumulativeMs = 0;
-
-    for (let i = 1; i < currentBeats.length; i++) {
-      const prevWords = currentBeats[i - 1].narrationText.trim().split(/\s+/).length;
-      cumulativeMs += prevWords * MS_PER_WORD;
-      const timer = setTimeout(() => {
-        setBeatTransitioning(true);
-        setTimeout(() => setBeatTransitioning(false), 300);
-        advanceBeat();
-      }, cumulativeMs);
-      imageTimersRef.current.push(timer);
-    }
-  }, [advanceBeat, setBeatTransitioning]);
-
-  // ── Effect 2: Start image timers when narrating and beats are ready ──
-  useEffect(() => {
-    if (!isNarrating || beats.length <= 1 || !currentSegmentId) return;
-    if (imageTimersStartedRef.current === currentSegmentId) return;
-    imageTimersStartedRef.current = currentSegmentId;
-    startImageTimers();
-  }, [isNarrating, beats, currentSegmentId, startImageTimers]);
 
   // ── Effect 2b: On turn_complete, send next beat or end narration ──
   // Gemini finishes speaking one beat → send the next. This avoids interrupting
@@ -337,19 +312,18 @@ export function DocumentaryPlayer() {
     const totalBeats = usePlayerStore.getState().beats.length || 1;
     const nextBeat = lastSentBeatRef.current + 1;
 
-    console.log(`[DocumentaryPlayer] turn_complete: beat ${lastSentBeatRef.current} done, ${nextBeat < totalBeats ? `sending beat ${nextBeat}` : 'narration complete'}`);
-
     if (nextBeat < totalBeats) {
-      // Send next beat text — Gemini will speak it immediately
+      // Advance image to match the beat we're about to narrate
+      setBeatTransitioning(true);
+      setTimeout(() => setBeatTransitioning(false), 300);
+      advanceBeat();
       sendBeatNarration(nextBeat);
       lastSentBeatRef.current = nextBeat;
     } else {
       // All beats spoken — end narration
-      imageTimersRef.current.forEach(clearTimeout);
-      imageTimersRef.current = [];
       setIsNarrating(false);
     }
-  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration]);
+  }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning]);
 
   // ── Effect 3: Fallback — if no beats arrive in 30s, create synthetic beats ──
   useEffect(() => {
@@ -427,22 +401,36 @@ export function DocumentaryPlayer() {
             open(nextSeg.id);
           }
           // Auto-start narration for next segment (beat 0)
-          // Beats load via Effect 1 when currentSegment changes.
-          // Use a short delay to let beats load first, then send beat 0.
+          // Use retry pattern — beats may take time to load
           setTimeout(() => {
-            const nextBeats = usePlayerStore.getState().beats;
-            const send = useVoiceStore.getState().sendTextToHistorian;
-            if (send && nextBeats.length > 0) {
-              const beat = nextBeats[0];
-              lastSentBeatRef.current = 0;
-              send(
-                `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
-                sanitize(beat.narrationText)
-              );
-              setIsNarrating(true);
-              beatWasSpokenRef.current = true;
-            }
-          }, 500);
+            const checkAndSend = (retries = 0) => {
+              const nextBeats = usePlayerStore.getState().beats;
+              const send = useVoiceStore.getState().sendTextToHistorian;
+              if (send && nextBeats.length > 0) {
+                const beat = nextBeats[0];
+                lastSentBeatRef.current = 0;
+                send(
+                  `You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
+                  sanitize(beat.narrationText)
+                );
+                setIsNarrating(true);
+                beatWasSpokenRef.current = true;
+              } else if (retries < 5) {
+                setTimeout(() => checkAndSend(retries + 1), 500);
+              } else if (send) {
+                // Ultimate fallback: use script text
+                const seg = useResearchStore.getState().segments[nextSeg.id];
+                if (seg?.script) {
+                  lastSentBeatRef.current = 0;
+                  send(`You are narrating "${nextSeg.title}". Deliver this naturally, no announcements. ` +
+                    sanitize(seg.script).slice(0, 600));
+                  setIsNarrating(true);
+                  beatWasSpokenRef.current = true;
+                }
+              }
+            };
+            checkAndSend();
+          }, 1000);
         }, 2500);
       } else {
         // Last segment — show end card
@@ -455,10 +443,9 @@ export function DocumentaryPlayer() {
 
   // Reset state when segment changes
   useEffect(() => {
-    imageTimersStartedRef.current = null;
-    imageTimersRef.current.forEach(clearTimeout);
-    imageTimersRef.current = [];
+    narrationStartedRef.current.clear();
     lastSentBeatRef.current = -1;
+    clearTimeout(captionDelayTimerRef.current);
     setShowEndCard(false);
     setShowInterstitial(false);
   }, [currentSegment?.id]);
@@ -1314,6 +1301,35 @@ export function DocumentaryPlayer() {
       <div className="absolute bottom-24 left-0 right-0 flex justify-center z-10 pointer-events-none">
         <CaptionTrack />
       </div>
+
+      {/* Creative direction — shows Gemini's interleaved thinking */}
+      <AnimatePresence>
+        {currentBeat?.directionText && isNarrating && !isIdle && (
+          <motion.div
+            key={`dir-${currentBeatIndex}`}
+            className="absolute bottom-16 left-0 right-0 flex justify-center z-10 pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.6 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <p
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: 11,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--glow-primary)',
+                textShadow: '0 1px 8px rgba(0,0,0,0.7)',
+                textAlign: 'center',
+                maxWidth: 600,
+              }}
+            >
+              &#10022; {sanitize(currentBeat.directionText).slice(0, 80)}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Layer 3b: Illustration caption */}
       <AnimatePresence>
