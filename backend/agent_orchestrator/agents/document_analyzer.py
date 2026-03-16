@@ -730,7 +730,7 @@ Visual Bible Seed:
 
 YOUR TASK:
 Select approximately {recommended_scene_count} cinematically compelling moments
-(guidance based on document length; stay within 2–4 scenes total). Prioritise:
+(guidance based on document length; aim for 4–6 scenes for richer documentaries). Prioritise:
   - Narrative turning points that create dramatic tension
   - High-contrast scenes (conflict, transformation, revelation)
   - Visually specific moments (described settings, objects, weather, light)
@@ -917,7 +917,7 @@ class DocumentAnalyzerAgent(BaseAgent):
         if research_mode == "test":
             recommended_scene_count = 1
         else:
-            recommended_scene_count = min(max(2, total_chunks // 3), 4)
+            recommended_scene_count = min(max(3, total_chunks // 2), 6)
         ctx.session.state["recommended_scene_count"] = recommended_scene_count
         logger.info("Dynamic scene count: %d chunks -> %d recommended scenes (mode=%s)", total_chunks, recommended_scene_count, research_mode)
 
