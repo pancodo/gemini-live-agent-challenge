@@ -1,0 +1,1 @@
+google-adk, google-genai, gemini-2.5-flash-native-audio, gemini-2.5-flash-image, gemini-2.0-flash, gemini-2.0-pro, imagen-3, veo-2, cloud-run, firestore, cloud-storage, document-ai, vertex-ai, pub-sub, secret-manager, terraform, react, typescript, vite, tailwind-css, motion, zustand, web-audio-api, maplibre, fastapi, python, node.js, websocket
