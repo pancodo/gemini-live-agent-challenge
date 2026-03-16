@@ -159,7 +159,10 @@ export function DocumentaryPlayer() {
   // Buffer incoming captions + track WPS
   useEffect(() => {
     if (!voiceCaption) return;
-    captionPendingRef.current = voiceCaption;
+    // Filter Gemini control tokens from output transcription (e.g. <ctrl46>)
+    const cleaned = voiceCaption.replace(/<ctrl\d+>/gi, '').trim();
+    if (!cleaned) return;
+    captionPendingRef.current = cleaned;
 
     const now = Date.now();
     const wordCount = voiceCaption.trim().split(/\s+/).length;
@@ -176,7 +179,7 @@ export function DocumentaryPlayer() {
 
     // Fallback: no analyser yet — show captions immediately
     if (!useVoiceStore.getState().analyserNode) {
-      setCaption(voiceCaption);
+      setCaption(cleaned);
       captionPendingRef.current = null;
     }
   }, [voiceCaption, setCaptionWps, setCaption]);
@@ -324,6 +327,21 @@ export function DocumentaryPlayer() {
       setIsNarrating(false);
     }
   }, [beatAdvanceSignal, isNarrating, setIsNarrating, sendBeatNarration, advanceBeat, setBeatTransitioning]);
+
+  // ── Safety timer: force-end narration if it runs too long without completing ──
+  const narrationSafetyRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    clearTimeout(narrationSafetyRef.current);
+    if (isNarrating) {
+      // Max 2 minutes per segment — if still narrating, force-end
+      narrationSafetyRef.current = setTimeout(() => {
+        if (usePlayerStore.getState().isNarrating) {
+          setIsNarrating(false);
+        }
+      }, 120_000);
+    }
+    return () => clearTimeout(narrationSafetyRef.current);
+  }, [isNarrating, setIsNarrating]);
 
   // ── Effect 3: Fallback — if no beats arrive in 30s, create synthetic beats ──
   useEffect(() => {
@@ -1072,7 +1090,7 @@ export function DocumentaryPlayer() {
               fontSize: 10,
               letterSpacing: '0.5em',
               textTransform: 'uppercase',
-              color: 'var(--glow-primary)',
+              color: 'var(--player-text)',
             }}
           >
             <img src="/logo.png" alt="AI Historian" className="h-5 w-auto brightness-90" />
@@ -1370,7 +1388,7 @@ export function DocumentaryPlayer() {
         }}
       >
         <div
-          className="flex items-center justify-between pl-8 pr-20 py-5"
+          className="flex items-center justify-between px-6 py-4"
           style={{
             background:
               'linear-gradient(to top, var(--player-overlay) 0%, transparent 100%)',
@@ -1395,8 +1413,8 @@ export function DocumentaryPlayer() {
             aria-label="Previous segment"
           >
             <svg
-              width="14"
-              height="14"
+              width="18"
+              height="18"
               viewBox="0 0 14 14"
               fill="none"
               stroke="currentColor"
@@ -1406,7 +1424,6 @@ export function DocumentaryPlayer() {
             >
               <path d="M9 2L4 7L9 12" />
             </svg>
-            Prev
           </button>
 
           {/* Current segment title */}
@@ -1415,8 +1432,8 @@ export function DocumentaryPlayer() {
             style={{
               fontFamily: 'var(--font-serif)',
               fontWeight: 400,
-              fontSize: 14,
-              color: 'var(--player-text-secondary)',
+              fontSize: 16,
+              color: 'var(--player-text)',
             }}
           >
             {currentSegment?.title ?? ''}
@@ -1441,10 +1458,9 @@ export function DocumentaryPlayer() {
               }}
               aria-label="Next segment"
             >
-              Next
               <svg
-                width="14"
-                height="14"
+                width="18"
+                height="18"
                 viewBox="0 0 14 14"
                 fill="none"
                 stroke="currentColor"
@@ -1486,7 +1502,6 @@ export function DocumentaryPlayer() {
                 <line x1="2" y1="7" x2="12" y2="7" />
                 <line x1="2" y1="11" x2="12" y2="11" />
               </svg>
-              Segments
             </button>
 
             {/* Download current image */}
