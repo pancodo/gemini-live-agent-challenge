@@ -330,6 +330,7 @@ async def get_session_segments(session_id: str) -> SegmentsResponse:
                 videoUrl=video_url,
                 sources=d.get("sources", []),
                 graphEdges=d.get("graphEdges", []),
+                geo=d.get("geo"),
             )
         )
 
