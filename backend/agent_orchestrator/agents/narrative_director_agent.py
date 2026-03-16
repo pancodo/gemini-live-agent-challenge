@@ -275,14 +275,29 @@ class NarrativeDirectorAgent(BaseAgent):
                 # ── THE CORE INTERLEAVED CALL ─────────────────────────────────
                 # One Gemini call → TEXT creative direction + IMAGE storyboard frame
                 # This is the native interleaved output capability.
-                response = await client.aio.models.generate_content(
-                    model=self.model,
-                    contents=[prompt],
-                    config=genai_types.GenerateContentConfig(
-                        response_modalities=["TEXT", "IMAGE"],
-                        temperature=0.7,
-                    ),
-                )
+                _MAX_RETRIES = 3
+                response = None
+                for attempt in range(_MAX_RETRIES):
+                    try:
+                        response = await client.aio.models.generate_content(
+                            model=self.model,
+                            contents=[prompt],
+                            config=genai_types.GenerateContentConfig(
+                                response_modalities=["TEXT", "IMAGE"],
+                                temperature=0.7,
+                            ),
+                        )
+                        break
+                    except Exception as exc:
+                        if attempt < _MAX_RETRIES - 1:
+                            wait = 2 ** attempt
+                            logger.warning("[NarrativeDirector] Scene %s attempt %d failed: %s. Retrying in %ds", scene_id, attempt + 1, exc, wait)
+                            await asyncio.sleep(wait)
+                        else:
+                            raise  # Let outer except handle final failure
+
+                if response is None:
+                    raise RuntimeError(f"Interleaved call returned no response for scene {scene_id}")
 
                 # ── Parse interleaved response ────────────────────────────────
                 # Process parts sequentially: text parts emit storyboard_text_chunk,
